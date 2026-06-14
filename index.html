@@ -11,6 +11,7 @@
   <script src="https://unpkg.com/react-force-graph-2d"></script>            <!-- VIEW 1: force graph -->
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" /> <!-- VIEW 2: tree -->
   <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
+  <script src="https://unpkg.com/d3@7"></script>                              <!-- VIEW 3: UP district map -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -1260,11 +1261,227 @@
     })();
 
     // #####################################################################
+    // ## VIEW 3 — Uttar Pradesh district map (d3-geo choropleth).         ##
+    // ## Each district is its own UI element, coloured by its BSA's       ##
+    // ## score and showing the district name, the BSA's face, the BSA's   ##
+    // ## name and the score. Self-contained IIFE; exported as <MapApp/>.  ##
+    // #####################################################################
+    const MapApp = (function () {
+      const d3 = window.d3;
+
+      // --- minimal helpers (mirror the other views; IIFEs stay independent) ---
+      function hashStr(s) {
+        let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+        for (let i = 0; i < s.length; i++) {
+          const ch = s.charCodeAt(i);
+          h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return (h1 >>> 0);
+      }
+      const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+        "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+        "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+        "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+        "Mohan","Usha","Suresh","Gita"];
+      const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+        "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+      const FACE_COUNT = { adult: 300 };
+
+      const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+      function scoreRGB(p) {                              // red(0) -> yellow(.5) -> green(1)
+        const red = [239, 68, 68], yellow = [234, 179, 8], green = [34, 197, 94];
+        return (p < 0.5 ? lerp(red, yellow, p / 0.5) : lerp(yellow, green, (p - 0.5) / 0.5)).map((v) => v | 0);
+      }
+      const scoreColor = (p) => `rgb(${scoreRGB(p).join(",")})`;
+      const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
+
+      // BSA k -> the same person the force-graph / tree views show for node "r.k".
+      function bsa(k) {
+        const id = "r." + k;
+        const h = hashStr("u:" + id);
+        const perf = (h % 1000) / 1000;
+        return {
+          id,
+          name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 9) % LAST.length],
+          perf, score: Math.round(perf * 100),
+          face: "faces/adult/" + (hashStr("face:" + id) % FACE_COUNT.adult) + ".jpg",
+          phone: "+9198" + String(1000000 + (h % 9000000)),
+        };
+      }
+
+      const ZMIN = 0.7, ZMAX = 9;
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+      function MapApp() {
+        const wrapRef = useRef(null);
+        const [size, setSize] = useState({ w: 1000, h: 640 });
+        const [geo, setGeo] = useState(null);                 // null | "error" | FeatureCollection
+        const [active, setActive] = useState(null);           // hovered/focused district index
+        const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });    // pan/zoom transform
+        const drag = useRef(null);
+
+        useEffect(() => {
+          fetch("up-districts.geojson")
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(setGeo)
+            .catch(() => setGeo("error"));
+        }, []);
+
+        // track container size
+        useEffect(() => {
+          const el = wrapRef.current; if (!el) return;
+          const measure = () => { const r = el.getBoundingClientRect(); setSize({ w: Math.max(320, r.width), h: Math.max(320, r.height) }); };
+          measure();
+          const ro = new ResizeObserver(measure); ro.observe(el);
+          return () => ro.disconnect();
+        }, []);
+
+        // project once per (geo,size): district paths + label centroids + BSA
+        const districts = useMemo(() => {
+          if (!geo || geo === "error" || !d3) return null;
+          const proj = d3.geoMercator().fitSize([size.w, size.h], geo);
+          const path = d3.geoPath(proj);
+          return geo.features.map((f, i) => ({
+            i, name: f.properties.district, u: bsa(i),
+            d: path(f), c: path.centroid(f),
+          }));
+        }, [geo, size]);
+
+        // wheel zoom toward cursor
+        const onWheel = useCallback((e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const px = e.clientX - rect.left, py = e.clientY - rect.top;
+          setTf((t) => {
+            const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX);
+            const s = k / t.k;
+            return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s };
+          });
+        }, []);
+        const onPointerDown = useCallback((e) => {
+          drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }, [tf]);
+        const onPointerMove = useCallback((e) => {
+          if (!drag.current) return;
+          setTf((t) => ({ ...t, x: drag.current.tx + (e.clientX - drag.current.x), y: drag.current.ty + (e.clientY - drag.current.y) }));
+        }, []);
+        const onPointerUp = useCallback((e) => {
+          if (drag.current) { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {} }
+          drag.current = null;
+        }, []);
+
+        const sel = active != null && districts ? districts[active] : null;
+
+        return (
+          <div className="flex h-full flex-col">
+            <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
+              <div>
+                <h1 className="text-lg font-semibold text-zinc-900">Uttar Pradesh · BSA performance by district</h1>
+                <p className="text-xs text-zinc-500">Each district is coloured by the score of its BSA · hover a district for detail · scroll to zoom, drag to pan</p>
+              </div>
+              <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <span>score</span><span>0</span>
+                <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
+                <span>100</span>
+                <button onClick={() => setTf({ k: 1, x: 0, y: 0 })}
+                  className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
+              </div>
+            </header>
+
+            <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#f6f7f9]">
+              {!districts ? (
+                <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+                  {geo === "error" ? "Could not load up-districts.geojson — serve the folder over http (npx serve .)." : "Loading map…"}
+                </div>
+              ) : (
+                <svg width={size.w} height={size.h} className="block touch-none select-none"
+                  onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
+                  style={{ cursor: drag.current ? "grabbing" : "grab" }}>
+                  <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`}>
+                    {/* district shapes — the choropleth */}
+                    {districts.map((dst) => (
+                      <path key={dst.i} d={dst.d}
+                        fill={scoreColor(dst.u.perf)}
+                        stroke={active === dst.i ? "#0f172a" : "#ffffff"}
+                        strokeWidth={(active === dst.i ? 1.6 : 0.6) / tf.k}
+                        style={{ cursor: "pointer", transition: "stroke .1s" }}
+                        onMouseEnter={() => setActive(dst.i)} />
+                    ))}
+                    {/* per-district UI element: face + district + BSA name + score */}
+                    {[...districts].sort((a, b) => (a.i === active ? 1 : 0) - (b.i === active ? 1 : 0)).map((dst) => {
+                      const on = active === dst.i;
+                      const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k;   // chip holds a constant screen size, enlarges on hover
+                      const w = BW * s, h = BH * s;
+                      const fx = dst.c[0] - w / 2, fy = dst.c[1] - h / 2;
+                      return (
+                        <foreignObject key={"c" + dst.i} x={fx} y={fy} width={w} height={h}
+                          style={{ overflow: "visible", pointerEvents: "none" }}>
+                          <div onMouseEnter={() => setActive(dst.i)}
+                            className="flex items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
+                            style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left",
+                                     pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
+                            <img src={dst.u.face} alt="" loading="lazy"
+                              className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110"
+                              style={{ boxShadow: "0 0 0 2px " + scoreColor(dst.u.perf) }} />
+                            <div className="min-w-0 leading-tight">
+                              <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{dst.name}</div>
+                              <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{dst.u.name}</div>
+                            </div>
+                            <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold"
+                              style={{ background: scoreColor(dst.u.perf), color: textOn(dst.u.perf) }}>{dst.u.score}</span>
+                          </div>
+                        </foreignObject>
+                      );
+                    })}
+                  </g>
+                </svg>
+              )}
+
+              {/* readout panel for the active district (always legible regardless of overlap) */}
+              {sel && (
+                <div className="pointer-events-none absolute left-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <img src={sel.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110"
+                      style={{ boxShadow: "0 0 0 3px " + scoreColor(sel.u.perf) }} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-900">{sel.name}</div>
+                      <div className="truncate text-xs text-zinc-500">BSA · {sel.u.name}</div>
+                      <div className="text-[11px] text-zinc-400">{sel.u.phone}</div>
+                    </div>
+                    <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold"
+                      style={{ background: scoreColor(sel.u.perf), color: textOn(sel.u.perf) }}>{sel.u.score}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-600">
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + sel.u.perf * 160)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(sel.u.perf * 100)}%</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + sel.u.perf * 1400)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{sel.u.score}</span></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return MapApp;
+    })();
+
+    // #####################################################################
     // ## Top-level shell: a toggle that switches between the two views.   ##
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      const [view, setView] = useState("force");
+      const TABS = ["force", "tree", "map"];
+      const [view, setView] = useState(() => {
+        const h = (window.location.hash || "").replace("#", "");
+        return TABS.includes(h) ? h : "force";
+      });
+      useEffect(() => { window.location.hash = view; }, [view]);
       const tab = (id, label) => (
         <button key={id} onClick={() => setView(id)}
           className={"rounded-md px-3 py-1 text-xs font-semibold transition " +
@@ -1279,10 +1496,11 @@
             <div className="ml-auto flex rounded-lg bg-zinc-800 p-0.5">
               {tab("force", "Force graph")}
               {tab("tree", "Tree")}
+              {tab("map", "Map")}
             </div>
           </div>
           <div className="relative min-h-0 flex-1">
-            {view === "force" ? <ForceGraphApp /> : <TreeFlowApp />}
+            {view === "force" ? <ForceGraphApp /> : view === "tree" ? <TreeFlowApp /> : <MapApp />}
           </div>
         </div>
       );
