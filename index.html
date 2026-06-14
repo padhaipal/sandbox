@@ -2279,9 +2279,22 @@
         return out;
       }
       const inAnyRing = (pt, rings) => { for (const r of rings) if (pointInPoly(pt, r)) return true; return false; };
-      // manual mercator fit using PROJECTED bounds of raw coords (not geoBounds)
+      // Render geoBoundaries polygons by tracing the PROJECTED exterior rings ourselves.
+      // d3.geoPath does spherical antimeridian clipping that, with their clockwise
+      // winding, traces a whole-sphere path (the screen goes solid). Planar tracing is safe.
+      const ringsToPath = (rings) => rings.map(toPath).join(" ");
+      // manual mercator fit using PROJECTED bounds of raw coords (not geoBounds).
+      // Mercator is rotated to the country's circular-mean longitude so antimeridian
+      // spans (US/Alaska, Russia, Fiji, NZ) don't straddle the seam and blow up the fit.
       function fitMercator(features, w, h, pad) {
-        const proj = d3.geoMercator().scale(1).translate([0, 0]);
+        let sx = 0, sy = 0, nC = 0;
+        for (const f of features) {
+          const g = f.geometry; if (!g) continue;
+          const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+          for (const poly of polys) for (const ring of poly) for (const c of ring) { const r = c[0] * Math.PI / 180; sx += Math.cos(r); sy += Math.sin(r); nC++; }
+        }
+        const meanLon = nC ? Math.atan2(sy, sx) * 180 / Math.PI : 0;
+        const proj = d3.geoMercator().rotate([-meanLon, 0]).scale(1).translate([0, 0]);
         let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
         for (const f of features) {
           const g = f.geometry; if (!g) continue;
@@ -2712,10 +2725,11 @@
           if (isWorld || !projd || !country || !adm1FC || adm1FC === "error") return null;
           const { proj, path } = projd;
           return adm1FC.features.map((f, i) => {
+            const rings = exteriorRings(f, proj);
             const ring = stripClose(largestRing(f, proj));
             const id = country.orgId + "." + i;
             const nm = f.properties.shapeName || ("Region " + (i + 1));
-            return { i, id, feature: f, name: nm, d: path(f), c: centroidOf(ring), ring, rings: exteriorRings(f, proj), bbox: bboxOf(ring),
+            return { i, id, feature: f, name: nm, d: ringsToPath(rings), c: centroidOf(ring), ring, rings, bbox: bboxOf(ring),
               u: node(id), demo: demoFor(f, country.iso, nm) };
           });
         }, [isWorld, projd, country, adm1FC]);
@@ -2731,10 +2745,10 @@
           const kids = adm2FC.features.map((f) => ({ f, ring: stripClose(largestRing(f, proj)) }))
             .filter((o) => o.ring.length >= 3 && inAnyRing(centroidOf(o.ring), pr));
           return kids.map((o, j) => {
-            const f = o.f, ring = o.ring;
+            const f = o.f, ring = o.ring, rings = exteriorRings(f, proj);
             const id = parent.id + "." + j;
             const nm = f.properties.shapeName || ("District " + (j + 1));
-            return { j, id, feature: f, name: nm, d: path(f), c: centroidOf(ring), ring, rings: exteriorRings(f, proj), bbox: bboxOf(ring),
+            return { j, id, feature: f, name: nm, d: ringsToPath(rings), c: centroidOf(ring), ring, rings, bbox: bboxOf(ring),
               u: node(id), demo: demoFor(f, country.iso, nm) };
           });
         }, [adm1, a1Idx, adm2FC, projd, country]);
@@ -2753,10 +2767,10 @@
           }
           if (real.length) {
             return real.map((o, k) => {
-              const f = o.f, ring = o.ring;
+              const f = o.f, ring = o.ring, rings = exteriorRings(f, proj);
               const id = dst.id + "." + k;
               const nm = f.properties.shapeName || ("Block " + (k + 1));
-              return { k, id, u: node(id), name: nm, feature: f, ring, d: path(f), seed: centroidOf(ring), bbox: bboxOf(ring), synthetic: false,
+              return { k, id, u: node(id), name: nm, feature: f, ring, d: ringsToPath(rings), seed: centroidOf(ring), bbox: bboxOf(ring), synthetic: false,
                 demo: demoFor(f, country.iso, nm) };
             });
           }
