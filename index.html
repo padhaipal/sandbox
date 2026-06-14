@@ -1396,7 +1396,8 @@
       function MapApp() {
         const wrapRef = useRef(null);
         const [size, setSize] = useState({ w: 1000, h: 640 });
-        const [geo, setGeo] = useState(null);                 // null | "error" | FeatureCollection
+        const [geo, setGeo] = useState(null);                 // districts — null | "error" | FeatureCollection
+        const [geoBlk, setGeoBlk] = useState(null);           // real LGD blocks — null | "error" | FeatureCollection
         const [level, setLevel] = useState("districts");      // districts | blocks | schools
         const [dIdx, setDIdx] = useState(null);               // focused district index
         const [bIdx, setBIdx] = useState(null);               // focused block index
@@ -1410,6 +1411,9 @@
           fetch("up-districts.geojson")
             .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(setGeo).catch(() => setGeo("error"));
+          fetch("up-blocks.geojson")
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(setGeoBlk).catch(() => setGeoBlk("error"));
         }, []);
 
         useEffect(() => {
@@ -1420,35 +1424,49 @@
           return () => ro.disconnect();
         }, []);
 
-        // LEVEL 0 — districts (each = a BSA), projected once per geo/size
-        const districts = useMemo(() => {
+        // shared projection (fitted to the districts), reused for blocks so they align
+        const projd = useMemo(() => {
           if (!geo || geo === "error" || !d3) return null;
           const proj = d3.geoMercator().fitSize([size.w, size.h], geo);
-          const path = d3.geoPath(proj);
+          return { proj, path: d3.geoPath(proj) };
+        }, [geo, size]);
+
+        // LEVEL 0 — districts (each = a BSA)
+        const districts = useMemo(() => {
+          if (!projd || !geo || geo === "error") return null;
+          const { proj, path } = projd;
           return geo.features.map((f, i) => {
             const ring = stripClose(largestRing(f, proj));
             return { i, id: "r." + i, name: f.properties.district, u: node("r." + i),
               d: path(f), c: path.centroid(f), ring, bbox: bboxOf(ring) };
           });
-        }, [geo, size]);
+        }, [projd, geo]);
 
-        // LEVEL 1 — blocks (each = a BEO): Voronoi subdivision of the focused district.
-        // Block count = the BSA's child count in the org model (the "right" number).
+        // real LGD block polygons, projected with the district projection and grouped by district name
+        const blocksByDistrict = useMemo(() => {
+          if (!projd || !geoBlk || geoBlk === "error") return null;
+          const { proj, path } = projd;
+          const m = new Map();
+          for (const f of geoBlk.features) {
+            const ring = stripClose(largestRing(f, proj));
+            if (ring.length < 3) continue;
+            const item = { name: f.properties.block, ring, d: path(f), c: path.centroid(f), bbox: bboxOf(ring) };
+            const k = f.properties.district;
+            if (!m.has(k)) m.set(k, []);
+            m.get(k).push(item);
+          }
+          return m;
+        }, [projd, geoBlk]);
+
+        // LEVEL 1 — blocks (each = a BEO): the real LGD blocks of the focused district.
+        // A procedural BEO (face/name/score) is attached to each real block by index.
         const blocks = useMemo(() => {
-          if (!districts || dIdx == null) return null;
+          if (!districts || dIdx == null || !blocksByDistrict) return null;
           const dst = districts[dIdx];
-          const n = baseChildCount(dst.id);
-          const seeds = sampleInside(dst.ring, n, hashStr("seed:" + dst.id));
-          if (seeds.length < 1) return [];
-          const [minx, miny, maxx, maxy] = dst.bbox;
-          const vor = d3.Delaunay.from(seeds).voronoi([minx - 5, miny - 5, maxx + 5, maxy + 5]);
-          return seeds.map((s, j) => {
-            const id = dst.id + "." + j;
-            const cell = vor.cellPolygon(j);
-            const poly = cell ? clipPolygon(dst.ring, cell) : [];
-            return { j, id, u: node(id), seed: s, ring: poly, d: poly.length >= 3 ? toPath(poly) : "", bbox: bboxOf(poly.length ? poly : [s]) };
-          }).filter((b) => b.ring.length >= 3);
-        }, [districts, dIdx]);
+          const list = blocksByDistrict.get(dst.name) || [];
+          return list.map((b, j) => ({ j, id: dst.id + "." + j, u: node(dst.id + "." + j),
+            name: b.name, ring: b.ring, d: b.d, seed: b.c, bbox: b.bbox }));
+        }, [districts, dIdx, blocksByDistrict]);
 
         // LEVEL 2 — schools (each = a Head Teacher): random points inside the focused block.
         // School count = the BEO's child count in the org model (the "right" number).
@@ -1542,13 +1560,13 @@
                   {dst && <span className="text-zinc-300">›</span>}
                   {dst && <button onClick={() => level === "schools" && popUp()} className={level === "schools" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{dst.name}</button>}
                   {blk && <span className="text-zinc-300">›</span>}
-                  {blk && <button onClick={() => level === "school" && popUp()} className={level === "school" ? "text-blue-600 hover:underline" : "text-zinc-900"}>Block {blk.j + 1}</button>}
+                  {blk && <button onClick={() => level === "school" && popUp()} className={level === "school" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{blk.name}</button>}
                   {level === "school" && <span className="text-zinc-300">›</span>}
                   {level === "school" && <span className="text-zinc-900">School</span>}
                 </h1>
                 <p className="text-xs text-zinc-500">
                   {level === "districts" && "75 districts · coloured by BSA score · click a district to see its blocks"}
-                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · click a block to see its schools · click empty space to go up`}
+                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · real LGD boundaries · click a block to see its schools · click empty space to go up`}
                   {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · each dot is a school (Head Teacher) · click a school to open it · click empty space to go up`}
                   {level === "school" && `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`}
                 </p>
@@ -1588,7 +1606,7 @@
                       <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
                         stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                         style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: b.u, title: "Block " + (b.j + 1) + " · " + dst.name, sub: "BEO · " + b.u.name })}
+                        onMouseEnter={() => setActive({ u: b.u, title: b.name + " · " + dst.name, sub: "BEO · " + b.u.name })}
                         onClick={(e) => { e.stopPropagation(); drillBlock(b.j); }} />
                     ))}
 
@@ -1627,7 +1645,7 @@
                     {(level === "districts" || level === "blocks") && (() => {
                       const items = level === "districts"
                         ? districts.map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillDistrict(d0.i), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name }) }))
-                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: "Block " + (b.j + 1), c: b.seed, go: () => drillBlock(b.j), set: () => setActive({ u: b.u, title: "Block " + (b.j + 1) + " · " + dst.name, sub: "BEO · " + b.u.name }) }));
+                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.j), set: () => setActive({ u: b.u, title: b.name + " · " + dst.name, sub: "BEO · " + b.u.name }) }));
                       return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
                         const on = active && active.u.id === it.id;
                         const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
