@@ -1400,6 +1400,7 @@
         const [level, setLevel] = useState("districts");      // districts | blocks | schools
         const [dIdx, setDIdx] = useState(null);               // focused district index
         const [bIdx, setBIdx] = useState(null);               // focused block index
+        const [selHt, setSelHt] = useState(null);             // focused Head-Teacher id (force-graph level)
         const [active, setActive] = useState(null);           // { u, title, sub } under the cursor
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });    // pan/zoom transform
         const drag = useRef(null);
@@ -1461,6 +1462,38 @@
           });
         }, [blocks, bIdx]);
 
+        // LEVEL 3 — one school (force graph): the Head Teacher, its Teachers and their
+        // Students, laid out with a settled d3-force simulation. Counts come from the org model.
+        const school = useMemo(() => {
+          if (!selHt || !d3) return null;
+          const htU = node(selHt);
+          const nodes = [{ id: selHt, u: htU, group: "ht", r: 15 }];
+          const links = [];
+          const teachers = baseChildCount(selHt);
+          for (let t = 0; t < teachers; t++) {
+            const tid = selHt + "." + t;
+            nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9 });
+            links.push({ source: selHt, target: tid });
+            const sc = baseChildCount(tid);
+            for (let s = 0; s < sc; s++) {
+              const sid = tid + "." + s;
+              nodes.push({ id: sid, u: node(sid), group: "student", r: 5 });
+              links.push({ source: tid, target: sid });
+            }
+          }
+          const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
+            .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
+            .force("collide", d3.forceCollide().radius((d) => d.r + 2).iterations(2))
+            .force("x", d3.forceX(0).strength(0.045)).force("y", d3.forceY(0).strength(0.045))
+            .stop();
+          for (let i = 0; i < 300; i++) sim.tick();
+          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+          for (const n of nodes) { if (n.x < minx) minx = n.x; if (n.x > maxx) maxx = n.x; if (n.y < miny) miny = n.y; if (n.y > maxy) maxy = n.y; }
+          return { nodes, links, htU, bbox: [minx - 24, miny - 24, maxx + 24, maxy + 24],
+            counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
+        }, [selHt]);
+
         const frame = useCallback((bbox, pad) => {
           const [minx, miny, maxx, maxy] = bbox;
           const bw = Math.max(1, maxx - minx), bh = Math.max(1, maxy - miny);
@@ -1470,10 +1503,15 @@
 
         const drillDistrict = useCallback((i) => { if (moved.current) return; setDIdx(i); setBIdx(null); setActive(null); setLevel("blocks"); setTf(frame(districts[i].bbox)); }, [districts, frame]);
         const drillBlock = useCallback((j) => { if (moved.current || !blocks || !blocks[j]) return; setBIdx(j); setActive(null); setLevel("schools"); setTf(frame(blocks[j].bbox)); }, [blocks, frame]);
+        const drillSchool = useCallback((sc) => { if (moved.current) return; setSelHt(sc.u.id); setActive(null); setLevel("school"); }, []);
         const popUp = useCallback(() => {
-          if (level === "schools") { setLevel("blocks"); setBIdx(null); setActive(null); setTf(frame(districts[dIdx].bbox)); }
+          if (level === "school") { setLevel("schools"); setSelHt(null); setActive(null); if (blocks && blocks[bIdx]) setTf(frame(blocks[bIdx].bbox)); }
+          else if (level === "schools") { setLevel("blocks"); setBIdx(null); setActive(null); setTf(frame(districts[dIdx].bbox)); }
           else if (level === "blocks") { setLevel("districts"); setDIdx(null); setActive(null); setTf({ k: 1, x: 0, y: 0 }); }
-        }, [level, dIdx, districts, frame]);
+        }, [level, dIdx, bIdx, blocks, districts, frame]);
+
+        // frame the force graph to the viewport when a school opens
+        useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox)); }, [school, level, frame]);
 
         const onWheel = useCallback((e) => {
           e.preventDefault();
@@ -1504,19 +1542,22 @@
                   {dst && <span className="text-zinc-300">›</span>}
                   {dst && <button onClick={() => level === "schools" && popUp()} className={level === "schools" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{dst.name}</button>}
                   {blk && <span className="text-zinc-300">›</span>}
-                  {blk && <span className="text-zinc-900">Block {blk.j + 1}</span>}
+                  {blk && <button onClick={() => level === "school" && popUp()} className={level === "school" ? "text-blue-600 hover:underline" : "text-zinc-900"}>Block {blk.j + 1}</button>}
+                  {level === "school" && <span className="text-zinc-300">›</span>}
+                  {level === "school" && <span className="text-zinc-900">School</span>}
                 </h1>
                 <p className="text-xs text-zinc-500">
                   {level === "districts" && "75 districts · coloured by BSA score · click a district to see its blocks"}
                   {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · click a block to see its schools · click empty space to go up`}
-                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · each dot is a school (Head Teacher) at a random location · click empty space to go up`}
+                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · each dot is a school (Head Teacher) · click a school to open it · click empty space to go up`}
+                  {level === "school" && `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`}
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
                 <span>score</span><span>0</span>
                 <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
                 <span>100</span>
-                <button onClick={() => setTf(level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : { k: 1, x: 0, y: 0 })}
+                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : { k: 1, x: 0, y: 0 })}
                   className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
               </div>
             </header>
@@ -1559,8 +1600,28 @@
                       <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 5 : 3) / tf.k}
                         fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={0.8 / tf.k} style={{ cursor: "pointer" }}
                         onMouseEnter={() => setActive({ u: sc.u, title: "School " + (sc.k + 1), sub: "Head Teacher · " + sc.u.name })}
-                        onClick={(e) => e.stopPropagation()} />
+                        onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
                     ))}
+
+                    {/* LEVEL: school (force graph — Head Teacher › Teachers › Students) */}
+                    {level === "school" && school && (
+                      <g>
+                        {school.links.map((l, idx) => (
+                          <line key={"l" + idx} x1={l.source.x} y1={l.source.y} x2={l.target.x} y2={l.target.y}
+                            stroke="#cbd5e1" strokeWidth={(l.source.group === "ht" ? 1.6 : 0.8) / tf.k} />
+                        ))}
+                        {school.nodes.map((n) => {
+                          const on = active && active.u.id === n.id;
+                          return (
+                            <circle key={n.id} cx={n.x} cy={n.y} r={n.r}
+                              fill={scoreColor(n.u.perf)} stroke={on || n.group === "ht" ? "#0f172a" : "#ffffff"}
+                              strokeWidth={(n.group === "ht" ? 2.5 : on ? 2 : 0.8) / tf.k} style={{ cursor: "pointer" }}
+                              onMouseEnter={() => setActive({ u: n.u, title: n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student", sub: n.u.name })}
+                              onClick={(e) => e.stopPropagation()} />
+                          );
+                        })}
+                      </g>
+                    )}
 
                     {/* chips (districts & blocks): face + name + score, click to drill */}
                     {(level === "districts" || level === "blocks") && (() => {
