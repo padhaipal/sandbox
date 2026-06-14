@@ -1311,12 +1311,16 @@
         };
       }
 
-      const ZMIN = 0.7, ZMAX = 9;
+      const ZMIN = 0.7, ZMAX = 200;   // all-India projection: deep levels (block/schools) need high zoom
       const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-      // --- org model (mirrors the force-graph view): district=BSA, block=BEO, school=Head Teacher ---
-      const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
-      const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]]; // children-per-node range, by level
+      // --- org model: state=DGSE, district=BSA, block=BEO, school=Head Teacher ---
+      // The signed-in user is a DGSE; their peer level is every State DGSE (all India).
+      const LEVELS = ["India", "DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+      // children-per-node range, by level. India/DGSE/BSA fan-out is geographic
+      // (states, districts, blocks come from the map data); only BEO->school,
+      // Head Teacher->teacher and teacher->student are procedural.
+      const FANOUT = [null, null, null, [120, 150], [2, 7], [12, 28]];
       FACE_COUNT.child = 50;
       function node(id) {
         const lvl = id.split(".").length - 1;
@@ -1333,8 +1337,9 @@
       }
       function baseChildCount(id) {
         const lvl = id.split(".").length - 1;
-        if (lvl >= FANOUT.length) return 0;
-        const [mn, mx] = FANOUT[lvl];
+        const f = FANOUT[lvl];
+        if (!f) return 0;
+        const [mn, mx] = f;
         return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
       }
 
@@ -1396,10 +1401,11 @@
       function MapApp() {
         const wrapRef = useRef(null);
         const [size, setSize] = useState({ w: 1000, h: 640 });
-        const [geo, setGeo] = useState(null);                 // districts — null | "error" | FeatureCollection
-        const [geoBlk, setGeoBlk] = useState(null);           // real LGD blocks — null | "error" | FeatureCollection
-        const [level, setLevel] = useState("districts");      // districts | blocks | schools
-        const [dIdx, setDIdx] = useState(null);               // focused district index
+        const [geoDist, setGeoDist] = useState(null);         // national districts — null | "error" | FeatureCollection
+        const [geoBlk, setGeoBlk] = useState(null);           // national LGD blocks — null | "error" | FeatureCollection
+        const [level, setLevel] = useState("states");         // states | districts | blocks | schools | school
+        const [sIdx, setSIdx] = useState(null);               // focused state index (a DGSE — peer of the signed-in user)
+        const [dIdx, setDIdx] = useState(null);               // focused district index (within the state)
         const [bIdx, setBIdx] = useState(null);               // focused block index
         const [selHt, setSelHt] = useState(null);             // focused Head-Teacher id (force-graph level)
         const [active, setActive] = useState(null);           // { u, title, sub } under the cursor
@@ -1408,10 +1414,10 @@
         const moved = useRef(false);
 
         useEffect(() => {
-          fetch("up-districts.geojson")
+          fetch("india-districts.geojson")
             .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(setGeo).catch(() => setGeo("error"));
-          fetch("up-blocks.geojson")
+            .then(setGeoDist).catch(() => setGeoDist("error"));
+          fetch("india-blocks.geojson")
             .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(setGeoBlk).catch(() => setGeoBlk("error"));
         }, []);
@@ -1424,52 +1430,67 @@
           return () => ro.disconnect();
         }, []);
 
-        // shared projection (fitted to the districts), reused for blocks so they align
+        // one projection fitted to all of India; every level lives in this space (drill = zoom)
         const projd = useMemo(() => {
-          if (!geo || geo === "error" || !d3) return null;
-          const proj = d3.geoMercator().fitSize([size.w, size.h], geo);
+          if (!geoDist || geoDist === "error" || !d3) return null;
+          const proj = d3.geoMercator().fitSize([size.w, size.h], geoDist);
           return { proj, path: d3.geoPath(proj) };
-        }, [geo, size]);
+        }, [geoDist, size]);
 
-        // LEVEL 0 — districts (each = a BSA)
-        const districts = useMemo(() => {
-          if (!projd || !geo || geo === "error") return null;
+        // every district of India, projected once
+        const allDist = useMemo(() => {
+          if (!projd || !geoDist || geoDist === "error") return null;
           const { proj, path } = projd;
-          return geo.features.map((f, i) => {
+          return geoDist.features.map((f, gi) => {
             const ring = stripClose(largestRing(f, proj));
-            return { i, id: "r." + i, name: f.properties.district, u: node("r." + i),
+            return { gi, st: f.properties.st, dt: f.properties.dt, name: f.properties.district, stateName: f.properties.state,
               d: path(f), c: path.centroid(f), ring, bbox: bboxOf(ring) };
           });
-        }, [projd, geo]);
+        }, [projd, geoDist]);
 
-        // real LGD block polygons, projected with the district projection and grouped by district name
-        const blocksByDistrict = useMemo(() => {
-          if (!projd || !geoBlk || geoBlk === "error") return null;
-          const { proj, path } = projd;
+        // LEVEL 0 — states (each = a DGSE): districts grouped by state code
+        const states = useMemo(() => {
+          if (!allDist) return null;
+          const groups = new Map();
+          for (const d of allDist) { if (!groups.has(d.st)) groups.set(d.st, []); groups.get(d.st).push(d); }
+          return [...groups.entries()].sort((a, b) => (+a[0]) - (+b[0])).map(([stc, ds], i) => {
+            const id = "r." + i;
+            const bb = [Infinity, Infinity, -Infinity, -Infinity]; let cx = 0, cy = 0;
+            for (const d of ds) { bb[0] = Math.min(bb[0], d.bbox[0]); bb[1] = Math.min(bb[1], d.bbox[1]); bb[2] = Math.max(bb[2], d.bbox[2]); bb[3] = Math.max(bb[3], d.bbox[3]); cx += d.c[0]; cy += d.c[1]; }
+            return { i, id, st: stc, name: ds[0].stateName, districts: ds, u: node(id), c: [cx / ds.length, cy / ds.length], bbox: bb };
+          });
+        }, [allDist]);
+
+        const stIndex = useMemo(() => { const m = new Map(); if (states) for (const s of states) m.set(s.st, s); return m; }, [states]);
+
+        // LEVEL 1 — districts (each = a BSA) of the focused state, with org id
+        const districts = useMemo(() => {
+          if (!states || sIdx == null) return null;
+          const s = states[sIdx];
+          return s.districts.map((d, j) => ({ ...d, j, id: s.id + "." + j, u: node(s.id + "." + j) }));
+        }, [states, sIdx]);
+
+        // raw block features grouped by state|district census code (cheap; no projection)
+        const blockIndex = useMemo(() => {
+          if (!geoBlk || geoBlk === "error") return null;
           const m = new Map();
-          for (const f of geoBlk.features) {
-            const ring = stripClose(largestRing(f, proj));
-            if (ring.length < 3) continue;
-            const item = { name: f.properties.block, ring, d: path(f), c: path.centroid(f), bbox: bboxOf(ring) };
-            const k = f.properties.district;
-            if (!m.has(k)) m.set(k, []);
-            m.get(k).push(item);
-          }
+          for (const f of geoBlk.features) { const k = f.properties.st + "|" + f.properties.dt; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
           return m;
-        }, [projd, geoBlk]);
+        }, [geoBlk]);
 
-        // LEVEL 1 — blocks (each = a BEO): the real LGD blocks of the focused district.
-        // A procedural BEO (face/name/score) is attached to each real block by index.
+        // LEVEL 2 — blocks (each = a BEO): the real LGD blocks of the focused district, projected on demand.
         const blocks = useMemo(() => {
-          if (!districts || dIdx == null || !blocksByDistrict) return null;
-          const dst = districts[dIdx];
-          const list = blocksByDistrict.get(dst.name) || [];
-          return list.map((b, j) => ({ j, id: dst.id + "." + j, u: node(dst.id + "." + j),
-            name: b.name, ring: b.ring, d: b.d, seed: b.c, bbox: b.bbox }));
-        }, [districts, dIdx, blocksByDistrict]);
+          if (!districts || dIdx == null || !blockIndex || !projd) return null;
+          const dst = districts[dIdx]; const { proj, path } = projd;
+          const feats = blockIndex.get(dst.st + "|" + dst.dt) || [];
+          return feats.map((f, k) => {
+            const ring = stripClose(largestRing(f, proj)); const id = dst.id + "." + k;
+            return { k, id, u: node(id), name: f.properties.block, ring, d: path(f), seed: path.centroid(f), bbox: bboxOf(ring) };
+          }).filter((b) => b.ring.length >= 3);
+        }, [districts, dIdx, blockIndex, projd]);
 
-        // LEVEL 2 — schools (each = a Head Teacher): random points inside the focused block.
-        // School count = the BEO's child count in the org model (the "right" number).
+        // LEVEL 3 — schools (each = a Head Teacher): random points inside the focused block.
+        // Count = the BEO's child count in the org model; positions are illustrative, not real.
         const schools = useMemo(() => {
           if (!blocks || bIdx == null || !blocks[bIdx]) return null;
           const blk = blocks[bIdx];
@@ -1519,14 +1540,24 @@
           return { k, x: size.w / 2 - ((minx + maxx) / 2) * k, y: size.h / 2 - ((miny + maxy) / 2) * k };
         }, [size]);
 
-        const drillDistrict = useCallback((i) => { if (moved.current) return; setDIdx(i); setBIdx(null); setActive(null); setLevel("blocks"); setTf(frame(districts[i].bbox)); }, [districts, frame]);
-        const drillBlock = useCallback((j) => { if (moved.current || !blocks || !blocks[j]) return; setBIdx(j); setActive(null); setLevel("schools"); setTf(frame(blocks[j].bbox)); }, [blocks, frame]);
+        const drillState = useCallback((i) => { if (moved.current) return; setSIdx(i); setDIdx(null); setBIdx(null); setSelHt(null); setActive(null); setLevel("districts"); setTf(frame(states[i].bbox)); }, [states, frame]);
+        const drillDistrict = useCallback((j) => { if (moved.current || !districts || !districts[j]) return; setDIdx(j); setBIdx(null); setActive(null); setLevel("blocks"); setTf(frame(districts[j].bbox)); }, [districts, frame]);
+        const drillBlock = useCallback((k) => { if (moved.current || !blocks || !blocks[k]) return; setBIdx(k); setActive(null); setLevel("schools"); setTf(frame(blocks[k].bbox)); }, [blocks, frame]);
         const drillSchool = useCallback((sc) => { if (moved.current) return; setSelHt(sc.u.id); setActive(null); setLevel("school"); }, []);
+        // jump straight to a level via the breadcrumb
+        const goLevel = useCallback((target) => {
+          setActive(null);
+          if (target === "states") { setLevel("states"); setSIdx(null); setDIdx(null); setBIdx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
+          else if (target === "districts") { setLevel("districts"); setDIdx(null); setBIdx(null); setSelHt(null); if (states && states[sIdx]) setTf(frame(states[sIdx].bbox)); }
+          else if (target === "blocks") { setLevel("blocks"); setBIdx(null); setSelHt(null); if (districts && districts[dIdx]) setTf(frame(districts[dIdx].bbox)); }
+          else if (target === "schools") { setLevel("schools"); setSelHt(null); if (blocks && blocks[bIdx]) setTf(frame(blocks[bIdx].bbox)); }
+        }, [states, sIdx, districts, dIdx, blocks, bIdx, frame]);
         const popUp = useCallback(() => {
-          if (level === "school") { setLevel("schools"); setSelHt(null); setActive(null); if (blocks && blocks[bIdx]) setTf(frame(blocks[bIdx].bbox)); }
-          else if (level === "schools") { setLevel("blocks"); setBIdx(null); setActive(null); setTf(frame(districts[dIdx].bbox)); }
-          else if (level === "blocks") { setLevel("districts"); setDIdx(null); setActive(null); setTf({ k: 1, x: 0, y: 0 }); }
-        }, [level, dIdx, bIdx, blocks, districts, frame]);
+          if (level === "school") goLevel("schools");
+          else if (level === "schools") goLevel("blocks");
+          else if (level === "blocks") goLevel("districts");
+          else if (level === "districts") goLevel("states");
+        }, [level, goLevel]);
 
         // frame the force graph to the viewport when a school opens
         useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox)); }, [school, level, frame]);
@@ -1548,6 +1579,7 @@
         const onBgClick = useCallback(() => { if (!moved.current) popUp(); }, [popUp]);   // empty-space click = up one level
 
         const gStyle = { transition: drag.current ? "none" : "transform .35s ease" };
+        const st = sIdx != null && states ? states[sIdx] : null;
         const dst = dIdx != null && districts ? districts[dIdx] : null;
         const blk = bIdx != null && blocks ? blocks[bIdx] : null;
 
@@ -1555,19 +1587,22 @@
           <div className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
               <div>
-                <h1 className="flex items-center gap-1.5 text-lg font-semibold text-zinc-900">
-                  <button onClick={popUp} disabled={level === "districts"} className={level === "districts" ? "text-zinc-900" : "text-blue-600 hover:underline"}>Uttar Pradesh</button>
+                <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
+                  <button onClick={() => goLevel("states")} className={level === "states" ? "text-zinc-900" : "text-blue-600 hover:underline"}>All India</button>
+                  {st && <span className="text-zinc-300">›</span>}
+                  {st && <button onClick={() => goLevel("districts")} className={level === "districts" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{st.name}</button>}
                   {dst && <span className="text-zinc-300">›</span>}
-                  {dst && <button onClick={() => level === "schools" && popUp()} className={level === "schools" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{dst.name}</button>}
+                  {dst && <button onClick={() => goLevel("blocks")} className={level === "blocks" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{dst.name}</button>}
                   {blk && <span className="text-zinc-300">›</span>}
-                  {blk && <button onClick={() => level === "school" && popUp()} className={level === "school" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{blk.name}</button>}
+                  {blk && <button onClick={() => goLevel("schools")} className={level === "schools" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{blk.name}</button>}
                   {level === "school" && <span className="text-zinc-300">›</span>}
                   {level === "school" && <span className="text-zinc-900">School</span>}
                 </h1>
                 <p className="text-xs text-zinc-500">
-                  {level === "districts" && "75 districts · coloured by BSA score · click a district to see its blocks"}
-                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · real LGD boundaries · click a block to see its schools · click empty space to go up`}
-                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · each dot is a school (Head Teacher) · click a school to open it · click empty space to go up`}
+                  {level === "states" && "Signed in as a DGSE · viewing every State DGSE — your peers across India · click a state to drill in"}
+                  {level === "districts" && `${st ? st.name : ""} · ${districts ? districts.length : 0} districts (BSAs) · click a district · click empty space to go up`}
+                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · real LGD boundaries · click a block · click empty space to go up`}
+                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · markers are illustrative — randomly placed within the block, not real locations · click a school · click empty space to go up`}
                   {level === "school" && `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`}
                 </p>
               </div>
@@ -1575,15 +1610,15 @@
                 <span>score</span><span>0</span>
                 <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
                 <span>100</span>
-                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : { k: 1, x: 0, y: 0 })}
+                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : level === "districts" && st ? frame(st.bbox) : { k: 1, x: 0, y: 0 })}
                   className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
               </div>
             </header>
 
             <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#f6f7f9]">
-              {!districts ? (
+              {!allDist ? (
                 <div className="flex h-full items-center justify-center text-sm text-zinc-400">
-                  {geo === "error" ? "Could not load up-districts.geojson — serve the folder over http (npx serve .)." : "Loading map…"}
+                  {geoDist === "error" ? "Could not load india-districts.geojson — serve the folder over http (npx serve .)." : "Loading map…"}
                 </div>
               ) : (
                 <svg width={size.w} height={size.h} className="block touch-none select-none"
@@ -1592,22 +1627,35 @@
                   style={{ cursor: drag.current ? "grabbing" : "grab" }}>
                   <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={gStyle}>
 
-                    {/* LEVEL: districts */}
-                    {level === "districts" && districts.map((d0) => (
-                      <path key={d0.i} d={d0.d} fill={scoreColor(d0.u.perf)}
+                    {/* LEVEL: states — every district coloured by its state's DGSE score */}
+                    {level === "states" && allDist.map((d0) => {
+                      const s = stIndex.get(d0.st); if (!s) return null;
+                      const on = active && active.u.id === s.id;
+                      return (
+                        <path key={d0.gi} d={d0.d} fill={scoreColor(s.u.perf)}
+                          stroke={on ? "#0f172a" : scoreColor(s.u.perf)} strokeWidth={(on ? 1.4 : 0.4) / tf.k}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setActive({ u: s.u, title: s.name, sub: "DGSE · " + s.u.name })}
+                          onClick={(e) => { e.stopPropagation(); drillState(s.i); }} />
+                      );
+                    })}
+
+                    {/* LEVEL: districts (of the focused state) */}
+                    {level === "districts" && districts && districts.map((d0) => (
+                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
                         stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                         style={{ cursor: "pointer" }}
                         onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name })}
-                        onClick={(e) => { e.stopPropagation(); drillDistrict(d0.i); }} />
+                        onClick={(e) => { e.stopPropagation(); drillDistrict(d0.j); }} />
                     ))}
 
-                    {/* LEVEL: blocks (subdivision of focused district) */}
+                    {/* LEVEL: blocks (real LGD blocks of focused district) */}
                     {level === "blocks" && blocks && blocks.map((b) => (
                       <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
                         stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                         style={{ cursor: "pointer" }}
                         onMouseEnter={() => setActive({ u: b.u, title: b.name + " · " + dst.name, sub: "BEO · " + b.u.name })}
-                        onClick={(e) => { e.stopPropagation(); drillBlock(b.j); }} />
+                        onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
                     ))}
 
                     {/* LEVEL: schools (dots inside focused block) */}
@@ -1641,11 +1689,13 @@
                       </g>
                     )}
 
-                    {/* chips (districts & blocks): face + name + score, click to drill */}
-                    {(level === "districts" || level === "blocks") && (() => {
-                      const items = level === "districts"
-                        ? districts.map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillDistrict(d0.i), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name }) }))
-                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.j), set: () => setActive({ u: b.u, title: b.name + " · " + dst.name, sub: "BEO · " + b.u.name }) }));
+                    {/* chips (states, districts & blocks): face + name + score, click to drill */}
+                    {(level === "states" || level === "districts" || level === "blocks") && (() => {
+                      const items = level === "states"
+                        ? (states || []).map((s) => ({ id: s.id, u: s.u, name: s.name, c: s.c, go: () => drillState(s.i), set: () => setActive({ u: s.u, title: s.name, sub: "DGSE · " + s.u.name }) }))
+                        : level === "districts"
+                        ? (districts || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillDistrict(d0.j), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name }) }))
+                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.k), set: () => setActive({ u: b.u, title: b.name + " · " + (dst ? dst.name : ""), sub: "BEO · " + b.u.name }) }));
                       return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
                         const on = active && active.u.id === it.id;
                         const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
@@ -1690,10 +1740,24 @@
                 </div>
               )}
 
-              {level !== "districts" && (
+              {level !== "states" && (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
                   click empty space to go up one level
                 </div>
+              )}
+
+              {/* school markers are not real locations — make that explicit */}
+              {level === "schools" && (
+                <div className="pointer-events-none absolute left-4 bottom-4 max-w-xs rounded-lg border border-amber-200 bg-amber-50/95 px-3 py-2 text-[11px] leading-snug text-amber-800 shadow-sm">
+                  <span className="font-semibold">Illustrative positions.</span> School markers are scattered at random within the block to show density — they are <span className="font-semibold">not</span> the schools' real geographic locations.
+                </div>
+              )}
+
+              {(level === "blocks" || level === "schools") && !blocks && geoBlk !== "error" && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400">Loading blocks…</div>
+              )}
+              {level === "blocks" && blocks && blocks.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400">No LGD block data for {dst ? dst.name : "this district"} · click empty space to go back</div>
               )}
             </div>
           </div>
