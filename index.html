@@ -11,6 +11,7 @@
   <script src="https://unpkg.com/react-force-graph-2d"></script>            <!-- VIEW 1: force graph -->
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" /> <!-- VIEW 2: tree -->
   <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
+  <script src="https://unpkg.com/d3@7"></script>                              <!-- VIEW 3: UP district map -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -1260,11 +1261,539 @@
     })();
 
     // #####################################################################
+    // ## VIEW 3 — Uttar Pradesh district map (d3-geo choropleth).         ##
+    // ## Each district is its own UI element, coloured by its BSA's       ##
+    // ## score and showing the district name, the BSA's face, the BSA's   ##
+    // ## name and the score. Self-contained IIFE; exported as <MapApp/>.  ##
+    // #####################################################################
+    const MapApp = (function () {
+      const d3 = window.d3;
+
+      // --- minimal helpers (mirror the other views; IIFEs stay independent) ---
+      function hashStr(s) {
+        let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+        for (let i = 0; i < s.length; i++) {
+          const ch = s.charCodeAt(i);
+          h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return (h1 >>> 0);
+      }
+      const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+        "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+        "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+        "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+        "Mohan","Usha","Suresh","Gita"];
+      const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+        "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+      const FACE_COUNT = { adult: 300 };
+
+      const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+      function scoreRGB(p) {                              // red(0) -> yellow(.5) -> green(1)
+        const red = [239, 68, 68], yellow = [234, 179, 8], green = [34, 197, 94];
+        return (p < 0.5 ? lerp(red, yellow, p / 0.5) : lerp(yellow, green, (p - 0.5) / 0.5)).map((v) => v | 0);
+      }
+      const scoreColor = (p) => `rgb(${scoreRGB(p).join(",")})`;
+      const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
+
+      // BSA k -> the same person the force-graph / tree views show for node "r.k".
+      function bsa(k) {
+        const id = "r." + k;
+        const h = hashStr("u:" + id);
+        const perf = (h % 1000) / 1000;
+        return {
+          id,
+          name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 9) % LAST.length],
+          perf, score: Math.round(perf * 100),
+          face: "faces/adult/" + (hashStr("face:" + id) % FACE_COUNT.adult) + ".jpg",
+          phone: "+9198" + String(1000000 + (h % 9000000)),
+        };
+      }
+
+      const ZMIN = 0.7, ZMAX = 200;   // all-India projection: deep levels (block/schools) need high zoom
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+      // --- org model: state=DGSE, district=BSA, block=BEO, school=Head Teacher ---
+      // The signed-in user is a DGSE; their peer level is every State DGSE (all India).
+      const LEVELS = ["India", "DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+      // children-per-node range, by level. India/DGSE/BSA fan-out is geographic
+      // (states, districts, blocks come from the map data); only BEO->school,
+      // Head Teacher->teacher and teacher->student are procedural.
+      const FANOUT = [null, null, null, [120, 150], [2, 7], [12, 28]];
+      FACE_COUNT.child = 50;
+      function node(id) {
+        const lvl = id.split(".").length - 1;
+        const h = hashStr("u:" + id);
+        const perf = (h % 1000) / 1000;
+        const student = lvl === LEVELS.length - 1;
+        return {
+          id, lvl, designation: LEVELS[lvl] || "—",
+          name: FIRST[h % FIRST.length] + (student ? "" : " " + LAST[(h >>> 9) % LAST.length]),
+          perf, score: Math.round(perf * 100),
+          face: "faces/" + (student ? "child" : "adult") + "/" + (hashStr("face:" + id) % (student ? FACE_COUNT.child : FACE_COUNT.adult)) + ".jpg",
+          phone: "+9198" + String(1000000 + (h % 9000000)),
+        };
+      }
+      function baseChildCount(id) {
+        const lvl = id.split(".").length - 1;
+        const f = FANOUT[lvl];
+        if (!f) return 0;
+        const [mn, mx] = f;
+        return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
+      }
+
+      // --- geometry helpers (operate in projected screen space) ---
+      const stripClose = (r) => (r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.slice(0, -1) : r);
+      const ringArea = (r) => { let s = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return s / 2; };
+      function bboxOf(r) { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const p of r) { if (p[0] < a) a = p[0]; if (p[1] < b) b = p[1]; if (p[0] > c) c = p[0]; if (p[1] > d) d = p[1]; } return [a, b, c, d]; }
+      function largestRing(feature, proj) {
+        const g = feature.geometry;
+        const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+        let best = null, bestA = -1;
+        for (const poly of polys) { const pr = poly[0].map((c) => proj(c)); const a = Math.abs(ringArea(pr)); if (a > bestA) { bestA = a; best = pr; } }
+        return best || [];
+      }
+      const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
+      function pointInPoly(p, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+          if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+      }
+      function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+      function sampleInside(ring, n, seed) {
+        const [minx, miny, maxx, maxy] = bboxOf(ring);
+        const r = rng(seed), out = []; let tries = 0; const cap = n * 400 + 3000;
+        while (out.length < n && tries++ < cap) { const p = [minx + (maxx - minx) * r(), miny + (maxy - miny) * r()]; if (pointInPoly(p, ring)) out.push(p); }
+        return out;
+      }
+      const segInt = (p1, p2, a, b) => {
+        const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1], x3 = a[0], y3 = a[1], x4 = b[0], y4 = b[1];
+        const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (!den) return p2.slice();
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+        return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+      };
+      // Sutherland–Hodgman: clip 'subject' (any simple polygon) by convex 'clip'.
+      function clipPolygon(subject, clip) {
+        clip = stripClose(clip);
+        if (clip.length < 3) return subject;
+        let cx = 0, cy = 0; for (const p of clip) { cx += p[0]; cy += p[1]; } cx /= clip.length; cy /= clip.length;
+        let out = subject;
+        for (let e = 0; e < clip.length && out.length; e++) {
+          const A = clip[e], B = clip[(e + 1) % clip.length];
+          const sgn = ((B[0] - A[0]) * (cy - A[1]) - (B[1] - A[1]) * (cx - A[0])) >= 0 ? 1 : -1;
+          const inside = (p) => sgn * ((B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0])) >= 0;
+          const inp = out; out = [];
+          for (let i = 0; i < inp.length; i++) {
+            const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+            const ci = inside(cur), pi = inside(prev);
+            if (ci) { if (!pi) out.push(segInt(prev, cur, A, B)); out.push(cur); }
+            else if (pi) out.push(segInt(prev, cur, A, B));
+          }
+        }
+        return out;
+      }
+
+      function MapApp() {
+        const wrapRef = useRef(null);
+        const [size, setSize] = useState({ w: 1000, h: 640 });
+        const [geoDist, setGeoDist] = useState(null);         // national districts — null | "error" | FeatureCollection
+        const [geoBlk, setGeoBlk] = useState(null);           // national LGD blocks — null | "error" | FeatureCollection
+        const [level, setLevel] = useState("states");         // states | districts | blocks | schools | school
+        const [sIdx, setSIdx] = useState(null);               // focused state index (a DGSE — peer of the signed-in user)
+        const [dIdx, setDIdx] = useState(null);               // focused district index (within the state)
+        const [bIdx, setBIdx] = useState(null);               // focused block index
+        const [selHt, setSelHt] = useState(null);             // focused Head-Teacher id (force-graph level)
+        const [active, setActive] = useState(null);           // { u, title, sub } under the cursor
+        const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });    // pan/zoom transform
+        const drag = useRef(null);
+        const moved = useRef(false);
+
+        useEffect(() => {
+          fetch("india-districts.geojson")
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(setGeoDist).catch(() => setGeoDist("error"));
+          fetch("india-blocks.geojson")
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(setGeoBlk).catch(() => setGeoBlk("error"));
+        }, []);
+
+        useEffect(() => {
+          const el = wrapRef.current; if (!el) return;
+          const measure = () => { const r = el.getBoundingClientRect(); setSize({ w: Math.max(320, r.width), h: Math.max(320, r.height) }); };
+          measure();
+          const ro = new ResizeObserver(measure); ro.observe(el);
+          return () => ro.disconnect();
+        }, []);
+
+        // one projection fitted to all of India; every level lives in this space (drill = zoom)
+        const projd = useMemo(() => {
+          if (!geoDist || geoDist === "error" || !d3) return null;
+          const proj = d3.geoMercator().fitSize([size.w, size.h], geoDist);
+          return { proj, path: d3.geoPath(proj) };
+        }, [geoDist, size]);
+
+        // every district of India, projected once
+        const allDist = useMemo(() => {
+          if (!projd || !geoDist || geoDist === "error") return null;
+          const { proj, path } = projd;
+          return geoDist.features.map((f, gi) => {
+            const ring = stripClose(largestRing(f, proj));
+            return { gi, st: f.properties.st, dt: f.properties.dt, name: f.properties.district, stateName: f.properties.state,
+              d: path(f), c: path.centroid(f), ring, bbox: bboxOf(ring) };
+          });
+        }, [projd, geoDist]);
+
+        // LEVEL 0 — states (each = a DGSE): districts grouped by state code
+        const states = useMemo(() => {
+          if (!allDist) return null;
+          const groups = new Map();
+          for (const d of allDist) { if (!groups.has(d.st)) groups.set(d.st, []); groups.get(d.st).push(d); }
+          return [...groups.entries()].sort((a, b) => (+a[0]) - (+b[0])).map(([stc, ds], i) => {
+            const id = "r." + i;
+            const bb = [Infinity, Infinity, -Infinity, -Infinity]; let cx = 0, cy = 0;
+            for (const d of ds) { bb[0] = Math.min(bb[0], d.bbox[0]); bb[1] = Math.min(bb[1], d.bbox[1]); bb[2] = Math.max(bb[2], d.bbox[2]); bb[3] = Math.max(bb[3], d.bbox[3]); cx += d.c[0]; cy += d.c[1]; }
+            return { i, id, st: stc, name: ds[0].stateName, districts: ds, u: node(id), c: [cx / ds.length, cy / ds.length], bbox: bb };
+          });
+        }, [allDist]);
+
+        const stIndex = useMemo(() => { const m = new Map(); if (states) for (const s of states) m.set(s.st, s); return m; }, [states]);
+
+        // LEVEL 1 — districts (each = a BSA) of the focused state, with org id
+        const districts = useMemo(() => {
+          if (!states || sIdx == null) return null;
+          const s = states[sIdx];
+          return s.districts.map((d, j) => ({ ...d, j, id: s.id + "." + j, u: node(s.id + "." + j) }));
+        }, [states, sIdx]);
+
+        // raw block features grouped by state|district census code (cheap; no projection)
+        const blockIndex = useMemo(() => {
+          if (!geoBlk || geoBlk === "error") return null;
+          const m = new Map();
+          for (const f of geoBlk.features) { const k = f.properties.st + "|" + f.properties.dt; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
+          return m;
+        }, [geoBlk]);
+
+        // LEVEL 2 — blocks (each = a BEO). Real LGD blocks where available; for the ~45
+        // districts the LGD set doesn't cover, fall back to a synthesised Voronoi subdivision.
+        const blocks = useMemo(() => {
+          if (!districts || dIdx == null || !blockIndex || !projd) return null;
+          const dst = districts[dIdx]; const { proj, path } = projd;
+          const feats = blockIndex.get(dst.st + "|" + dst.dt) || [];
+          if (feats.length) {
+            return feats.map((f, k) => {
+              const ring = stripClose(largestRing(f, proj)); const id = dst.id + "." + k;
+              return { k, id, u: node(id), name: f.properties.block, ring, d: path(f), seed: path.centroid(f), bbox: bboxOf(ring), synthetic: false };
+            }).filter((b) => b.ring.length >= 3);
+          }
+          // fallback: subdivide the district into a plausible number of blocks
+          if (!dst.ring || dst.ring.length < 3) return [];
+          const n = 6 + (hashStr("nblk:" + dst.id) % 9);
+          const seeds = sampleInside(dst.ring, n, hashStr("seed:" + dst.id));
+          if (!seeds.length) return [];
+          const [minx, miny, maxx, maxy] = dst.bbox;
+          const vor = d3.Delaunay.from(seeds).voronoi([minx - 5, miny - 5, maxx + 5, maxy + 5]);
+          return seeds.map((s, k) => {
+            const id = dst.id + "." + k; const cell = vor.cellPolygon(k);
+            const poly = cell ? clipPolygon(dst.ring, cell) : [];
+            return { k, id, u: node(id), name: "Block " + (k + 1), ring: poly, d: poly.length >= 3 ? toPath(poly) : "", seed: s, bbox: bboxOf(poly.length ? poly : [s]), synthetic: true };
+          }).filter((b) => b.ring.length >= 3);
+        }, [districts, dIdx, blockIndex, projd]);
+
+        // LEVEL 3 — schools (each = a Head Teacher): random points inside the focused block.
+        // Count = the BEO's child count in the org model; positions are illustrative, not real.
+        const schools = useMemo(() => {
+          if (!blocks || bIdx == null || !blocks[bIdx]) return null;
+          const blk = blocks[bIdx];
+          const m = baseChildCount(blk.id);
+          return sampleInside(blk.ring, m, hashStr("sch:" + blk.id)).map((p, k) => {
+            const id = blk.id + "." + k;
+            return { k, id, u: node(id), p };
+          });
+        }, [blocks, bIdx]);
+
+        // LEVEL 3 — one school (force graph): the Head Teacher, its Teachers and their
+        // Students, laid out with a settled d3-force simulation. Counts come from the org model.
+        const school = useMemo(() => {
+          if (!selHt || !d3) return null;
+          const htU = node(selHt);
+          const nodes = [{ id: selHt, u: htU, group: "ht", r: 15 }];
+          const links = [];
+          const teachers = baseChildCount(selHt);
+          for (let t = 0; t < teachers; t++) {
+            const tid = selHt + "." + t;
+            nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9 });
+            links.push({ source: selHt, target: tid });
+            const sc = baseChildCount(tid);
+            for (let s = 0; s < sc; s++) {
+              const sid = tid + "." + s;
+              nodes.push({ id: sid, u: node(sid), group: "student", r: 5 });
+              links.push({ source: tid, target: sid });
+            }
+          }
+          const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
+            .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
+            .force("collide", d3.forceCollide().radius((d) => d.r + 2).iterations(2))
+            .force("x", d3.forceX(0).strength(0.045)).force("y", d3.forceY(0).strength(0.045))
+            .stop();
+          for (let i = 0; i < 300; i++) sim.tick();
+          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+          for (const n of nodes) { if (n.x < minx) minx = n.x; if (n.x > maxx) maxx = n.x; if (n.y < miny) miny = n.y; if (n.y > maxy) maxy = n.y; }
+          return { nodes, links, htU, bbox: [minx - 24, miny - 24, maxx + 24, maxy + 24],
+            counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
+        }, [selHt]);
+
+        const frame = useCallback((bbox, pad) => {
+          const [minx, miny, maxx, maxy] = bbox;
+          const bw = Math.max(1, maxx - minx), bh = Math.max(1, maxy - miny);
+          const k = clamp(Math.min(size.w / bw, size.h / bh) * (pad || 0.82), ZMIN, ZMAX);
+          return { k, x: size.w / 2 - ((minx + maxx) / 2) * k, y: size.h / 2 - ((miny + maxy) / 2) * k };
+        }, [size]);
+
+        const drillState = useCallback((i) => { if (moved.current) return; setSIdx(i); setDIdx(null); setBIdx(null); setSelHt(null); setActive(null); setLevel("districts"); setTf(frame(states[i].bbox)); }, [states, frame]);
+        const drillDistrict = useCallback((j) => { if (moved.current || !districts || !districts[j]) return; setDIdx(j); setBIdx(null); setActive(null); setLevel("blocks"); setTf(frame(districts[j].bbox)); }, [districts, frame]);
+        const drillBlock = useCallback((k) => { if (moved.current || !blocks || !blocks[k]) return; setBIdx(k); setActive(null); setLevel("schools"); setTf(frame(blocks[k].bbox)); }, [blocks, frame]);
+        const drillSchool = useCallback((sc) => { if (moved.current) return; setSelHt(sc.u.id); setActive(null); setLevel("school"); }, []);
+        // jump straight to a level via the breadcrumb
+        const goLevel = useCallback((target) => {
+          setActive(null);
+          if (target === "states") { setLevel("states"); setSIdx(null); setDIdx(null); setBIdx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
+          else if (target === "districts") { setLevel("districts"); setDIdx(null); setBIdx(null); setSelHt(null); if (states && states[sIdx]) setTf(frame(states[sIdx].bbox)); }
+          else if (target === "blocks") { setLevel("blocks"); setBIdx(null); setSelHt(null); if (districts && districts[dIdx]) setTf(frame(districts[dIdx].bbox)); }
+          else if (target === "schools") { setLevel("schools"); setSelHt(null); if (blocks && blocks[bIdx]) setTf(frame(blocks[bIdx].bbox)); }
+        }, [states, sIdx, districts, dIdx, blocks, bIdx, frame]);
+        const popUp = useCallback(() => {
+          if (level === "school") goLevel("schools");
+          else if (level === "schools") goLevel("blocks");
+          else if (level === "blocks") goLevel("districts");
+          else if (level === "districts") goLevel("states");
+        }, [level, goLevel]);
+
+        // frame the force graph to the viewport when a school opens
+        useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox)); }, [school, level, frame]);
+
+        const onWheel = useCallback((e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const px = e.clientX - rect.left, py = e.clientY - rect.top;
+          setTf((t) => { const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX); const s = k / t.k; return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s }; });
+        }, []);
+        const onPointerDown = useCallback((e) => { drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; }, [tf]);
+        const onPointerMove = useCallback((e) => {
+          if (!drag.current) return;
+          const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
+          if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
+          setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
+        }, []);
+        const onPointerUp = useCallback(() => { drag.current = null; }, []);
+        const onBgClick = useCallback(() => { if (!moved.current) popUp(); }, [popUp]);   // empty-space click = up one level
+
+        const gStyle = { transition: drag.current ? "none" : "transform .35s ease" };
+        const st = sIdx != null && states ? states[sIdx] : null;
+        const dst = dIdx != null && districts ? districts[dIdx] : null;
+        const blk = bIdx != null && blocks ? blocks[bIdx] : null;
+
+        return (
+          <div className="flex h-full flex-col">
+            <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
+              <div>
+                <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
+                  <button onClick={() => goLevel("states")} className={level === "states" ? "text-zinc-900" : "text-blue-600 hover:underline"}>All India</button>
+                  {st && <span className="text-zinc-300">›</span>}
+                  {st && <button onClick={() => goLevel("districts")} className={level === "districts" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{st.name}</button>}
+                  {dst && <span className="text-zinc-300">›</span>}
+                  {dst && <button onClick={() => goLevel("blocks")} className={level === "blocks" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{dst.name}</button>}
+                  {blk && <span className="text-zinc-300">›</span>}
+                  {blk && <button onClick={() => goLevel("schools")} className={level === "schools" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{blk.name}</button>}
+                  {level === "school" && <span className="text-zinc-300">›</span>}
+                  {level === "school" && <span className="text-zinc-900">School</span>}
+                </h1>
+                <p className="text-xs text-zinc-500">
+                  {level === "states" && "Signed in as a DGSE · viewing every State DGSE — your peers across India · click a state to drill in"}
+                  {level === "districts" && `${st ? st.name : ""} · ${districts ? districts.length : 0} districts (BSAs) · click a district · click empty space to go up`}
+                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · ${blocks && blocks[0] && blocks[0].synthetic ? "synthesised (no LGD data for this district)" : "real LGD boundaries"} · click a block · click empty space to go up`}
+                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · markers are illustrative — randomly placed within the block, not real locations · click a school · click empty space to go up`}
+                  {level === "school" && `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`}
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <span>score</span><span>0</span>
+                <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
+                <span>100</span>
+                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : level === "districts" && st ? frame(st.bbox) : { k: 1, x: 0, y: 0 })}
+                  className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
+              </div>
+            </header>
+
+            <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#f6f7f9]">
+              {!allDist ? (
+                <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+                  {geoDist === "error" ? "Could not load india-districts.geojson — serve the folder over http (npx serve .)." : "Loading map…"}
+                </div>
+              ) : (
+                <svg width={size.w} height={size.h} className="block touch-none select-none"
+                  onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onClick={onBgClick}
+                  style={{ cursor: drag.current ? "grabbing" : "grab" }}>
+                  <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={gStyle}>
+
+                    {/* LEVEL: states — every district coloured by its state's DGSE score */}
+                    {level === "states" && allDist.map((d0) => {
+                      const s = stIndex.get(d0.st); if (!s) return null;
+                      const on = active && active.u.id === s.id;
+                      return (
+                        <path key={d0.gi} d={d0.d} fill={scoreColor(s.u.perf)}
+                          stroke={on ? "#0f172a" : scoreColor(s.u.perf)} strokeWidth={(on ? 1.4 : 0.4) / tf.k}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setActive({ u: s.u, title: s.name, sub: "DGSE · " + s.u.name })}
+                          onClick={(e) => { e.stopPropagation(); drillState(s.i); }} />
+                      );
+                    })}
+
+                    {/* LEVEL: districts (of the focused state) */}
+                    {level === "districts" && districts && districts.map((d0) => (
+                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
+                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillDistrict(d0.j); }} />
+                    ))}
+
+                    {/* LEVEL: blocks (real LGD blocks of focused district) */}
+                    {level === "blocks" && blocks && blocks.map((b) => (
+                      <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
+                        stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: b.u, title: b.name + " · " + dst.name, sub: "BEO · " + b.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                    ))}
+
+                    {/* LEVEL: schools (dots inside focused block) */}
+                    {level === "schools" && blk && (
+                      <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} style={{ pointerEvents: "none" }} />
+                    )}
+                    {level === "schools" && schools && schools.map((sc) => (
+                      <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 5 : 3) / tf.k}
+                        fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={0.8 / tf.k} style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: sc.u, title: "School " + (sc.k + 1), sub: "Head Teacher · " + sc.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
+                    ))}
+
+                    {/* LEVEL: school (force graph — Head Teacher › Teachers › Students) */}
+                    {level === "school" && school && (
+                      <g>
+                        {school.links.map((l, idx) => (
+                          <line key={"l" + idx} x1={l.source.x} y1={l.source.y} x2={l.target.x} y2={l.target.y}
+                            stroke="#cbd5e1" strokeWidth={(l.source.group === "ht" ? 1.6 : 0.8) / tf.k} />
+                        ))}
+                        {school.nodes.map((n) => {
+                          const on = active && active.u.id === n.id;
+                          return (
+                            <circle key={n.id} cx={n.x} cy={n.y} r={n.r}
+                              fill={scoreColor(n.u.perf)} stroke={on || n.group === "ht" ? "#0f172a" : "#ffffff"}
+                              strokeWidth={(n.group === "ht" ? 2.5 : on ? 2 : 0.8) / tf.k} style={{ cursor: "pointer" }}
+                              onMouseEnter={() => setActive({ u: n.u, title: n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student", sub: n.u.name })}
+                              onClick={(e) => e.stopPropagation()} />
+                          );
+                        })}
+                      </g>
+                    )}
+
+                    {/* chips (states, districts & blocks): face + name + score, click to drill */}
+                    {(level === "states" || level === "districts" || level === "blocks") && (() => {
+                      const items = level === "states"
+                        ? (states || []).map((s) => ({ id: s.id, u: s.u, name: s.name, c: s.c, go: () => drillState(s.i), set: () => setActive({ u: s.u, title: s.name, sub: "DGSE · " + s.u.name }) }))
+                        : level === "districts"
+                        ? (districts || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillDistrict(d0.j), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name }) }))
+                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.k), set: () => setActive({ u: b.u, title: b.name + " · " + (dst ? dst.name : ""), sub: "BEO · " + b.u.name }) }));
+                      return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
+                        const on = active && active.u.id === it.id;
+                        const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
+                        return (
+                          <foreignObject key={"c" + it.id} x={it.c[0] - w / 2} y={it.c[1] - h / 2} width={w} height={h} style={{ overflow: "visible", pointerEvents: "none" }}>
+                            <div onMouseEnter={it.set} onClick={(e) => { e.stopPropagation(); it.go(); }}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
+                              style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left", pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
+                              <img src={it.u.face} alt="" loading="lazy" className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 2px " + scoreColor(it.u.perf) }} />
+                              <div className="min-w-0 leading-tight">
+                                <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{it.name}</div>
+                                <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{it.u.name}</div>
+                              </div>
+                              <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(it.u.perf), color: textOn(it.u.perf) }}>{it.u.score}</span>
+                            </div>
+                          </foreignObject>
+                        );
+                      });
+                    })()}
+                  </g>
+                </svg>
+              )}
+
+              {/* readout panel for the active element */}
+              {active && (
+                <div className="pointer-events-none absolute left-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                      <div className="truncate text-xs text-zinc-500">{active.sub}</div>
+                      <div className="text-[11px] text-zinc-400">{active.u.phone}</div>
+                    </div>
+                    <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-600">
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + active.u.perf * 160)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(active.u.perf * 100)}%</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + active.u.perf * 1400)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{active.u.score}</span></div>
+                  </div>
+                </div>
+              )}
+
+              {level !== "states" && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
+                  click empty space to go up one level
+                </div>
+              )}
+
+              {/* school markers are not real locations — call this out prominently */}
+              {level === "schools" && (
+                <div className="pointer-events-none absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border-2 border-amber-400 bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900 shadow-lg">
+                  <span className="text-lg leading-none">⚠</span>
+                  School markers are in randomly placed locations and not real locations.
+                </div>
+              )}
+
+              {(level === "blocks" || level === "schools") && !blocks && geoBlk !== "error" && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400">Loading blocks…</div>
+              )}
+              {level === "blocks" && blocks && blocks.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400">No block data for {dst ? dst.name : "this district"} · click empty space to go back</div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return MapApp;
+    })();
+
+    // #####################################################################
     // ## Top-level shell: a toggle that switches between the two views.   ##
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      const [view, setView] = useState("force");
+      const TABS = ["force", "tree", "map"];
+      const [view, setView] = useState(() => {
+        const h = (window.location.hash || "").replace("#", "");
+        return TABS.includes(h) ? h : "force";
+      });
+      useEffect(() => { window.location.hash = view; }, [view]);
       const tab = (id, label) => (
         <button key={id} onClick={() => setView(id)}
           className={"rounded-md px-3 py-1 text-xs font-semibold transition " +
@@ -1279,10 +1808,11 @@
             <div className="ml-auto flex rounded-lg bg-zinc-800 p-0.5">
               {tab("force", "Force graph")}
               {tab("tree", "Tree")}
+              {tab("map", "Map")}
             </div>
           </div>
           <div className="relative min-h-0 flex-1">
-            {view === "force" ? <ForceGraphApp /> : <TreeFlowApp />}
+            {view === "force" ? <ForceGraphApp /> : view === "tree" ? <TreeFlowApp /> : <MapApp />}
           </div>
         </div>
       );
