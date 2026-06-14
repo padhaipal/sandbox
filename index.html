@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PadhaiPal — Educator Network (force-graph demo)</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/react-force-graph-2d"></script>            <!-- VIEW 1: force graph -->
+  <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" /> <!-- VIEW 2: tree -->
+  <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #18181b; }
+    @keyframes livedot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .live-dot { animation: livedot 1.4s ease-in-out infinite; }
+    /* VIEW 2 (React Flow) card chrome */
+    .react-flow__node-card { background: transparent; border: none; padding: 0; width: auto; }
+    .react-flow__handle { background: #a1a1aa; width: 6px; height: 6px; border: none; }
+    .react-flow__attribution { display: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useMemo, useEffect, useCallback, useRef } = React;
+
+    // #####################################################################
+    // ## VIEW 1 — Force-directed radial graph (react-force-graph-2d).     ##
+    // ## Fully self-contained in this IIFE; exported as <ForceGraphApp/>. ##
+    // #####################################################################
+    const ForceGraphApp = (function () {
+    const ForceGraph2D = window.ForceGraph2D.default || window.ForceGraph2D;
+    const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+    // =====================================================================
+    //  Config
+    // =====================================================================
+    const CURRENT_USER_ID = "r";                                   // signed-in DGSE / org root (same as the tree view)
+    const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+    const SHORT  = { DGSE: "DGSE", BSA: "BSA", BEO: "BEO", "Head Teacher": "HT", Teacher: "Tchr", Student: "Std" };
+    const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]]; // children-per-node range, by level
+    const FACE_COUNT = { adult: 300, child: 50 };                   // local FairFace subset sizes
+
+    // layout geometry (every node is the same size — a child's radius from its parent is fixed by score)
+    const NODE_R = 8;                                  // node radius
+    const HIT_MULT = 2.6;                              // collide / hit radius and parent-gap, as a multiple of NODE_R
+    const INNER = HIT_MULT * 2 * NODE_R;               // closest a child can sit to its parent without overlap
+    const FOOT  = NODE_R * HIT_MULT;                   // a child's collision radius
+    const PACK = 0.6;                                  // annulus packing fraction (smaller => looser ring)
+    const SELECTED_GAP = 1.5625;                       // a selected node sits this × beyond (peer ring + child ring)
+
+    // forces & settle
+    const SIBLING_REPEL = -480, REPEL_RANGE = 600;     // peers (siblings) are the only repulsion
+    const COLLIDE_STRENGTH = 0.9, COLLIDE_ITERS = 3;
+    const SETTLE = { cooldownTicks: 60, alphaDecay: 0.2, velocityDecay: 0.45 };
+
+    // search
+    const SEARCH_MAX_RESULTS = 40, SEARCH_MAX_SCAN = 3000;
+
+    // colours
+    const ACCENT = "37, 99, 235";                      // brand blue (glow + "YOU" badge)
+
+    // =====================================================================
+    //  Procedural population (≈10.1M users, generated on demand from ids)
+    //  ids are dotted paths: "r" -> "r.2" -> "r.2.5" …; level = number of dots.
+    // =====================================================================
+    function hashStr(s) {
+      let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (h1 >>> 0);
+    }
+    const levelOf = (id) => id.split(".").length - 1;
+    const baseParentOf = (id) => { const i = id.lastIndexOf("."); return i < 0 ? null : id.slice(0, i); };
+    const baseChildCount = (id) => {
+      const lvl = levelOf(id);
+      if (lvl >= FANOUT.length) return 0;
+      const [mn, mx] = FANOUT[lvl];
+      return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
+    };
+
+    const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+      "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+      "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+      "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+      "Mohan","Usha","Suresh","Gita"];
+    const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+      "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+
+    // ov = { deleted:Set, moved:Map<child,parent>, movedInto:Map<parent,Set<child>> } — edits over the base tree
+    const parentOf = (id, ov) => (ov.moved.get(id) ?? baseParentOf(id));
+
+    function genUser(id, ov) {
+      const lvl = levelOf(id);
+      const type = lvl === LEVELS.length - 1 ? "student" : "educator";
+      const h = hashStr("u:" + id);
+      const first = FIRST[h % FIRST.length];
+      return {
+        id,
+        name: type === "student" ? first : first + " " + LAST[(h >>> 9) % LAST.length],
+        phone: "+9198" + String(1000000 + (h % 9000000)),
+        designation: LEVELS[lvl], type, parentId: parentOf(id, ov), perf: (h % 1000) / 1000,
+      };
+    }
+    function childIdsOf(id, ov) {
+      const ids = [];
+      const n = baseChildCount(id);
+      for (let k = 0; k < n; k++) {
+        const c = id + "." + k;
+        if (ov.deleted.has(c)) continue;
+        if ((ov.moved.get(c) ?? baseParentOf(c)) !== id) continue; // moved elsewhere
+        ids.push(c);
+      }
+      ov.movedInto.get(id)?.forEach((c) => { if (!ov.deleted.has(c)) ids.push(c); }); // moved in
+      return ids;
+    }
+    const isAncestorOf = (anc, id, ov) => {
+      for (let c = parentOf(id, ov); c; c = parentOf(c, ov)) if (c === anc) return true;
+      return false;
+    };
+    function rankOf(id, ov) {
+      const p = parentOf(id, ov); if (!p) return null;
+      const sibs = childIdsOf(p, ov).map((c) => ({ c, perf: genUser(c, ov).perf })).sort((a, b) => b.perf - a.perf);
+      const i = sibs.findIndex((s) => s.c === id);
+      return i < 0 ? null : { pos: i + 1, total: sibs.length };
+    }
+    const matchUser = (u, q) => {
+      const ql = q.toLowerCase();
+      return u.name.toLowerCase().includes(ql) || u.phone.includes(q) ||
+             u.designation.toLowerCase().includes(ql) || SHORT[u.designation].toLowerCase().includes(ql);
+    };
+
+    // =====================================================================
+    //  Visuals (score colour, faces, demo metrics)
+    // =====================================================================
+    const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+    function scoreRGB(p) {                              // red(0) -> yellow(.5) -> green(1)
+      const red = [239, 68, 68], yellow = [234, 179, 8], green = [34, 197, 94];
+      return (p < 0.5 ? lerp(red, yellow, p / 0.5) : lerp(yellow, green, (p - 0.5) / 0.5)).map((v) => v | 0);
+    }
+    const scoreColor = (p) => `rgb(${scoreRGB(p).join(",")})`;
+    const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
+
+    // deterministic Indian face per user, from a local FairFace subset (DEMO ONLY).
+    const faceUrl = (u) => {
+      const bucket = u.type === "student" ? "child" : "adult";
+      return `faces/${bucket}/${hashStr("face:" + u.id) % FACE_COUNT[bucket]}.jpg`;
+    };
+
+    function metricsFor(u) {
+      const p = u.perf;
+      if (u.type === "student") {
+        const letters = ["क","ख","ग","अ","आ","इ","म","प","र","स","ल","न"];
+        const voice = Array.from({ length: 6 }, (_, i) => ({
+          word: letters[(i * 5 + Math.round(p * 10)) % letters.length],
+          dur: (1 + ((i * 7 + Math.round(p * 9)) % 2)) + "s",
+          when: ["just now","2h ago","yesterday","2d ago","3d ago","5d ago"][i],
+        }));
+        return { isStudent: true, stats: [
+          ["Letters learnt", Math.round(p * 46) + " / 46"], ["Lessons done", Math.round(p * 120)],
+          ["Active (7d)", Math.round(p * 100) + "%"], ["Last active", ["today","yesterday","2d ago","4d ago"][Math.round(p * 3)]],
+        ], voice };
+      }
+      return { isStudent: false, stats: [
+        ["Students reached", Math.round(40 + p * 160)], ["Active (7d)", Math.round(p * 100) + "%"],
+        ["Lessons", Math.round(200 + p * 1400)], ["Avg score", Math.round(p * 100)],
+        ["Letters taught", Math.round(10 + p * 36)],
+        ["Reports below", u.designation === "BEO" ? "100s" : u.designation === "Head Teacher" ? "10s" : "few"],
+      ] };
+    }
+
+    // =====================================================================
+    //  Layout — what's visible and where each node is locked to its parent.
+    //
+    //  Children fan out around their parent on a ring. A child's distance is
+    //  set by its score (top score -> inner edge, score 0 -> outer edge), with
+    //  the ring's outer radius sized so all N children fit (equal-area packing).
+    //  A *selected* node pops out past both its peer ring and its own child ring.
+    // =====================================================================
+    function collectVisible(ov, expanded, viewRootId) {
+      const order = [], seen = new Set();
+      const walk = (id) => {
+        if (seen.has(id)) return;
+        seen.add(id); order.push(id);
+        if (id === viewRootId || expanded.has(id)) childIdsOf(id, ov).forEach(walk);
+      };
+      walk(viewRootId);
+      return { order, seen };
+    }
+
+    const ringOuter = (n) => Math.sqrt(INNER * INNER + (n * FOOT * FOOT) / PACK);
+    const bandRadius = (outer, frac) => Math.sqrt(INNER * INNER + frac * (outer * outer - INNER * INNER));
+
+    function computeLayout(ov, expanded, viewRootId) {
+      const { order, seen } = collectVisible(ov, expanded, viewRootId);
+
+      // one peer group per visible parent
+      const groups = new Map(); // parentId -> { children:[{id,perf}] sorted high->low, outer }
+      const rank = new Map();   // id -> { pos, total }
+      for (const p of new Set(order.map((id) => parentOf(id, ov)).filter(Boolean))) {
+        const children = childIdsOf(p, ov).map((id) => ({ id, perf: genUser(id, ov).perf })).sort((a, b) => b.perf - a.perf);
+        children.forEach((c, i) => rank.set(c.id, { pos: i + 1, total: children.length }));
+        groups.set(p, { children, outer: ringOuter(children.length) });
+      }
+
+      // fixed distance from each child to its parent
+      const lockR = new Map();
+      for (const g of groups.values()) {
+        const maxPerf = g.children[0]?.perf || 1;
+        for (const { id, perf } of g.children) {
+          if (expanded.has(id)) {
+            const own = groups.get(id);                       // this node's own child ring (if open)
+            lockR.set(id, (g.outer + (own ? own.outer : 0)) * SELECTED_GAP);
+          } else {
+            lockR.set(id, bandRadius(g.outer, maxPerf > 0 ? clamp01(1 - perf / maxPerf) : 0));
+          }
+        }
+      }
+      return { order, seen, lockR, rank };
+    }
+
+    // place a brand-new node at its locked radius, at an even angle around its parent
+    function spawnNode(id, map, ov, lockR) {
+      const n = { id };  // the view root is pinned at the centre in the build pass (its parent isn't in view)
+      const pid = parentOf(id, ov), parent = map.get(pid);
+      if (parent && parent.x != null) {
+        const sibs = childIdsOf(pid, ov);
+        const idx = Math.max(0, sibs.indexOf(id)), count = Math.max(1, sibs.length);
+        const angle = (hashStr("ang:" + pid) % 360) * Math.PI / 180 + (idx / count) * 2 * Math.PI;
+        const r = lockR.get(id) ?? INNER;
+        n.x = parent.x + Math.cos(angle) * r;
+        n.y = parent.y + Math.sin(angle) * r;
+      }
+      return n;
+    }
+
+    // =====================================================================
+    //  Custom d3 forces (the react-force-graph UMD bundle doesn't expose these)
+    // =====================================================================
+    const eachPair = (nodes, fn) => {                  // every unordered pair with a position
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i]; if (a.x == null) continue;
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j]; if (b.x == null) continue;
+          fn(a, b);
+        }
+      }
+    };
+    const makeForce = (run) => { let nodes; const f = () => nodes && run(nodes); f.initialize = (n) => { nodes = n; }; return f; };
+    const arePeers = (a, b) => a.u && b.u && a.u.parentId != null && a.u.parentId === b.u.parentId;
+
+    // resolve overlaps by moving POSITIONS directly (several iterations) so dense
+    // clusters separate even with a fast settle; pinned nodes (fx/fy) don't move.
+    // PEERS ONLY — non-peer nodes must exert no force on each other.
+    const makeCollide = (radiusFn, strength, iterations) => makeForce((nodes) => {
+      for (let it = 0; it < iterations; it++) eachPair(nodes, (a, b) => {
+        if (!arePeers(a, b)) return;
+        const rmin = radiusFn(a) + radiusFn(b);
+        const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+        if (d2 < 1e-6) { if (a.fx == null) a.x += 0.5; else if (b.fx == null) b.x -= 0.5; return; }
+        if (d2 >= rmin * rmin) return;
+        const d = Math.sqrt(d2), push = (rmin - d) * strength * 0.5, ux = dx / d * push, uy = dy / d * push;
+        if (a.fx == null) a.x -= ux; if (a.fy == null) a.y -= uy;
+        if (b.fx == null) b.x += ux; if (b.fy == null) b.y += uy;
+      });
+    });
+
+    // repulsion that acts ONLY between siblings (same parent) — with the radial
+    // lock below, this just spreads peers apart along their shared ring.
+    const makeSiblingRepel = (strength, maxDist) => { const max2 = maxDist * maxDist; return makeForce((nodes) =>
+      eachPair(nodes, (a, b) => {
+        if (!arePeers(a, b)) return;
+        let dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+        if (d2 === 0) { a.vx += 0.5; return; }
+        if (d2 > max2) return;
+        const k = strength / Math.max(1, d2);
+        a.vx += dx * k; a.vy += dy * k; b.vx -= dx * k; b.vy -= dy * k;
+      })
+    ); };
+
+    // hard-pin every child to its fixed lockR from its parent, keeping whatever
+    // ANGLE the other forces produced — so length is absolute, only angle animates.
+    // Runs last. A selected (open) node is locked straight DOWN from its parent.
+    function makeRadialLock() {
+      let nodes, byId;
+      const f = () => {
+        if (!nodes) return;
+        for (const n of nodes) {
+          if (n.lockR == null || n.fx != null || n.x == null) continue; // skip the pinned root
+          const p = byId.get(n.u?.parentId);
+          if (!p || p.x == null) continue;
+          if (n.expanded) { n.x = p.x; n.y = p.y + n.lockR; continue; }
+          let dx = n.x - p.x, dy = n.y - p.y, d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
+          n.x = p.x + dx / d * n.lockR; n.y = p.y + dy / d * n.lockR;
+        }
+      };
+      f.initialize = (n) => { nodes = n; byId = new Map(n.map((x) => [x.id, x])); };
+      return f;
+    }
+
+    // =====================================================================
+    //  Search — scoped to the user's parent + peers + own downline (capped BFS)
+    // =====================================================================
+    function searchNetwork(ov, rootId, query) {
+      const q = query.trim();
+      if (!q) return [];
+      const out = [], seen = new Set();
+      const consider = (id) => {
+        if (seen.has(id) || out.length >= SEARCH_MAX_RESULTS) return;
+        seen.add(id);
+        const u = genUser(id, ov);
+        if (matchUser(u, q)) out.push(u);
+      };
+      const parent = parentOf(rootId, ov);
+      if (parent) { consider(parent); childIdsOf(parent, ov).forEach(consider); } // parent + peers
+      consider(rootId);
+      let frontier = [rootId], scanned = 0;             // BFS down the subtree
+      while (frontier.length && scanned < SEARCH_MAX_SCAN && out.length < SEARCH_MAX_RESULTS) {
+        const next = [];
+        scan: for (const id of frontier)
+          for (const c of childIdsOf(id, ov)) {
+            consider(c); scanned++; next.push(c);
+            if (scanned >= SEARCH_MAX_SCAN || out.length >= SEARCH_MAX_RESULTS) break scan;
+          }
+        frontier = next;
+      }
+      return out;
+    }
+
+    // =====================================================================
+    //  Canvas node rendering
+    // =====================================================================
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);         ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+    const circle = (ctx, x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); };
+
+    const nodeBox = (node) => {
+      const w = NODE_R * 3.8, h = NODE_R * 2.1;
+      return { w, h, x: node.x - w / 2, y: node.y + NODE_R * 0.1 };
+    };
+
+    function drawGlow(ctx, node, box, passes) {           // blue halo: current user + search-hover
+      ctx.save();
+      ctx.fillStyle = `rgba(${ACCENT},1)`;
+      ctx.shadowColor = `rgba(${ACCENT},0.95)`; ctx.shadowBlur = NODE_R * 2.2;
+      for (let i = 0; i < passes; i++) {                 // extra passes => denser glow
+        roundRect(ctx, box.x, box.y, box.w, box.h, NODE_R * 0.32); ctx.fill();
+        circle(ctx, node.x, node.y, NODE_R); ctx.fill();
+      }
+      ctx.restore();
+    }
+    function fittedText(ctx, text, x, y, maxW, fontPx, bold) {
+      const font = (px) => `${bold ? "bold " : ""}${px}px Arial`;
+      ctx.font = font(fontPx);
+      const w = ctx.measureText(text).width;
+      if (w > maxW) ctx.font = font(fontPx * maxW / w);  // shrink so it never overflows the box
+      ctx.fillText(text, x, y);
+    }
+    function drawCard(ctx, node, box, col) {              // coloured box + two text lines
+      roundRect(ctx, box.x, box.y, box.w, box.h, NODE_R * 0.32);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.fillStyle = textOn(node.u.perf); ctx.textAlign = "center"; ctx.textBaseline = "top";
+      const maxW = box.w - NODE_R * 0.5;
+      fittedText(ctx, truncate(node.u.name, 16), node.x, node.y + NODE_R * 1.12, maxW, NODE_R * 0.5, true);
+      const rank = node.rank ? `  ·  #${node.rank.pos}/${node.rank.total}` : "";
+      fittedText(ctx, `${SHORT[node.u.designation]}  ·  ${node.score}${rank}`, node.x, node.y + NODE_R * 1.7, maxW, NODE_R * 0.42, false);
+    }
+    function drawFace(ctx, node, col, img) {              // brightened photo, clipped to a circle + matching border
+      ctx.save();
+      circle(ctx, node.x, node.y, NODE_R); ctx.clip();
+      if (img.complete && img.naturalWidth) { ctx.filter = "brightness(1.18)"; ctx.drawImage(img, node.x - NODE_R, node.y - NODE_R, NODE_R * 2, NODE_R * 2); }
+      else { ctx.fillStyle = col; ctx.fillRect(node.x - NODE_R, node.y - NODE_R, NODE_R * 2, NODE_R * 2); }
+      ctx.restore();
+      circle(ctx, node.x, node.y, NODE_R);
+      ctx.lineWidth = Math.max(0.6, NODE_R * 0.16); ctx.strokeStyle = col; ctx.stroke();
+    }
+    function drawSelectionRing(ctx, node) {
+      circle(ctx, node.x, node.y, NODE_R * 1.22);
+      ctx.lineWidth = NODE_R * 0.16; ctx.strokeStyle = "#18181b"; ctx.stroke();
+    }
+    function drawYouBadge(ctx, node) {
+      const w = NODE_R * 1.5, h = NODE_R * 0.72, x = node.x - w / 2, y = node.y - NODE_R - h - NODE_R * 0.28;
+      roundRect(ctx, x, y, w, h, h * 0.5);
+      ctx.fillStyle = `rgb(${ACCENT})`; ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = `bold ${NODE_R * 0.42}px Arial`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("YOU", node.x, y + h / 2);
+    }
+
+    // =====================================================================
+    //  React: small hooks
+    // =====================================================================
+    function useSize() {
+      const ref = useRef(null);
+      const [size, setSize] = useState({ width: 800, height: 600 });
+      useEffect(() => {
+        if (!ref.current) return;
+        const ro = new ResizeObserver(([e]) => setSize({ width: Math.max(1, e.contentRect.width), height: Math.max(1, e.contentRect.height) }));
+        ro.observe(ref.current);
+        return () => ro.disconnect();
+      }, []);
+      return [ref, size];
+    }
+
+    // cache face images; coalesce a redraw (one per frame) as they finish loading
+    function useFaceImages() {
+      const cache = useRef(new Map());
+      const pending = useRef(false);
+      const [tick, setTick] = useState(0);
+      const get = useCallback((url) => {
+        if (cache.current.has(url)) return cache.current.get(url);
+        const img = new Image();
+        img.onload = () => {
+          if (pending.current) return;
+          pending.current = true;
+          requestAnimationFrame(() => { pending.current = false; setTick((t) => t + 1); });
+        };
+        img.src = url;
+        cache.current.set(url, img);
+        return img;
+      }, []);
+      return [get, tick];
+    }
+
+    function buildOverrides(deleted, moved) {
+      const movedInto = new Map();
+      moved.forEach((parent, child) => {
+        if (!movedInto.has(parent)) movedInto.set(parent, new Set());
+        movedInto.get(parent).add(child);
+      });
+      return { deleted, moved, movedInto };
+    }
+
+    // =====================================================================
+    //  React: presentation components
+    // =====================================================================
+    const stop = (e) => e.stopPropagation();
+
+    function NetworkHeader({ user }) {
+      return (
+        <header className="border-b border-zinc-200 bg-white px-6 py-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-zinc-900">Your Network · force graph</h1>
+              <p className="text-xs text-zinc-500">Signed in as {user.name} · {user.designation} · click a node to open it &amp; reveal the level below</p>
+              <p className="mt-0.5 text-[11px] text-zinc-400">Modeling ≈10.1M users (1 DGSE · 75 BSA · 820 BEO · 112.5k HT · 470k teachers · 9.53M students) — generated on demand</p>
+            </div>
+            <div className="hidden items-center gap-2 text-[11px] text-zinc-500 sm:flex">
+              <span>score</span><span>0</span>
+              <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
+              <span>100</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <ShareField label="Share with Parents" value="https://pp.link/p/8x2k9" hint="Opens the WhatsApp literacy chatbot & onboards the parent." />
+            <ShareField label="Share with Teachers" value="https://pp.link/t/9q4m2" hint="Opens this dashboard & onboards a new BSA / BEO / Head Teacher / Teacher." />
+          </div>
+        </header>
+      );
+    }
+
+    function ShareField({ label, value, hint }) {
+      const [copied, setCopied] = useState(false);
+      const copy = () => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200); };
+      return (
+        <div className="flex-1 min-w-[260px]">
+          <label className="mb-1 block text-xs font-semibold text-zinc-600">{label}</label>
+          <div className="flex">
+            <input readOnly value={value} className="w-full rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-700 outline-none" />
+            <button onClick={copy} className="rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400">{hint}</p>
+        </div>
+      );
+    }
+
+    function SearchPanel({ value, onChange, results, isInView, onHover, onPick }) {
+      return (
+        <div className="absolute left-3 top-3 z-20 w-72">
+          <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search name, phone, or rank (HT, BEO…)"
+            className="w-full rounded-lg border border-zinc-300 bg-white/95 px-3 py-2 text-sm shadow outline-none focus:border-emerald-400" />
+          {value.trim() && (
+            <div className="mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
+              {results.length === 0 && <div className="px-3 py-2 text-xs text-zinc-400">No matches in your network.</div>}
+              {results.map((u) => {
+                const visible = isInView(u.id);
+                return (
+                  <div key={u.id} onMouseEnter={() => onHover(u.id)} onMouseLeave={() => onHover(null)} onClick={() => onPick(u.id)}
+                    className="flex cursor-pointer items-center gap-2 border-b border-zinc-100 px-2.5 py-1.5 last:border-0 hover:bg-zinc-50">
+                    <img src={faceUrl(u)} alt="" className="h-7 w-7 rounded-full object-cover brightness-110" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-zinc-900">{u.name}</div>
+                      <div className="truncate text-[10px] text-zinc-500">{u.designation} · <span className="font-mono">{u.phone}</span></div>
+                    </div>
+                    <span title={visible ? "In current view" : "Not in view"} className={"shrink-0 text-sm " + (visible ? "text-emerald-600" : "text-zinc-300")}>{visible ? "◉" : "○"}</span>
+                  </div>
+                );
+              })}
+              {results.length >= SEARCH_MAX_RESULTS && <div className="px-3 py-1 text-[10px] text-zinc-400">Showing first {SEARCH_MAX_RESULTS} matches…</div>}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function DetailPanel({ id, ov, visibleIds, actions }) {
+      if (!id) return null;
+      const u = genUser(id, ov);
+      const m = metricsFor(u);
+      const rank = rankOf(id, ov);
+      const editable = isAncestorOf(CURRENT_USER_ID, id, ov); // only people below the current user
+      const moveTargets = visibleIds
+        .filter((c) => c !== u.id && c !== u.parentId && genUser(c, ov).type !== "student" && !isAncestorOf(u.id, c, ov))
+        .map((c) => genUser(c, ov));
+
+      return (
+        <div className="absolute right-3 top-3 bottom-3 z-10 flex w-80 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl" onClick={stop}>
+          <div className="flex items-start justify-between border-b border-zinc-200 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <img src={faceUrl(u)} alt="" className="h-11 w-11 rounded-full object-cover ring-2 brightness-110" style={{ boxShadow: "0 0 0 2px " + scoreColor(u.perf) }} />
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">{u.name}</div>
+                <div className="text-xs text-zinc-500">{u.designation} · <span className="font-mono">{u.phone}</span></div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: scoreColor(u.perf) }}>score {Math.round(u.perf * 100)}</span>
+                  {rank && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 ring-1 ring-zinc-200">#{rank.pos}/{rank.total} peers</span>}
+                </div>
+              </div>
+            </div>
+            <button onClick={actions.close} className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">✕</button>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live metrics
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {m.stats.map(([label, val]) => (
+                <div key={label} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+                  <div className="text-[10px] text-zinc-500">{label}</div>
+                  <div className="text-sm font-semibold text-zinc-900">{val}</div>
+                </div>
+              ))}
+            </div>
+            {m.isStudent && (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Recent voice</span>
+                  <button onClick={() => actions.openDashboard(u)} className="text-[10px] font-semibold text-sky-600 underline">Open dashboard ↗</button>
+                </div>
+                <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+                  {m.voice.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-white">▶</button>
+                        <span className="text-base leading-none text-zinc-900">{v.word}</span>
+                        <span className="text-[10px] text-zinc-400">{v.dur}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">{v.when}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+            <button onClick={() => actions.message(u)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+              💬 {m.isStudent ? "Message parent" : "WhatsApp"}
+            </button>
+            {editable && (
+              <div className="flex gap-2">
+                <select defaultValue="" onChange={(e) => e.target.value && actions.reattach(u.id, e.target.value)} className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700">
+                  <option value="">Move to…</option>
+                  {moveTargets.map((c) => <option key={c.id} value={c.id}>{c.name} ({SHORT[c.designation]})</option>)}
+                </select>
+                <button onClick={() => actions.remove(u.id)} className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // =====================================================================
+    //  App
+    // =====================================================================
+    function App() {
+      const [deleted, setDeleted] = useState(() => new Set());
+      const [moved, setMoved] = useState(() => new Map());
+      const ov = useMemo(() => buildOverrides(deleted, moved), [deleted, moved]);
+
+      const viewRootId = useMemo(() => parentOf(CURRENT_USER_ID, ov) || CURRENT_USER_ID, [ov]);
+      const currentUser = useMemo(() => genUser(CURRENT_USER_ID, ov), [ov]);
+
+      const [expanded, setExpanded] = useState(() => new Set([CURRENT_USER_ID]));
+      const [selectedId, setSelectedId] = useState(CURRENT_USER_ID);
+      const [query, setQuery] = useState("");
+      const [highlightId, setHighlightId] = useState(null);
+
+      const fgRef = useRef(null);
+      const nodesRef = useRef(new Map());
+      const [containerRef, size] = useSize();
+      const [getImg, imgTick] = useFaceImages();
+
+      // ---- graph (reuses node objects across renders so positions persist) ----
+      const { graphData, visibleIds } = useMemo(() => {
+        const { order, seen, lockR, rank } = computeLayout(ov, expanded, viewRootId);
+        const map = nodesRef.current;
+        const nodes = order.map((id) => {
+          const u = genUser(id, ov);
+          const n = map.get(id) || spawnNode(id, map, ov, lockR);
+          map.set(id, n);
+          n.u = u;
+          n.isCurrent = id === CURRENT_USER_ID;
+          n.expanded = expanded.has(id);
+          n.rank = rank.get(id) || null;
+          n.lockR = lockR.get(id) ?? INNER;
+          n.score = Math.round(u.perf * 100);
+          // pin the view root at the centre; everything fans out from it (the signed-in user
+          // is just a YOU-badged node among their peers, not necessarily the root).
+          if (id === viewRootId) { n.x = 0; n.y = 0; n.fx = 0; n.fy = 0; }
+          // expanded nodes pop straight down (mirrors the radial lock); snap them HERE, before
+          // their children are spawned below, so children fan evenly 360° around the final spot
+          // rather than bunching where the parent sat before it popped out.
+          if (n.expanded && id !== viewRootId) {
+            const p = map.get(u.parentId);
+            if (p && p.x != null) { n.x = p.x; n.y = p.y + n.lockR; n.vx = n.vy = 0; }
+          }
+          return n;
+        });
+        for (const id of [...map.keys()]) if (!seen.has(id)) map.delete(id); // prune nodes that left view
+        const links = order.filter((id) => id !== viewRootId)
+          .map((id) => ({ source: parentOf(id, ov), target: id }))
+          .filter((l) => seen.has(l.source));
+        return { graphData: { nodes, links }, visibleIds: order };
+      }, [ov, expanded, viewRootId]);
+
+      // ---- forces (the radial lock fixes every distance; only angles animate) ----
+      useEffect(() => {
+        const fg = fgRef.current; if (!fg) return;
+        fg.d3Force("link").distance((l) => l.target?.lockR ?? INNER).strength(0); // no parent->child pull; radial lock fixes distance
+        fg.d3Force("charge", null);  // the only repulsion is between siblings (below)
+        fg.d3Force("center", null);  // the pinned root is the anchor, not the centroid
+        fg.d3Force("sibrepel", makeSiblingRepel(SIBLING_REPEL, REPEL_RANGE));
+        fg.d3Force("collide", makeCollide(() => NODE_R * HIT_MULT, COLLIDE_STRENGTH, COLLIDE_ITERS));
+        fg.d3Force("radial", makeRadialLock());
+      }, [graphData]);
+
+      // ---- on every graph change, fit all nodes then back off ~25% ----
+      useEffect(() => {
+        const raf = requestAnimationFrame(() => {
+          const fg = fgRef.current; if (!fg) return;
+          fg.zoomToFit(0, 60);
+          fg.zoom(fg.zoom() * 0.75, 400);
+        });
+        return () => cancelAnimationFrame(raf);
+      }, [graphData]);
+
+      // ---- edits ----
+      const removeUser = useCallback((id) => {
+        setDeleted((s) => new Set(s).add(id));
+        setExpanded((e) => { const n = new Set(e); n.delete(id); return n; });
+        setSelectedId((cur) => (cur === id ? null : cur));
+      }, []);
+      const reattachUser = useCallback((id, parent) => setMoved((m) => new Map(m).set(id, parent)), []);
+
+      // ---- selection: accordion (one open node per level; opening prunes deeper) ----
+      const selectNode = useCallback((node) => {
+        const id = node.id, depth = levelOf(id);
+        const keepAncestors = (e) => [...e].filter((x) => levelOf(x) < depth);
+        if (expanded.has(id)) { setExpanded((e) => new Set(keepAncestors(e))); setSelectedId(parentOf(id, ov)); }
+        else { setExpanded((e) => new Set([...keepAncestors(e), id])); setSelectedId(id); }
+      }, [expanded, ov]);
+
+      // reveal a (possibly off-screen) node by opening its whole ancestor path
+      const navigateTo = useCallback((id) => {
+        const chain = [];
+        for (let c = id, i = 0; c && i < 40; c = parentOf(c, ov), i++) { chain.push(c); if (c === viewRootId) break; }
+        setExpanded(new Set(chain));
+        setSelectedId(id);
+      }, [ov, viewRootId]);
+
+      // ---- drag is disabled: click OR click-drag just selects; the node never moves ----
+      const dragHome = useRef(new Map());
+      const onNodeDrag = useCallback((node) => {
+        const home = dragHome.current.get(node.id) || (dragHome.current.set(node.id, { x: node.x, y: node.y }), dragHome.current.get(node.id));
+        Object.assign(node, { fx: home.x, fy: home.y, x: home.x, y: home.y, vx: 0, vy: 0 });
+      }, []);
+      const onNodeDragEnd = useCallback((node) => {
+        const home = dragHome.current.get(node.id);
+        if (home) { node.x = home.x; node.y = home.y; dragHome.current.delete(node.id); }
+        if (node.id !== viewRootId) { node.fx = undefined; node.fy = undefined; }  // keep the centre anchored
+        selectNode(node);
+      }, [selectNode, viewRootId]);
+
+      // ---- search ----
+      const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
+      const results = useMemo(() => searchNetwork(ov, CURRENT_USER_ID, query), [ov, query]);
+
+      // ---- rendering ----
+      const drawNode = useCallback((node, ctx) => {
+        const col = scoreColor(node.u.perf), box = nodeBox(node);
+        const glow = (node.isCurrent ? 3 : 0) + (node.id === highlightId ? 3 : 0);
+        if (glow) drawGlow(ctx, node, box, glow);
+        drawCard(ctx, node, box, col);
+        drawFace(ctx, node, col, getImg(faceUrl(node.u)));
+        if (node.id === selectedId) drawSelectionRing(ctx, node);
+        if (node.isCurrent) drawYouBadge(ctx, node);
+      }, [selectedId, highlightId, imgTick, getImg]);
+
+      const drawHit = useCallback((node, color, ctx) => {
+        ctx.fillStyle = color; circle(ctx, node.x, node.y, NODE_R * HIT_MULT); ctx.fill();
+      }, []);
+
+      const panelActions = useMemo(() => ({
+        close: () => setSelectedId(null),
+        message: (u) => window.open("https://wa.me/" + u.phone.replace(/\D/g, ""), "_blank"),
+        openDashboard: (u) => alert("Would open the existing dashboard at /user/" + u.id),
+        remove: removeUser,
+        reattach: reattachUser,
+      }), [removeUser, reattachUser]);
+
+      return (
+        <div className="flex h-full flex-col">
+          <NetworkHeader user={currentUser} />
+          <div ref={containerRef} className="relative flex-1 overflow-hidden bg-white">
+            <SearchPanel
+              value={query} onChange={setQuery}
+              results={results} isInView={(id) => visibleSet.has(id)}
+              onHover={setHighlightId}
+              onPick={(id) => { navigateTo(id); setHighlightId(id); }} />
+
+            <ForceGraph2D
+              ref={fgRef}
+              width={size.width} height={size.height}
+              graphData={graphData}
+              backgroundColor="#ffffff"
+              nodeRelSize={5}
+              nodeLabel={(n) => `${n.u.name} · ${SHORT[n.u.designation]} · score ${n.score}`}
+              nodeCanvasObject={drawNode}
+              nodePointerAreaPaint={drawHit}
+              linkColor={() => "#d4d4d8"}
+              linkWidth={0.6}
+              linkDirectionalArrowLength={2.4}
+              linkDirectionalArrowRelPos={1}
+              cooldownTicks={SETTLE.cooldownTicks}
+              d3AlphaDecay={SETTLE.alphaDecay}
+              d3VelocityDecay={SETTLE.velocityDecay}
+              enableNodeDrag={true}
+              onNodeDrag={onNodeDrag}
+              onNodeDragEnd={onNodeDragEnd}
+              onNodeClick={selectNode}
+              onBackgroundClick={() => setSelectedId(null)} />
+
+            <DetailPanel id={selectedId} ov={ov} visibleIds={visibleIds} actions={panelActions} />
+          </div>
+        </div>
+      );
+    }
+
+    return App;
+    })();
+
+    // #####################################################################
+    // ## VIEW 2 — Expandable accordion TREE (React Flow v11).             ##
+    // ## Fully self-contained in this IIFE; exported as <TreeFlowApp/>.   ##
+    // #####################################################################
+    const TreeFlowApp = (function () {
+    const RFLib = window.ReactFlow;
+    const ReactFlow = RFLib.default || RFLib.ReactFlow;
+    const { Background, Controls, MiniMap, Handle, Position, useNodesState, useEdgesState, MarkerType } = RFLib;
+
+    // =====================================================================
+    //  Procedural population — models ≈10.1M users WITHOUT materializing them.
+    //  ids are dotted paths: "r" -> "r.2" -> "r.2.5" … ; level = number of dots.
+    // =====================================================================
+    const ROOT_ID = "r";
+    const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+    const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]];
+
+    // the logged-in user is the DGSE / org root (level 0); the tree roots on them
+    const CURRENT_USER_ID = "r";
+
+    function hashStr(s) { // cyrb53-ish -> uint32
+      let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (h1 >>> 0);
+    }
+
+    const levelOf = (id) => id.split(".").length - 1;
+    const baseParentOf = (id) => { const i = id.lastIndexOf("."); return i < 0 ? null : id.slice(0, i); };
+    const baseChildCount = (id) => {
+      const lvl = levelOf(id);
+      if (lvl >= 5) return 0;
+      const [mn, mx] = FANOUT[lvl];
+      if (mn === mx) return mn;
+      return mn + (hashStr("fan:" + id) % (mx - mn + 1));
+    };
+
+    const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+      "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+      "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+      "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+      "Mohan","Usha","Suresh","Gita"];
+    const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+      "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+
+    const parentOf = (id, ov) => (ov.moved.get(id) ?? baseParentOf(id));
+
+    function genUser(id, ov) {
+      const lvl = levelOf(id);
+      const type = lvl === 5 ? "student" : "educator";
+      const h = hashStr("u:" + id);
+      const first = FIRST[h % FIRST.length];
+      return {
+        id,
+        name: type === "student" ? first : first + " " + LAST[(h >>> 9) % LAST.length],
+        phone: "+9198" + String(1000000 + (h % 9000000)),
+        designation: LEVELS[lvl],
+        type,
+        parentId: parentOf(id, ov),
+        perf: (h % 1000) / 1000,
+      };
+    }
+
+    function childIdsOf(id, ov) {
+      const ids = [];
+      const n = baseChildCount(id);
+      for (let k = 0; k < n; k++) {
+        const c = id + "." + k;
+        if (ov.deleted.has(c)) continue;
+        if ((ov.moved.get(c) ?? baseParentOf(c)) !== id) continue; // moved away
+        ids.push(c);
+      }
+      const movedIn = ov.movedInto.get(id);
+      if (movedIn) movedIn.forEach((c) => { if (!ov.deleted.has(c)) ids.push(c); });
+      return ids;
+    }
+
+    const isAncestorOf = (anc, id, ov) => {
+      let c = parentOf(id, ov);
+      while (c) { if (c === anc) return true; c = parentOf(c, ov); }
+      return false;
+    };
+    const depthFromRoot = (id, viewRootId, ov) => {
+      let d = 0, c = id;
+      while (c && c !== viewRootId) { c = parentOf(c, ov); d++; if (d > 24) break; }
+      return d;
+    };
+
+    // =====================================================================
+    //  Presentation helpers
+    // =====================================================================
+    const TIER = {
+      "DGSE":         { ring: "bg-fuchsia-100 text-fuchsia-700", pill: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200" },
+      "BSA":          { ring: "bg-rose-100 text-rose-700",     pill: "bg-rose-50 text-rose-700 ring-rose-200" },
+      "BEO":          { ring: "bg-indigo-100 text-indigo-700", pill: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
+      "Head Teacher": { ring: "bg-sky-100 text-sky-700",       pill: "bg-sky-50 text-sky-700 ring-sky-200" },
+      "Teacher":      { ring: "bg-violet-100 text-violet-700", pill: "bg-violet-50 text-violet-700 ring-violet-200" },
+      "Student":      { ring: "bg-amber-100 text-amber-700",   pill: "bg-amber-50 text-amber-700 ring-amber-200" },
+    };
+    const SHORT = { "DGSE": "DGSE", "BSA": "BSA", "BEO": "BEO", "Head Teacher": "HT", "Teacher": "Tchr", "Student": "Std" };
+    const perfColor = (p) =>
+      p >= 0.75 ? { chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "#10b981" }
+      : p >= 0.5 ? { chip: "bg-amber-50 text-amber-700 ring-amber-200",      dot: "#f59e0b" }
+      :            { chip: "bg-red-50 text-red-700 ring-red-200",            dot: "#ef4444" };
+    function initials(name) {
+      const parts = name.replace(/\(.*\)/, "").trim().split(/\s+/);
+      return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+    }
+
+    function metricsFor(u) {
+      const p = u.perf;
+      if (u.type === "student") {
+        const letters = ["क","ख","ग","अ","आ","इ","म","प","र","स","ल","न"];
+        const voice = Array.from({ length: 6 }, (_, i) => ({
+          word: letters[(i * 5 + Math.round(p * 10)) % letters.length],
+          dur: (1 + ((i * 7 + Math.round(p * 9)) % 2)) + "s",
+          when: ["just now","2h ago","yesterday","2d ago","3d ago","5d ago"][i],
+        }));
+        return { kind: "student", stats: [
+          ["Letters learnt", Math.round(p * 46) + " / 46"],
+          ["Lessons done", Math.round(p * 120)],
+          ["Active (7d)", Math.round(p * 100) + "%"],
+          ["Last active", ["today","yesterday","2d ago","4d ago"][Math.round(p * 3)]],
+        ], voice };
+      }
+      return { kind: "educator", stats: [
+        ["Students reached", Math.round(40 + p * 160)],
+        ["Active (7d)", Math.round(p * 100) + "%"],
+        ["Lessons", Math.round(200 + p * 1400)],
+        ["Avg score", Math.round(p * 100)],
+        ["Letters taught", Math.round(10 + p * 36)],
+        ["Reports below", u.designation === "BEO" ? "100s" : u.designation === "Head Teacher" ? "10s" : "few"],
+      ] };
+    }
+
+    // =====================================================================
+    //  Layout: LEFT -> RIGHT. depth = column (x). children block is centered
+    //  on the parent it expands from. Only VISIBLE nodes are placed/generated.
+    // =====================================================================
+    const CARD_W = 272, COL_GAP = 104, ROW_GAP = 0;
+    const H_COLLAPSED = 24, H_EXP_ED = 300, H_EXP_STU = 344;
+    const heightOf = (u, selected) => !selected ? H_COLLAPSED : (u.type === "student" ? H_EXP_STU : H_EXP_ED);
+
+    function computeView(ov, selected, viewRootId) {
+      const sortedKids = (id) =>
+        childIdsOf(id, ov)
+          .map((cid) => ({ cid, perf: genUser(cid, ov).perf }))
+          .sort((a, b) => b.perf - a.perf)
+          .map((x) => x.cid);
+
+      const order = [];
+      const walk = (id, depth) => {
+        order.push({ id, depth });
+        if (id === viewRootId || selected.has(id)) sortedKids(id).forEach((c) => walk(c, depth + 1));
+      };
+      walk(viewRootId, 0);
+
+      const node = {};
+      order.forEach(({ id }) => { node[id] = genUser(id, ov); });
+      const hOf = (id) => heightOf(node[id], selected.has(id));
+
+      // group by depth (accordion => one revealing parent per depth)
+      const byDepth = {};
+      order.forEach((o) => { (byDepth[o.depth] = byDepth[o.depth] || []).push(o.id); });
+      const maxDepth = order.reduce((m, o) => Math.max(m, o.depth), 0);
+
+      const pos = {};
+      for (let d = 0; d <= maxDepth; d++) {
+        const ids = byDepth[d] || [];
+        if (d === 0) { ids.forEach((id) => { pos[id] = { x: 0, y: 0 }; }); continue; }
+        const parent = node[ids[0]].parentId;
+        const parentCenter = pos[parent].y + hOf(parent) / 2;
+        const total = ids.reduce((s, id) => s + hOf(id), 0) + ROW_GAP * (ids.length - 1);
+        let cursor = parentCenter - total / 2;
+        ids.forEach((id) => { pos[id] = { x: d * (CARD_W + COL_GAP), y: cursor }; cursor += hOf(id) + ROW_GAP; });
+      }
+
+      // rank each visible node among its FULL peer set (same referrer, ≤150)
+      const rank = {};
+      const parents = new Set(order.map((o) => node[o.id].parentId).filter(Boolean));
+      parents.forEach((p) => {
+        childIdsOf(p, ov)
+          .map((cid) => ({ cid, perf: genUser(cid, ov).perf }))
+          .sort((a, b) => b.perf - a.perf)
+          .forEach((s, i, arr) => { rank[s.cid] = { pos: i + 1, total: arr.length }; });
+      });
+
+      const dims = {};
+      order.forEach(({ id }) => {
+        const isSel = selected.has(id);
+        dims[id] = {
+          h: hOf(id), selected: isSel,
+          hiddenChildren: (id === viewRootId || isSel) ? 0 : childIdsOf(id, ov).length,
+        };
+      });
+
+      return { order, pos, dims, node, rank };
+    }
+
+    // =====================================================================
+    //  Card
+    // =====================================================================
+    const stop = (e) => e.stopPropagation();
+
+    function CardHeader({ u, rank, isMe, hiddenChildren, selected }) {
+      const tier = TIER[u.designation] || TIER.Student;
+      const pc = perfColor(u.perf);
+      return (
+        <div className="flex h-6 items-center gap-1 px-1.5 leading-none">
+          <div className={"flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[5px] font-bold leading-none " + tier.ring}>
+            {u.type === "student" ? "🙂" : initials(u.name)}
+          </div>
+          <span className="min-w-0 flex-1 truncate text-[7px] font-semibold leading-none text-zinc-900">{u.name}</span>
+          {isMe && <span className="shrink-0 rounded bg-emerald-500 px-0.5 text-[5px] font-semibold leading-none text-white">YOU</span>}
+          <span className={"shrink-0 rounded px-1 text-[5px] font-medium leading-none ring-1 " + tier.pill}>
+            {SHORT[u.designation] || u.designation}
+          </span>
+          {rank && (
+            <span className={"flex shrink-0 items-center gap-0.5 rounded px-1 text-[6px] font-semibold leading-none ring-1 " + pc.chip}
+                  title="Rank among peers (same referrer)">
+              <span className="inline-block h-1 w-1 rounded-full" style={{ background: pc.dot }} />
+              #{rank.pos}/{rank.total}
+            </span>
+          )}
+          {selected ? (
+            <span className="shrink-0 text-[7px] leading-none text-zinc-300">˅</span>
+          ) : hiddenChildren > 0 ? (
+            <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-zinc-100 px-1 text-[5px] font-semibold leading-none text-zinc-500 ring-1 ring-zinc-200"
+                  title={hiddenChildren + " below — click to expand"}>
+              +{hiddenChildren} ›
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+
+    function CardNode({ data }) {
+      const u = data.user;
+      const isMe = data.isCurrent;
+      const selected = data.selected;
+      const header = <CardHeader u={u} rank={data.rank} isMe={isMe} hiddenChildren={data.hiddenChildren} selected={selected} />;
+      const shell =
+        "rounded-xl bg-white shadow-sm transition cursor-pointer " +
+        (isMe ? "ring-2 ring-emerald-400 border border-emerald-200"
+              : selected ? "border border-zinc-300 shadow-md" : "border border-zinc-200 hover:border-zinc-300");
+
+      if (!selected) {
+        return (
+          <div style={{ width: CARD_W, height: H_COLLAPSED }} className={shell}>
+            <Handle type="target" position={Position.Left} />
+            {header}
+            <Handle type="source" position={Position.Right} />
+          </div>
+        );
+      }
+
+      const m = metricsFor(u);
+      const isStudent = u.type === "student";
+      const candidates = data.visibleList.filter(
+        (c) => c.type === "educator" && c.id !== u.id && c.id !== u.parentId && !isAncestorOf(u.id, c.id, data.ov)
+      );
+
+      return (
+        <div style={{ width: CARD_W, height: data.height }} className={shell + " flex flex-col overflow-hidden"}>
+          <Handle type="target" position={Position.Left} />
+          <div className="border-b border-zinc-100">{header}</div>
+
+          <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2" onWheelCapture={stop}>
+            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live metrics
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {m.stats.map(([label, val]) => (
+                <div key={label} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1">
+                  <div className="text-[10px] text-zinc-500">{label}</div>
+                  <div className="text-sm font-semibold text-zinc-900">{val}</div>
+                </div>
+              ))}
+            </div>
+
+            {isStudent && (
+              <div onClick={stop}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Recent voice</span>
+                  <button onClick={() => data.onOpenDashboard(u)} className="text-[10px] font-semibold text-sky-600 underline">Open dashboard ↗</button>
+                </div>
+                <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+                  {m.voice.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1">
+                      <div className="flex items-center gap-2">
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-white">▶</button>
+                        <span className="text-base leading-none text-zinc-900">{v.word}</span>
+                        <span className="text-[10px] text-zinc-400">{v.dur}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">{v.when}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50 px-3 py-2" onClick={stop}>
+            <button onClick={() => data.onWhatsApp(u)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+              💬 {isStudent ? "Message parent" : "WhatsApp"}
+            </button>
+            {data.editable && (
+              <div className="flex gap-1.5">
+                <select defaultValue="" onChange={(e) => e.target.value && data.onReattach(u.id, e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-700">
+                  <option value="">Move to…</option>
+                  {candidates.map((c) => <option key={c.id} value={c.id}>{c.name} ({SHORT[c.designation]})</option>)}
+                </select>
+                <button onClick={() => data.onDelete(u.id)}
+                  className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            )}
+          </div>
+          <Handle type="source" position={Position.Right} />
+        </div>
+      );
+    }
+
+    const nodeTypes = { card: CardNode };
+
+    function ShareField({ label, value, hint }) {
+      const [copied, setCopied] = useState(false);
+      const copy = () => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200); };
+      return (
+        <div className="flex-1 min-w-[260px]">
+          <label className="mb-1 block text-xs font-semibold text-zinc-600">{label}</label>
+          <div className="flex">
+            <input readOnly value={value}
+              className="w-full rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-700 outline-none" />
+            <button onClick={copy} className="rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400">{hint}</p>
+        </div>
+      );
+    }
+
+    // =====================================================================
+    //  App
+    // =====================================================================
+    function App() {
+      // edits are stored as a tiny overrides delta over the procedural base
+      const [deleted, setDeleted] = useState(() => new Set());
+      const [moved, setMoved] = useState(() => new Map());
+      const ov = useMemo(() => {
+        const movedInto = new Map();
+        moved.forEach((p, c) => { if (!movedInto.has(p)) movedInto.set(p, new Set()); movedInto.get(p).add(c); });
+        return { deleted, moved, movedInto };
+      }, [deleted, moved]);
+
+      const viewRootId = useMemo(() => parentOf(CURRENT_USER_ID, ov) || CURRENT_USER_ID, [ov]);
+      const currentUser = useMemo(() => genUser(CURRENT_USER_ID, ov), [ov]);
+
+      const [selected, setSelected] = useState(() => new Set([CURRENT_USER_ID]));
+      const view = useMemo(() => computeView(ov, selected, viewRootId), [ov, selected, viewRootId]);
+
+      const [nodes, setNodes, onNodesChange] = useNodesState([]);
+      const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+      const onWhatsApp = useCallback((u) => window.open("https://wa.me/" + u.phone.replace(/\D/g, ""), "_blank"), []);
+      const onOpenDashboard = useCallback((u) => alert("Would open the existing dashboard at /user/" + u.id), []);
+      const onDelete = useCallback((id) => {
+        setDeleted((prev) => new Set(prev).add(id));
+        setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      }, []);
+      const onReattach = useCallback((id, newParentId) => {
+        setMoved((prev) => new Map(prev).set(id, newParentId));
+      }, []);
+
+      useEffect(() => {
+        const visibleList = view.order.map(({ id }) => {
+          const u = view.node[id];
+          return { id, name: u.name, designation: u.designation, type: u.type };
+        });
+        setNodes(view.order.map(({ id }) => {
+          const u = view.node[id];
+          const d = view.dims[id];
+          return {
+            id, type: "card", position: view.pos[id], draggable: false,
+            data: {
+              user: u, isCurrent: id === CURRENT_USER_ID, rank: view.rank[id],
+              selected: d.selected, hiddenChildren: d.hiddenChildren, height: d.h,
+              editable: isAncestorOf(CURRENT_USER_ID, id, ov), visibleList, ov,
+              onWhatsApp, onDelete, onReattach, onOpenDashboard,
+            },
+          };
+        }));
+        setEdges(view.order.filter((o) => o.depth > 0).map(({ id }) => {
+          const p = view.node[id].parentId;
+          return { id: p + "->" + id, source: p, target: id, type: "straight" };
+        }));
+      }, [view, ov, setNodes, setEdges, onWhatsApp, onDelete, onReattach, onOpenDashboard]);
+
+      // accordion-per-level toggle
+      const onNodeClick = useCallback((_e, node) => {
+        const X = node.id;
+        setSelected((prev) => {
+          if (prev.has(X)) {
+            return new Set([...prev].filter((id) => id !== X && !isAncestorOf(X, id, ov)));
+          }
+          const dX = depthFromRoot(X, viewRootId, ov);
+          const next = new Set([...prev].filter((id) => depthFromRoot(id, viewRootId, ov) < dX));
+          next.add(X);
+          return next;
+        });
+      }, [ov, viewRootId]);
+
+      // initial zoom: center on the current user
+      const [rf, setRf] = useState(null);
+      const centered = useRef(false);
+      useEffect(() => {
+        if (!rf || centered.current || !view.pos[CURRENT_USER_ID]) return;
+        const p = view.pos[CURRENT_USER_ID], h = view.dims[CURRENT_USER_ID].h;
+        rf.setCenter(p.x + CARD_W / 2, p.y + h / 2, { zoom: 1, duration: 0 });
+        centered.current = true;
+      }, [rf, view]);
+
+      return (
+        <div className="flex h-full flex-col">
+          <header className="border-b border-zinc-200 bg-white px-6 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-semibold text-zinc-900">Your Network · tree</h1>
+                <p className="text-xs text-zinc-500">
+                  Signed in as {currentUser.name} · {currentUser.designation} · click a card to open it &amp; reveal the level below
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Modeling ≈10.1M users (1 DGSE · 75 BSA · 820 BEO · 112.5k HT · 470k teachers · 9.53M students) — generated on demand from node IDs
+                </p>
+              </div>
+              <div className="hidden items-center gap-3 text-xs text-zinc-400 sm:flex">
+                <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" /> you</span>
+                <span className="flex items-center gap-1"><span className="rounded-full bg-zinc-100 px-1.5 ring-1 ring-zinc-200">+N ›</span> hidden below</span>
+                <span>scroll to zoom · drag to pan</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <ShareField label="Share with Parents" value="https://pp.link/p/8x2k9"
+                hint="Opens the WhatsApp literacy chatbot & onboards the parent." />
+              <ShareField label="Share with Teachers" value="https://pp.link/t/9q4m2"
+                hint="Opens this dashboard & onboards a new BSA / BEO / Head Teacher / Teacher." />
+            </div>
+          </header>
+
+          <div className="relative flex-1">
+            <ReactFlow
+              nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+              onNodeClick={onNodeClick} onInit={setRf}
+              minZoom={0.1} maxZoom={1.75}
+              defaultEdgeOptions={{ type: "straight", style: { stroke: "#cbd5e1", strokeWidth: 1.5 },
+                markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8", width: 13, height: 13 } }}
+              onlyRenderVisibleElements
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background variant="dots" gap={22} size={1} color="#e4e4e7" />
+              <Controls showInteractive={false} />
+              <MiniMap pannable zoomable nodeStrokeWidth={2}
+                nodeColor={(n) => n.id === CURRENT_USER_ID ? "#6ee7b7" : n.data?.user?.type === "student" ? "#fcd34d" : "#bae6fd"} />
+            </ReactFlow>
+          </div>
+        </div>
+      );
+    }
+
+    return App;
+    })();
+
+    // #####################################################################
+    // ## Top-level shell: a toggle that switches between the two views.   ##
+    // ## The two graphs above stay fully independent (separate IIFEs).    ##
+    // #####################################################################
+    function Root() {
+      const [view, setView] = useState("force");
+      const tab = (id, label) => (
+        <button key={id} onClick={() => setView(id)}
+          className={"rounded-md px-3 py-1 text-xs font-semibold transition " +
+            (view === id ? "bg-white text-zinc-900 shadow" : "text-zinc-300 hover:text-white")}>
+          {label}
+        </button>
+      );
+      return (
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
+            <span className="text-xs font-semibold text-white">PadhaiPal · Educator Network</span>
+            <div className="ml-auto flex rounded-lg bg-zinc-800 p-0.5">
+              {tab("force", "Force graph")}
+              {tab("tree", "Tree")}
+            </div>
+          </div>
+          <div className="relative min-h-0 flex-1">
+            {view === "force" ? <ForceGraphApp /> : <TreeFlowApp />}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
+  </script>
+</body>
+</html>

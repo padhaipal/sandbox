@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PadhaiPal — Educator Network (demo)</title>
+
+  <!-- Tailwind (play CDN) to match pp-dashboard's zinc/emerald utility style -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React + ReactDOM (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- React Flow v11 (UMD) + its stylesheet -->
+  <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" />
+  <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
+
+  <!-- Babel for inline JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #18181b; }
+    .react-flow__node-card { background: transparent; border: none; padding: 0; width: auto; }
+    .react-flow__handle { background: #a1a1aa; width: 6px; height: 6px; border: none; }
+    .react-flow__attribution { display: none; }
+    @keyframes livedot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .live-dot { animation: livedot 1.4s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useMemo, useEffect, useCallback, useRef } = React;
+
+    const RFLib = window.ReactFlow;
+    const ReactFlow = RFLib.default || RFLib.ReactFlow;
+    const { Background, Controls, MiniMap, Handle, Position, useNodesState, useEdgesState, MarkerType } = RFLib;
+
+    // =====================================================================
+    //  Procedural population — models ≈10.1M users WITHOUT materializing them.
+    //  Every node's identity, parentage, children, and data are DERIVED from
+    //  its id, so only the handful of nodes on screen are ever generated.
+    //
+    //  Modeled scale:  1 DGSE · 75 BSA · ~820 BEO · ~112.5k Head Teachers
+    //                  · ~470k Teachers · ~9.53M Students.
+    //
+    //  ids are dotted paths:  "r"            -> DGSE       (level 0)
+    //                         "r.2"          -> BSA #2     (level 1)
+    //                         "r.2.5"        -> BEO        (level 2)
+    //                         "r.2.5.73"     -> Head Tchr  (level 3)
+    //                         "r.2.5.73.1"   -> Teacher    (level 4)
+    //                         "r.2.5.73.1.4" -> Student    (level 5)
+    // =====================================================================
+    const ROOT_ID = "r";
+    const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+    // [min,max] children per node at each level (avg ≈ target totals; HT groups ≤150)
+    const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]];
+
+    // the logged-in user is a Head Teacher (level 3); their referrer (BEO) is the view root
+    const CURRENT_USER_ID = "r.2.5.73";
+
+    function hashStr(s) { // cyrb53-ish -> uint32
+      let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (h1 >>> 0);
+    }
+
+    const levelOf = (id) => id.split(".").length - 1;
+    const baseParentOf = (id) => { const i = id.lastIndexOf("."); return i < 0 ? null : id.slice(0, i); };
+    const baseChildCount = (id) => {
+      const lvl = levelOf(id);
+      if (lvl >= 5) return 0;
+      const [mn, mx] = FANOUT[lvl];
+      if (mn === mx) return mn;
+      return mn + (hashStr("fan:" + id) % (mx - mn + 1));
+    };
+
+    // ----- small reused pools => millions of distinct-looking users -----
+    const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+      "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+      "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+      "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+      "Mohan","Usha","Suresh","Gita"];
+    const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+      "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+
+    // overrides: { deleted:Set<id>, moved:Map<childId,newParentId>, movedInto:Map<parentId,Set<childId>> }
+    const parentOf = (id, ov) => (ov.moved.get(id) ?? baseParentOf(id));
+
+    function genUser(id, ov) {
+      const lvl = levelOf(id);
+      const type = lvl === 5 ? "student" : "educator";
+      const h = hashStr("u:" + id);
+      const first = FIRST[h % FIRST.length];
+      return {
+        id,
+        name: type === "student" ? first : first + " " + LAST[(h >>> 9) % LAST.length],
+        phone: "+9198" + String(1000000 + (h % 9000000)),
+        designation: LEVELS[lvl],
+        type,
+        parentId: parentOf(id, ov),
+        perf: (h % 1000) / 1000,
+      };
+    }
+
+    function childIdsOf(id, ov) {
+      const ids = [];
+      const n = baseChildCount(id);
+      for (let k = 0; k < n; k++) {
+        const c = id + "." + k;
+        if (ov.deleted.has(c)) continue;
+        if ((ov.moved.get(c) ?? baseParentOf(c)) !== id) continue; // moved away
+        ids.push(c);
+      }
+      const movedIn = ov.movedInto.get(id);
+      if (movedIn) movedIn.forEach((c) => { if (!ov.deleted.has(c)) ids.push(c); });
+      return ids;
+    }
+
+    const isAncestorOf = (anc, id, ov) => {
+      let c = parentOf(id, ov);
+      while (c) { if (c === anc) return true; c = parentOf(c, ov); }
+      return false;
+    };
+    const depthFromRoot = (id, viewRootId, ov) => {
+      let d = 0, c = id;
+      while (c && c !== viewRootId) { c = parentOf(c, ov); d++; if (d > 24) break; }
+      return d;
+    };
+
+    // =====================================================================
+    //  Presentation helpers
+    // =====================================================================
+    const TIER = {
+      "DGSE":         { ring: "bg-fuchsia-100 text-fuchsia-700", pill: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200" },
+      "BSA":          { ring: "bg-rose-100 text-rose-700",     pill: "bg-rose-50 text-rose-700 ring-rose-200" },
+      "BEO":          { ring: "bg-indigo-100 text-indigo-700", pill: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
+      "Head Teacher": { ring: "bg-sky-100 text-sky-700",       pill: "bg-sky-50 text-sky-700 ring-sky-200" },
+      "Teacher":      { ring: "bg-violet-100 text-violet-700", pill: "bg-violet-50 text-violet-700 ring-violet-200" },
+      "Student":      { ring: "bg-amber-100 text-amber-700",   pill: "bg-amber-50 text-amber-700 ring-amber-200" },
+    };
+    const SHORT = { "DGSE": "DGSE", "BSA": "BSA", "BEO": "BEO", "Head Teacher": "HT", "Teacher": "Tchr", "Student": "Std" };
+    const perfColor = (p) =>
+      p >= 0.75 ? { chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "#10b981" }
+      : p >= 0.5 ? { chip: "bg-amber-50 text-amber-700 ring-amber-200",      dot: "#f59e0b" }
+      :            { chip: "bg-red-50 text-red-700 ring-red-200",            dot: "#ef4444" };
+    function initials(name) {
+      const parts = name.replace(/\(.*\)/, "").trim().split(/\s+/);
+      return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+    }
+
+    function metricsFor(u) {
+      const p = u.perf;
+      if (u.type === "student") {
+        const letters = ["क","ख","ग","अ","आ","इ","म","प","र","स","ल","न"];
+        const voice = Array.from({ length: 6 }, (_, i) => ({
+          word: letters[(i * 5 + Math.round(p * 10)) % letters.length],
+          dur: (1 + ((i * 7 + Math.round(p * 9)) % 2)) + "s",
+          when: ["just now","2h ago","yesterday","2d ago","3d ago","5d ago"][i],
+        }));
+        return { kind: "student", stats: [
+          ["Letters learnt", Math.round(p * 46) + " / 46"],
+          ["Lessons done", Math.round(p * 120)],
+          ["Active (7d)", Math.round(p * 100) + "%"],
+          ["Last active", ["today","yesterday","2d ago","4d ago"][Math.round(p * 3)]],
+        ], voice };
+      }
+      return { kind: "educator", stats: [
+        ["Students reached", Math.round(40 + p * 160)],
+        ["Active (7d)", Math.round(p * 100) + "%"],
+        ["Lessons", Math.round(200 + p * 1400)],
+        ["Avg score", Math.round(p * 100)],
+        ["Letters taught", Math.round(10 + p * 36)],
+        ["Reports below", u.designation === "BEO" ? "100s" : u.designation === "Head Teacher" ? "10s" : "few"],
+      ] };
+    }
+
+    // =====================================================================
+    //  Layout: LEFT -> RIGHT. depth = column (x). children block is centered
+    //  on the parent it expands from. Only VISIBLE nodes are placed/generated.
+    // =====================================================================
+    const CARD_W = 272, COL_GAP = 104, ROW_GAP = 0;
+    const H_COLLAPSED = 24, H_EXP_ED = 300, H_EXP_STU = 344;
+    const heightOf = (u, selected) => !selected ? H_COLLAPSED : (u.type === "student" ? H_EXP_STU : H_EXP_ED);
+
+    function computeView(ov, selected, viewRootId) {
+      const sortedKids = (id) =>
+        childIdsOf(id, ov)
+          .map((cid) => ({ cid, perf: genUser(cid, ov).perf }))
+          .sort((a, b) => b.perf - a.perf)
+          .map((x) => x.cid);
+
+      const order = [];
+      const walk = (id, depth) => {
+        order.push({ id, depth });
+        if (id === viewRootId || selected.has(id)) sortedKids(id).forEach((c) => walk(c, depth + 1));
+      };
+      walk(viewRootId, 0);
+
+      const node = {};
+      order.forEach(({ id }) => { node[id] = genUser(id, ov); });
+      const hOf = (id) => heightOf(node[id], selected.has(id));
+
+      // group by depth (accordion => one revealing parent per depth)
+      const byDepth = {};
+      order.forEach((o) => { (byDepth[o.depth] = byDepth[o.depth] || []).push(o.id); });
+      const maxDepth = order.reduce((m, o) => Math.max(m, o.depth), 0);
+
+      const pos = {};
+      for (let d = 0; d <= maxDepth; d++) {
+        const ids = byDepth[d] || [];
+        if (d === 0) { ids.forEach((id) => { pos[id] = { x: 0, y: 0 }; }); continue; }
+        const parent = node[ids[0]].parentId;
+        const parentCenter = pos[parent].y + hOf(parent) / 2;
+        const total = ids.reduce((s, id) => s + hOf(id), 0) + ROW_GAP * (ids.length - 1);
+        let cursor = parentCenter - total / 2;
+        ids.forEach((id) => { pos[id] = { x: d * (CARD_W + COL_GAP), y: cursor }; cursor += hOf(id) + ROW_GAP; });
+      }
+
+      // rank each visible node among its FULL peer set (same referrer, ≤150)
+      const rank = {};
+      const parents = new Set(order.map((o) => node[o.id].parentId).filter(Boolean));
+      parents.forEach((p) => {
+        childIdsOf(p, ov)
+          .map((cid) => ({ cid, perf: genUser(cid, ov).perf }))
+          .sort((a, b) => b.perf - a.perf)
+          .forEach((s, i, arr) => { rank[s.cid] = { pos: i + 1, total: arr.length }; });
+      });
+
+      const dims = {};
+      order.forEach(({ id }) => {
+        const isSel = selected.has(id);
+        dims[id] = {
+          h: hOf(id), selected: isSel,
+          hiddenChildren: (id === viewRootId || isSel) ? 0 : childIdsOf(id, ov).length,
+        };
+      });
+
+      return { order, pos, dims, node, rank };
+    }
+
+    // =====================================================================
+    //  Card
+    // =====================================================================
+    const stop = (e) => e.stopPropagation();
+
+    function CardHeader({ u, rank, isMe, hiddenChildren, selected }) {
+      const tier = TIER[u.designation] || TIER.Student;
+      const pc = perfColor(u.perf);
+      return (
+        <div className="flex h-6 items-center gap-1 px-1.5 leading-none">
+          <div className={"flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[5px] font-bold leading-none " + tier.ring}>
+            {u.type === "student" ? "🙂" : initials(u.name)}
+          </div>
+          <span className="min-w-0 flex-1 truncate text-[7px] font-semibold leading-none text-zinc-900">{u.name}</span>
+          {isMe && <span className="shrink-0 rounded bg-emerald-500 px-0.5 text-[5px] font-semibold leading-none text-white">YOU</span>}
+          <span className={"shrink-0 rounded px-1 text-[5px] font-medium leading-none ring-1 " + tier.pill}>
+            {SHORT[u.designation] || u.designation}
+          </span>
+          {rank && (
+            <span className={"flex shrink-0 items-center gap-0.5 rounded px-1 text-[6px] font-semibold leading-none ring-1 " + pc.chip}
+                  title="Rank among peers (same referrer)">
+              <span className="inline-block h-1 w-1 rounded-full" style={{ background: pc.dot }} />
+              #{rank.pos}/{rank.total}
+            </span>
+          )}
+          {selected ? (
+            <span className="shrink-0 text-[7px] leading-none text-zinc-300">˅</span>
+          ) : hiddenChildren > 0 ? (
+            <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-zinc-100 px-1 text-[5px] font-semibold leading-none text-zinc-500 ring-1 ring-zinc-200"
+                  title={hiddenChildren + " below — click to expand"}>
+              +{hiddenChildren} ›
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+
+    function CardNode({ data }) {
+      const u = data.user;
+      const isMe = data.isCurrent;
+      const selected = data.selected;
+      const header = <CardHeader u={u} rank={data.rank} isMe={isMe} hiddenChildren={data.hiddenChildren} selected={selected} />;
+      const shell =
+        "rounded-xl bg-white shadow-sm transition cursor-pointer " +
+        (isMe ? "ring-2 ring-emerald-400 border border-emerald-200"
+              : selected ? "border border-zinc-300 shadow-md" : "border border-zinc-200 hover:border-zinc-300");
+
+      if (!selected) {
+        return (
+          <div style={{ width: CARD_W, height: H_COLLAPSED }} className={shell}>
+            <Handle type="target" position={Position.Left} />
+            {header}
+            <Handle type="source" position={Position.Right} />
+          </div>
+        );
+      }
+
+      const m = metricsFor(u);
+      const isStudent = u.type === "student";
+      const candidates = data.visibleList.filter(
+        (c) => c.type === "educator" && c.id !== u.id && c.id !== u.parentId && !isAncestorOf(u.id, c.id, data.ov)
+      );
+
+      return (
+        <div style={{ width: CARD_W, height: data.height }} className={shell + " flex flex-col overflow-hidden"}>
+          <Handle type="target" position={Position.Left} />
+          <div className="border-b border-zinc-100">{header}</div>
+
+          <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2" onWheelCapture={stop}>
+            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live metrics
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {m.stats.map(([label, val]) => (
+                <div key={label} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1">
+                  <div className="text-[10px] text-zinc-500">{label}</div>
+                  <div className="text-sm font-semibold text-zinc-900">{val}</div>
+                </div>
+              ))}
+            </div>
+
+            {isStudent && (
+              <div onClick={stop}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Recent voice</span>
+                  <button onClick={() => data.onOpenDashboard(u)} className="text-[10px] font-semibold text-sky-600 underline">Open dashboard ↗</button>
+                </div>
+                <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+                  {m.voice.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1">
+                      <div className="flex items-center gap-2">
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-white">▶</button>
+                        <span className="text-base leading-none text-zinc-900">{v.word}</span>
+                        <span className="text-[10px] text-zinc-400">{v.dur}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">{v.when}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5 border-t border-zinc-100 bg-zinc-50 px-3 py-2" onClick={stop}>
+            <button onClick={() => data.onWhatsApp(u)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+              💬 {isStudent ? "Message parent" : "WhatsApp"}
+            </button>
+            {data.editable && (
+              <div className="flex gap-1.5">
+                <select defaultValue="" onChange={(e) => e.target.value && data.onReattach(u.id, e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-700">
+                  <option value="">Move to…</option>
+                  {candidates.map((c) => <option key={c.id} value={c.id}>{c.name} ({SHORT[c.designation]})</option>)}
+                </select>
+                <button onClick={() => data.onDelete(u.id)}
+                  className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            )}
+          </div>
+          <Handle type="source" position={Position.Right} />
+        </div>
+      );
+    }
+
+    const nodeTypes = { card: CardNode };
+
+    function ShareField({ label, value, hint }) {
+      const [copied, setCopied] = useState(false);
+      const copy = () => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200); };
+      return (
+        <div className="flex-1 min-w-[260px]">
+          <label className="mb-1 block text-xs font-semibold text-zinc-600">{label}</label>
+          <div className="flex">
+            <input readOnly value={value}
+              className="w-full rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-700 outline-none" />
+            <button onClick={copy} className="rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400">{hint}</p>
+        </div>
+      );
+    }
+
+    // =====================================================================
+    //  App
+    // =====================================================================
+    function App() {
+      // edits are stored as a tiny overrides delta over the procedural base
+      const [deleted, setDeleted] = useState(() => new Set());
+      const [moved, setMoved] = useState(() => new Map());
+      const ov = useMemo(() => {
+        const movedInto = new Map();
+        moved.forEach((p, c) => { if (!movedInto.has(p)) movedInto.set(p, new Set()); movedInto.get(p).add(c); });
+        return { deleted, moved, movedInto };
+      }, [deleted, moved]);
+
+      const viewRootId = useMemo(() => parentOf(CURRENT_USER_ID, ov) || CURRENT_USER_ID, [ov]);
+      const currentUser = useMemo(() => genUser(CURRENT_USER_ID, ov), [ov]);
+
+      const [selected, setSelected] = useState(() => new Set([CURRENT_USER_ID]));
+      const view = useMemo(() => computeView(ov, selected, viewRootId), [ov, selected, viewRootId]);
+
+      const [nodes, setNodes, onNodesChange] = useNodesState([]);
+      const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+      const onWhatsApp = useCallback((u) => window.open("https://wa.me/" + u.phone.replace(/\D/g, ""), "_blank"), []);
+      const onOpenDashboard = useCallback((u) => alert("Would open the existing dashboard at /user/" + u.id), []);
+      const onDelete = useCallback((id) => {
+        setDeleted((prev) => new Set(prev).add(id));
+        setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      }, []);
+      const onReattach = useCallback((id, newParentId) => {
+        setMoved((prev) => new Map(prev).set(id, newParentId));
+      }, []);
+
+      useEffect(() => {
+        const visibleList = view.order.map(({ id }) => {
+          const u = view.node[id];
+          return { id, name: u.name, designation: u.designation, type: u.type };
+        });
+        setNodes(view.order.map(({ id }) => {
+          const u = view.node[id];
+          const d = view.dims[id];
+          return {
+            id, type: "card", position: view.pos[id], draggable: false,
+            data: {
+              user: u, isCurrent: id === CURRENT_USER_ID, rank: view.rank[id],
+              selected: d.selected, hiddenChildren: d.hiddenChildren, height: d.h,
+              editable: isAncestorOf(CURRENT_USER_ID, id, ov), visibleList, ov,
+              onWhatsApp, onDelete, onReattach, onOpenDashboard,
+            },
+          };
+        }));
+        setEdges(view.order.filter((o) => o.depth > 0).map(({ id }) => {
+          const p = view.node[id].parentId;
+          return { id: p + "->" + id, source: p, target: id, type: "straight" };
+        }));
+      }, [view, ov, setNodes, setEdges, onWhatsApp, onDelete, onReattach, onOpenDashboard]);
+
+      // accordion-per-level toggle
+      const onNodeClick = useCallback((_e, node) => {
+        const X = node.id;
+        setSelected((prev) => {
+          if (prev.has(X)) {
+            return new Set([...prev].filter((id) => id !== X && !isAncestorOf(X, id, ov)));
+          }
+          const dX = depthFromRoot(X, viewRootId, ov);
+          const next = new Set([...prev].filter((id) => depthFromRoot(id, viewRootId, ov) < dX));
+          next.add(X);
+          return next;
+        });
+      }, [ov, viewRootId]);
+
+      // initial zoom: center on the current user
+      const [rf, setRf] = useState(null);
+      const centered = useRef(false);
+      useEffect(() => {
+        if (!rf || centered.current || !view.pos[CURRENT_USER_ID]) return;
+        const p = view.pos[CURRENT_USER_ID], h = view.dims[CURRENT_USER_ID].h;
+        rf.setCenter(p.x + CARD_W / 2, p.y + h / 2, { zoom: 1, duration: 0 });
+        centered.current = true;
+      }, [rf, view]);
+
+      return (
+        <div className="flex h-full flex-col">
+          <header className="border-b border-zinc-200 bg-white px-6 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-semibold text-zinc-900">Your Network</h1>
+                <p className="text-xs text-zinc-500">
+                  Signed in as {currentUser.name} · Head Teacher · click a card to open it &amp; reveal the level below
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Modeling ≈10.1M users (1 DGSE · 75 BSA · 820 BEO · 112.5k HT · 470k teachers · 9.53M students) — generated on demand from node IDs
+                </p>
+              </div>
+              <div className="hidden items-center gap-3 text-xs text-zinc-400 sm:flex">
+                <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" /> you</span>
+                <span className="flex items-center gap-1"><span className="rounded-full bg-zinc-100 px-1.5 ring-1 ring-zinc-200">+N ›</span> hidden below</span>
+                <span>scroll to zoom · drag to pan</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <ShareField label="Share with Parents" value="https://pp.link/p/8x2k9"
+                hint="Opens the WhatsApp literacy chatbot & onboards the parent." />
+              <ShareField label="Share with Teachers" value="https://pp.link/t/9q4m2"
+                hint="Opens this dashboard & onboards a new BSA / BEO / Head Teacher / Teacher." />
+            </div>
+          </header>
+
+          <div className="relative flex-1">
+            <ReactFlow
+              nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+              onNodeClick={onNodeClick} onInit={setRf}
+              minZoom={0.1} maxZoom={1.75}
+              defaultEdgeOptions={{ type: "straight", style: { stroke: "#cbd5e1", strokeWidth: 1.5 },
+                markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8", width: 13, height: 13 } }}
+              onlyRenderVisibleElements
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background variant="dots" gap={22} size={1} color="#e4e4e7" />
+              <Controls showInteractive={false} />
+              <MiniMap pannable zoomable nodeStrokeWidth={2}
+                nodeColor={(n) => n.id === CURRENT_USER_ID ? "#6ee7b7" : n.data?.user?.type === "student" ? "#fcd34d" : "#bae6fd"} />
+            </ReactFlow>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

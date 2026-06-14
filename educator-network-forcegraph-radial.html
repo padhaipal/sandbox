@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PadhaiPal — Educator Network (force-graph demo)</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/react-force-graph-2d"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #18181b; }
+    @keyframes livedot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .live-dot { animation: livedot 1.4s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useMemo, useEffect, useCallback, useRef } = React;
+    const ForceGraph2D = window.ForceGraph2D.default || window.ForceGraph2D;
+
+    // =====================================================================
+    //  Procedural population (≈10.1M users, generated on demand from ids)
+    // =====================================================================
+    const ROOT_ID = "r";
+    const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+    const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]];
+    const CURRENT_USER_ID = "r"; // the DGSE — root of the whole tree
+
+    function hashStr(s) {
+      let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (h1 >>> 0);
+    }
+    const levelOf = (id) => id.split(".").length - 1;
+    const baseParentOf = (id) => { const i = id.lastIndexOf("."); return i < 0 ? null : id.slice(0, i); };
+    const baseChildCount = (id) => {
+      const lvl = levelOf(id);
+      if (lvl >= 5) return 0;
+      const [mn, mx] = FANOUT[lvl];
+      return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
+    };
+    const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+      "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+      "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+      "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+      "Mohan","Usha","Suresh","Gita"];
+    const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+      "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+
+    const parentOf = (id, ov) => (ov.moved.get(id) ?? baseParentOf(id));
+    function genUser(id, ov) {
+      const lvl = levelOf(id);
+      const type = lvl === 5 ? "student" : "educator";
+      const h = hashStr("u:" + id);
+      const first = FIRST[h % FIRST.length];
+      return {
+        id, name: type === "student" ? first : first + " " + LAST[(h >>> 9) % LAST.length],
+        phone: "+9198" + String(1000000 + (h % 9000000)),
+        designation: LEVELS[lvl], type, parentId: parentOf(id, ov), perf: (h % 1000) / 1000,
+      };
+    }
+    function childIdsOf(id, ov) {
+      const ids = [];
+      const n = baseChildCount(id);
+      for (let k = 0; k < n; k++) {
+        const c = id + "." + k;
+        if (ov.deleted.has(c)) continue;
+        if ((ov.moved.get(c) ?? baseParentOf(c)) !== id) continue;
+        ids.push(c);
+      }
+      const movedIn = ov.movedInto.get(id);
+      if (movedIn) movedIn.forEach((c) => { if (!ov.deleted.has(c)) ids.push(c); });
+      return ids;
+    }
+    const isAncestorOf = (anc, id, ov) => {
+      let c = parentOf(id, ov);
+      while (c) { if (c === anc) return true; c = parentOf(c, ov); }
+      return false;
+    };
+    function rankOf(id, ov) {
+      const p = parentOf(id, ov); if (!p) return null;
+      const sibs = childIdsOf(p, ov).map((c) => ({ c, perf: genUser(c, ov).perf })).sort((a, b) => b.perf - a.perf);
+      const i = sibs.findIndex((s) => s.c === id);
+      return i < 0 ? null : { pos: i + 1, total: sibs.length };
+    }
+
+    // deterministic Indian face per user, from local FairFace subset (DEMO ONLY).
+    const N_ADULT_FACES = 300, N_CHILD_FACES = 50;
+    const faceUrl = (u) => {
+      const h = hashStr("face:" + u.id);
+      return u.type === "student"
+        ? "faces/child/" + (h % N_CHILD_FACES) + ".jpg"
+        : "faces/adult/" + (h % N_ADULT_FACES) + ".jpg";
+    };
+
+    // ----- continuous score color: red(0) -> yellow(.5) -> green(1) -----
+    const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+    function scoreRGB(p) {
+      const red = [239, 68, 68], yellow = [234, 179, 8], green = [34, 197, 94];
+      const c = p < 0.5 ? lerp(red, yellow, p / 0.5) : lerp(yellow, green, (p - 0.5) / 0.5);
+      return c.map((v) => v | 0);
+    }
+    const scoreColor = (p) => { const c = scoreRGB(p); return `rgb(${c[0]},${c[1]},${c[2]})`; };
+    const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
+
+    const SHORT = { "DGSE": "DGSE", "BSA": "BSA", "BEO": "BEO", "Head Teacher": "HT", "Teacher": "Tchr", "Student": "Std" };
+    const matchUser = (u, q) => {
+      const ql = q.toLowerCase();
+      return u.name.toLowerCase().includes(ql) || u.phone.includes(q) ||
+             u.designation.toLowerCase().includes(ql) || (SHORT[u.designation] || "").toLowerCase().includes(ql);
+    };
+    const radiusFor = (id) => {
+      const l = levelOf(id);
+      const base = l <= 2 ? 11 : l === 3 ? 9 : l === 4 ? 8 : 7;
+      return id === CURRENT_USER_ID ? base + 3 : base;
+    };
+    // hit-circle radius = node size * HIT_MULT — also used as the collide radius
+    // so adjacent hit areas can touch but never overlap.
+    const HIT_MULT = 2.6;
+    // dynamic node sizing: deepest visible layer = BASE_R (floor), each layer
+    // higher is one STEP larger (recomputed as layers are added/removed).
+    const BASE_R = 8, STEP = 0; // STEP 0 => all nodes the same size regardless of hierarchy
+    // hierarchy hue + saturation ramp: each level gets a distinct ring/border colour.
+    function levelColor(level) {
+      const hue = (205 + level * 48) % 360;
+      const sat = Math.max(35, 85 - level * 9);
+      return `hsl(${hue}, ${sat}%, 48%)`;
+    }
+    const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // custom d3-force collision (react-force-graph UMD doesn't expose forceCollide).
+    // Resolves overlaps by moving POSITIONS directly (not velocity) and runs several
+    // iterations per tick, so dense clusters separate even with a fast settle.
+    // Pinned nodes (fx/fy set) are not moved.
+    function makeCollide(radiusFn, strength, iterations) {
+      let nodes; const iters = iterations || 1;
+      function force() {
+        if (!nodes) return;
+        const n = nodes.length;
+        for (let it = 0; it < iters; it++) {
+          for (let i = 0; i < n; i++) {
+            const a = nodes[i]; if (a.x == null) continue; const ra = radiusFn(a);
+            for (let j = i + 1; j < n; j++) {
+              const b = nodes[j]; if (b.x == null) continue; const rb = radiusFn(b);
+              let dx = b.x - a.x, dy = b.y - a.y, rmin = ra + rb, d2 = dx * dx + dy * dy;
+              if (d2 > 1e-6 && d2 < rmin * rmin) {
+                const d = Math.sqrt(d2), ux = dx / d, uy = dy / d, push = (rmin - d) * strength * 0.5;
+                if (a.fx == null) a.x -= ux * push; if (a.fy == null) a.y -= uy * push;
+                if (b.fx == null) b.x += ux * push; if (b.fy == null) b.y += uy * push;
+              } else if (d2 <= 1e-6) { if (b.fx == null) b.x += 0.5; else if (a.fx == null) a.x -= 0.5; }
+            }
+          }
+        }
+      }
+      force.initialize = (_n) => { nodes = _n; };
+      return force;
+    }
+
+    // radial-lock: hard-pin every child to its fixed distance (lockR) from its
+    // parent, keeping whatever ANGLE the other forces pushed it to. Runs last,
+    // so connection length is absolute and only the angle animates.
+    function makeRadialLock() {
+      let nodes, map;
+      function force() {
+        if (!nodes) return;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (n.lockR == null || n.fx != null || n.x == null) continue; // skip pinned root / no lockR
+          const p = map[n.u && n.u.parentId];
+          if (!p || p.x == null) continue;
+          if (n.expanded) { n.x = p.x; n.y = p.y + n.lockR; continue; } // selected node: connection points straight down
+          let dx = n.x - p.x, dy = n.y - p.y, d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
+          const s = n.lockR / d;
+          n.x = p.x + dx * s; n.y = p.y + dy * s;
+        }
+      }
+      force.initialize = (_n) => { nodes = _n; map = {}; for (let i = 0; i < _n.length; i++) map[_n[i].id] = _n[i]; };
+      return force;
+    }
+
+    // asymmetric many-body: full repulsion between same-level peers, full
+    // repulsion of a SHALLOWER node by a DEEPER one, but only WEAK repulsion of
+    // a deeper node by a shallower one (shallowFactor). => a child cluster
+    // groups around its parent and is gently pushed AWAY from the parent's peer
+    // ring, never pulled into it. shallowFactor 0 = hard shield, 1 = symmetric.
+    function makeAsymCharge(strength, maxDist, shallowFactor) {
+      let nodes; const max2 = maxDist * maxDist;
+      function force() {
+        if (!nodes) return;
+        const n = nodes.length;
+        for (let i = 0; i < n; i++) {
+          const a = nodes[i]; if (a.x == null) continue; const da = levelOf(a.id);
+          for (let j = i + 1; j < n; j++) {
+            const b = nodes[j]; if (b.x == null) continue; const db = levelOf(b.id);
+            let dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+            if (d2 === 0) { a.vx += 0.5; continue; }
+            if (d2 > max2) continue;
+            if (d2 < 1) d2 = 1;
+            const k = strength / d2;
+            const ka = (db >= da) ? k : k * shallowFactor; // a repelled by b
+            const kb = (da >= db) ? k : k * shallowFactor; // b repelled by a
+            a.vx += dx * ka; a.vy += dy * ka;
+            b.vx -= dx * kb; b.vy -= dy * kb;
+          }
+        }
+      }
+      force.initialize = (_n) => { nodes = _n; };
+      return force;
+    }
+
+    // extra repulsion that ONLY acts between siblings (same parent) — no effect
+    // on any other pair. With the radial-lock this just spreads peers angularly.
+    function makeSiblingRepel(strength, maxDist) {
+      let nodes; const max2 = maxDist * maxDist;
+      function force() {
+        if (!nodes) return;
+        const n = nodes.length;
+        for (let i = 0; i < n; i++) {
+          const a = nodes[i]; if (a.x == null || !a.u) continue; const pa = a.u.parentId;
+          if (pa == null) continue;
+          for (let j = i + 1; j < n; j++) {
+            const b = nodes[j]; if (b.x == null || !b.u || b.u.parentId !== pa) continue; // siblings only
+            let dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+            if (d2 === 0) { a.vx += 0.5; continue; }
+            if (d2 > max2) continue;
+            if (d2 < 1) d2 = 1;
+            const k = strength / d2; // strength negative => repel
+            a.vx += dx * k; a.vy += dy * k;
+            b.vx -= dx * k; b.vy -= dy * k;
+          }
+        }
+      }
+      force.initialize = (_n) => { nodes = _n; };
+      return force;
+    }
+
+    function metricsFor(u) {
+      const p = u.perf;
+      if (u.type === "student") {
+        const letters = ["क","ख","ग","अ","आ","इ","म","प","र","स","ल","न"];
+        const voice = Array.from({ length: 6 }, (_, i) => ({
+          word: letters[(i * 5 + Math.round(p * 10)) % letters.length],
+          dur: (1 + ((i * 7 + Math.round(p * 9)) % 2)) + "s",
+          when: ["just now","2h ago","yesterday","2d ago","3d ago","5d ago"][i],
+        }));
+        return { kind: "student", stats: [
+          ["Letters learnt", Math.round(p * 46) + " / 46"], ["Lessons done", Math.round(p * 120)],
+          ["Active (7d)", Math.round(p * 100) + "%"], ["Last active", ["today","yesterday","2d ago","4d ago"][Math.round(p * 3)]],
+        ], voice };
+      }
+      return { kind: "educator", stats: [
+        ["Students reached", Math.round(40 + p * 160)], ["Active (7d)", Math.round(p * 100) + "%"],
+        ["Lessons", Math.round(200 + p * 1400)], ["Avg score", Math.round(p * 100)],
+        ["Letters taught", Math.round(10 + p * 36)],
+        ["Reports below", u.designation === "BEO" ? "100s" : u.designation === "Head Teacher" ? "10s" : "few"],
+      ] };
+    }
+
+    function collectVisible(ov, expanded, viewRootId) {
+      const order = [], seen = new Set();
+      const walk = (id) => {
+        if (seen.has(id)) return;
+        seen.add(id); order.push(id);
+        if (id === viewRootId || expanded.has(id)) childIdsOf(id, ov).forEach(walk);
+      };
+      walk(viewRootId);
+      return { order, seen };
+    }
+
+    // =====================================================================
+    //  Detail panel
+    // =====================================================================
+    const stop = (e) => e.stopPropagation();
+    function DetailPanel({ id, ov, editable, visibleIds, onClose, onWhatsApp, onDelete, onReattach, onOpenDashboard }) {
+      if (!id) return null;
+      const u = genUser(id, ov);
+      const m = metricsFor(u);
+      const rank = rankOf(id, ov);
+      const isStudent = u.type === "student";
+      const candidates = visibleIds
+        .filter((c) => c !== u.id && c !== u.parentId && levelOf(c) < 5 && !isAncestorOf(u.id, c, ov))
+        .map((c) => genUser(c, ov));
+
+      return (
+        <div className="absolute right-3 top-3 bottom-3 z-10 flex w-80 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl" onClick={stop}>
+          <div className="flex items-start justify-between border-b border-zinc-200 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <img src={faceUrl(u)} alt="" className="h-11 w-11 rounded-full object-cover ring-2 brightness-110"
+                   style={{ boxShadow: "0 0 0 2px " + scoreColor(u.perf) }} />
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">{u.name}</div>
+                <div className="text-xs text-zinc-500">{u.designation} · <span className="font-mono">{u.phone}</span></div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: scoreColor(u.perf) }}>
+                    score {Math.round(u.perf * 100)}
+                  </span>
+                  {rank && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 ring-1 ring-zinc-200">#{rank.pos}/{rank.total} peers</span>}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">✕</button>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live metrics
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {m.stats.map(([label, val]) => (
+                <div key={label} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+                  <div className="text-[10px] text-zinc-500">{label}</div>
+                  <div className="text-sm font-semibold text-zinc-900">{val}</div>
+                </div>
+              ))}
+            </div>
+            {isStudent && (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Recent voice</span>
+                  <button onClick={() => onOpenDashboard(u)} className="text-[10px] font-semibold text-sky-600 underline">Open dashboard ↗</button>
+                </div>
+                <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+                  {m.voice.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[9px] text-white">▶</button>
+                        <span className="text-base leading-none text-zinc-900">{v.word}</span>
+                        <span className="text-[10px] text-zinc-400">{v.dur}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">{v.when}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+            <button onClick={() => onWhatsApp(u)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+              💬 {isStudent ? "Message parent" : "WhatsApp"}
+            </button>
+            {editable && (
+              <div className="flex gap-2">
+                <select defaultValue="" onChange={(e) => e.target.value && onReattach(u.id, e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700">
+                  <option value="">Move to…</option>
+                  {candidates.map((c) => <option key={c.id} value={c.id}>{c.name} ({SHORT[c.designation]})</option>)}
+                </select>
+                <button onClick={() => onDelete(u.id)}
+                  className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function ShareField({ label, value, hint }) {
+      const [copied, setCopied] = useState(false);
+      const copy = () => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200); };
+      return (
+        <div className="flex-1 min-w-[260px]">
+          <label className="mb-1 block text-xs font-semibold text-zinc-600">{label}</label>
+          <div className="flex">
+            <input readOnly value={value}
+              className="w-full rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-700 outline-none" />
+            <button onClick={copy} className="rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400">{hint}</p>
+        </div>
+      );
+    }
+
+    function useSize() {
+      const ref = useRef(null);
+      const [size, setSize] = useState({ width: 800, height: 600 });
+      useEffect(() => {
+        if (!ref.current) return;
+        const ro = new ResizeObserver((entries) => {
+          const cr = entries[0].contentRect;
+          setSize({ width: Math.max(1, cr.width), height: Math.max(1, cr.height) });
+        });
+        ro.observe(ref.current);
+        return () => ro.disconnect();
+      }, []);
+      return [ref, size];
+    }
+
+    // =====================================================================
+    //  App
+    // =====================================================================
+    function App() {
+      const [deleted, setDeleted] = useState(() => new Set());
+      const [moved, setMoved] = useState(() => new Map());
+      const ov = useMemo(() => {
+        const movedInto = new Map();
+        moved.forEach((p, c) => { if (!movedInto.has(p)) movedInto.set(p, new Set()); movedInto.get(p).add(c); });
+        return { deleted, moved, movedInto };
+      }, [deleted, moved]);
+
+      const viewRootId = useMemo(() => parentOf(CURRENT_USER_ID, ov) || CURRENT_USER_ID, [ov]);
+      const currentUser = useMemo(() => genUser(CURRENT_USER_ID, ov), [ov]);
+
+      const [expanded, setExpanded] = useState(() => new Set([CURRENT_USER_ID]));
+      const [selectedId, setSelectedId] = useState(CURRENT_USER_ID);
+      const [query, setQuery] = useState("");
+      const [highlightId, setHighlightId] = useState(null);
+
+      const fgRef = useRef(null);
+      const nodesRef = useRef(new Map());
+      const fitDone = useRef(false);
+      const [containerRef, size] = useSize();
+
+      // face image cache; coalesce redraws as faces load in
+      const imgCache = useRef(new Map());
+      const pending = useRef(false);
+      const [imgTick, setImgTick] = useState(0);
+      const getImg = useCallback((url) => {
+        const cache = imgCache.current;
+        if (cache.has(url)) return cache.get(url);
+        const img = new Image();
+        img.onload = () => { if (!pending.current) { pending.current = true; requestAnimationFrame(() => { pending.current = false; setImgTick((t) => t + 1); }); } };
+        img.src = url;
+        cache.set(url, img);
+        return img;
+      }, []);
+
+      const { graphData, visibleIds } = useMemo(() => {
+        const { order, seen } = collectVisible(ov, expanded, viewRootId);
+        const map = nodesRef.current;
+        // deepest visible level -> all higher levels are sized relative to it
+        const maxL = order.reduce((m, id) => Math.max(m, levelOf(id)), 0);
+        const rankCache = {}, lockRCache = {}, groupOuterR = {}, groupInnerR = {}, groupScores = {}, groups = [];
+        // pass 1: each peer group's geometry + ranks + outer radius (lowest-score member)
+        new Set(order.map((id) => genUser(id, ov).parentId).filter(Boolean)).forEach((p) => {
+          const sorted = childIdsOf(p, ov)
+            .map((c) => ({ c, perf: genUser(c, ov).perf }))
+            .sort((a, b) => b.perf - a.perf); // highest score first
+          const N = sorted.length;
+          const childLevel = levelOf(p) + 1;
+          const rC = BASE_R + (maxL - childLevel) * STEP;
+          const rP = BASE_R + (maxL - levelOf(p)) * STEP;
+          const innerFloor = HIT_MULT * (rC + rP);          // closest without overlapping the parent
+          const childFoot = rC * HIT_MULT;
+          const inner2 = innerFloor * innerFloor;
+          const outer2 = inner2 + (N * childFoot * childFoot) / 0.6; // annulus area sized to fit all N
+          groupOuterR[p] = Math.sqrt(outer2);               // lowest-score child's connection length
+          groupInnerR[p] = innerFloor;                      // highest-score child's connection length
+          groupScores[p] = sorted.map((s) => s.perf);       // child scores, high -> low
+          groups.push({ sorted, N, inner2, outer2 });
+          sorted.forEach((s, i) => { rankCache[s.c] = { pos: i + 1, total: N }; });
+        });
+        // pass 2: locked radius per child (selected nodes need their OWN children's outer radius)
+        groups.forEach(({ sorted, N, inner2, outer2 }) => {
+          const maxPerf = sorted.length ? sorted[0].perf : 1;
+          sorted.forEach((s, i) => {
+            if (expanded.has(s.c)) {
+              // selected: (lowest-score sibling length + its lowest-score child length) * 1.25
+              const peerOuter = Math.sqrt(outer2);      // lowest-score sibling's connection length
+              const childOuter = groupOuterR[s.c] || 0; // its lowest-score child's connection length
+              lockRCache[s.c] = (peerOuter + childOuter) * 1.25;
+            } else {
+              // radius straight from the score value: max score -> inner, score 0 -> outer
+              const frac = maxPerf > 0 ? Math.max(0, Math.min(1, 1 - s.perf / maxPerf)) : 0;
+              lockRCache[s.c] = Math.sqrt(inner2 + frac * (outer2 - inner2));
+            }
+          });
+        });
+        const nodes = order.map((id) => {
+          const u = genUser(id, ov);
+          let n = map.get(id);
+          if (!n) {
+            n = { id };
+            if (id === CURRENT_USER_ID) {
+              n.x = 0; n.y = 0; n.fx = 0; n.fy = 0;       // anchor the root at centre
+            } else {
+              const p = map.get(u.parentId);
+              if (p && p.x != null) {
+                // spawn children EVENLY around the parent (symmetric ring)
+                const sibs = childIdsOf(u.parentId, ov);
+                const idx = Math.max(0, sibs.indexOf(id)), cnt = Math.max(1, sibs.length);
+                const off = (hashStr("ang:" + u.parentId) % 360) * Math.PI / 180;
+                const ang = off + (idx / cnt) * 2 * Math.PI;
+                // spawn at the fixed (locked) radius, so only the angle settles.
+                const R = lockRCache[id] != null ? lockRCache[id] : (HIT_MULT * 2 * BASE_R);
+                n.x = p.x + Math.cos(ang) * R; n.y = p.y + Math.sin(ang) * R;
+              }
+            }
+            map.set(id, n);
+          }
+          n.u = u;
+          n.isCurrent = id === CURRENT_USER_ID;
+          n.expanded = expanded.has(id);
+          n.hasChildren = u.type !== "student";
+          n.rank = rankCache[id] || null;
+          n.lockR = lockRCache[id] != null ? lockRCache[id] : (HIT_MULT * 2 * BASE_R); // fixed parent-distance
+          n.childInner = groupInnerR[id]; n.childOuter = groupOuterR[id]; // children radius band (for score rings)
+          n.childScores = groupScores[id]; // child scores (for the % score rings)
+          n.sizeR = BASE_R + (maxL - levelOf(id)) * STEP; // higher layer = larger, floor = BASE_R
+          n.linkLevelMult = 1 + (maxL - levelOf(id)) * 0.1; // higher layer = longer parent-link
+          n.score = Math.round(u.perf * 100);
+          return n;
+        });
+        [...map.keys()].forEach((id) => { if (!seen.has(id)) map.delete(id); });
+        const links = order.filter((id) => id !== viewRootId)
+          .map((id) => ({ source: genUser(id, ov).parentId, target: id }))
+          .filter((l) => seen.has(l.source));
+        return { graphData: { nodes, links }, visibleIds: order };
+      }, [ov, expanded, viewRootId]);
+
+      // forces: link distance by score, repulsion (range-limited so distant
+      // clusters don't shove each other -> clusters stay symmetric), non-overlap.
+      useEffect(() => {
+        const fg = fgRef.current; if (!fg) return;
+        fg.d3Force("link").distance((l) => {
+          const t = l.target;
+          return (t && t.lockR != null) ? t.lockR : (HIT_MULT * 2 * BASE_R); // radius is hard-locked; link just agrees
+        });
+        fg.d3Force("charge", null); // no general repulsion — only peers (siblings) repel
+        fg.d3Force("sibrepel", makeSiblingRepel(-480, 600)); // the ONLY repulsion: siblings only (4x)
+        fg.d3Force("collide", makeCollide((nd) => (nd.sizeR || BASE_R) * HIT_MULT, 0.9, 3)); // hit areas never overlap
+        fg.d3Force("center", null); // drop default centering (it fights the pinned root)
+        fg.d3Force("radial", makeRadialLock()); // hard-lock each child's distance; only the angle is free
+      }, [graphData]);
+
+      // at the START of each animation (graph change), zoom to fit all nodes
+      useEffect(() => {
+        const id = requestAnimationFrame(() => {
+          const fg = fgRef.current; if (!fg) return;
+          fg.zoomToFit(0, 60);              // fit, then back off ~25% so it's less zoomed in
+          fg.zoom(fg.zoom() * 0.75, 400);
+        });
+        return () => cancelAnimationFrame(id);
+      }, [graphData]);
+
+      const onWhatsApp = useCallback((u) => window.open("https://wa.me/" + u.phone.replace(/\D/g, ""), "_blank"), []);
+      const onOpenDashboard = useCallback((u) => alert("Would open the existing dashboard at /user/" + u.id), []);
+      const onDelete = useCallback((id) => {
+        setDeleted((prev) => new Set(prev).add(id));
+        setExpanded((prev) => { const n = new Set(prev); n.delete(id); return n; });
+        setSelectedId((cur) => (cur === id ? null : cur));
+      }, []);
+      const onReattach = useCallback((id, newParentId) => { setMoved((prev) => new Map(prev).set(id, newParentId)); }, []);
+
+      // accordion: at most one open node per level. Selecting a new node
+      // collapses the previously-open node at its level and below (their
+      // children hide), keeping the ancestor path — recurses at every layer.
+      const selectNode = useCallback((node) => {
+        const X = node.id, dX = levelOf(X);
+        if (expanded.has(X)) {
+          setExpanded((p) => new Set([...p].filter((id) => levelOf(id) < dX)));
+          setSelectedId(parentOf(X, ov));
+        } else {
+          setExpanded((p) => new Set([...[...p].filter((id) => levelOf(id) < dX), X]));
+          setSelectedId(X);
+        }
+      }, [expanded, ov]);
+
+      // reveal a (possibly off-screen) node: open its whole ancestor path, select it
+      const navigateTo = useCallback((id) => {
+        const chain = []; let c = id, guard = 0;
+        while (c && guard++ < 40) { chain.push(c); if (c === viewRootId) break; c = parentOf(c, ov); }
+        setExpanded(new Set(chain));
+        setSelectedId(id);
+      }, [ov, viewRootId]);
+
+      // drag is disabled: a click OR click-drag on a node just selects it,
+      // the node never moves (held at its pre-drag position during the gesture).
+      const dragHome = useRef(new Map());
+      const onNodeDrag = useCallback((node) => {
+        const m = dragHome.current;
+        if (!m.has(node.id)) m.set(node.id, { x: node.x, y: node.y });
+        const h = m.get(node.id);
+        node.fx = h.x; node.fy = h.y; node.x = h.x; node.y = h.y; node.vx = 0; node.vy = 0;
+      }, []);
+      const onNodeDragEnd = useCallback((node) => {
+        const m = dragHome.current, h = m.get(node.id);
+        if (h) { node.x = h.x; node.y = h.y; m.delete(node.id); }
+        if (node.id !== CURRENT_USER_ID) { node.fx = undefined; node.fy = undefined; }
+        selectNode(node);
+      }, [selectNode]);
+
+      // ----- search (scoped to parent + peers + the user's own downline) -----
+      const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
+      const results = useMemo(() => {
+        const q = query.trim(); if (!q) return [];
+        const out = [], seen = new Set();
+        const RES_CAP = 40, SCAN_CAP = 3000;
+        const consider = (id) => {
+          if (seen.has(id) || out.length >= RES_CAP) return;
+          seen.add(id);
+          const u = genUser(id, ov);
+          if (matchUser(u, q)) out.push(u);
+        };
+        const par = parentOf(CURRENT_USER_ID, ov);
+        if (par) { consider(par); childIdsOf(par, ov).forEach(consider); } // parent + peers
+        consider(CURRENT_USER_ID);
+        let frontier = [CURRENT_USER_ID], scanned = 0;          // BFS down the user's subtree (capped)
+        while (frontier.length && scanned < SCAN_CAP && out.length < RES_CAP) {
+          const next = [];
+          for (const id of frontier) {
+            for (const c of childIdsOf(id, ov)) {
+              consider(c); scanned++; next.push(c);
+              if (scanned >= SCAN_CAP || out.length >= RES_CAP) break;
+            }
+            if (scanned >= SCAN_CAP || out.length >= RES_CAP) break;
+          }
+          frontier = next;
+        }
+        return out;
+      }, [query, ov]);
+
+      const drawNode = useCallback((node, ctx, scale) => {
+        const FR = node.sizeR || BASE_R;
+        const col = scoreColor(node.u.perf);
+        const img = getImg(faceUrl(node.u));
+        // node geometry
+        const boxW = FR * 3.8, boxH = FR * 2.1;
+        const bx = node.x - boxW / 2, by = node.y + FR * 0.1;
+        // faint dotted score-reference rings around a selected node: circles where
+        // children at 75% / 50% / 25% of the top child score would sit (score 0 = outer edge).
+        if (false && node.expanded && node.childOuter != null) { // score rings hidden for now
+          const inner = node.childInner != null ? node.childInner : 0;
+          const inner2 = inner * inner, outer2 = node.childOuter * node.childOuter;
+          ctx.save();
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          // 6 label positions per ring (so some stay visible if a node covers others)
+          const labelAngles = [];
+          for (let k = 0; k < 6; k++) labelAngles.push(-Math.PI / 2 + k * Math.PI / 3);
+          for (const pct of [0.75, 0.5, 0.25]) {
+            // a child scoring pct*maxScore sits at band fraction (1 - pct) — same
+            // score->radius rule the children use, so the ring lands exactly on them.
+            const frac = 1 - pct;
+            const r = Math.sqrt(inner2 + frac * (outer2 - inner2));
+            ctx.setLineDash([2 / scale, 3 / scale]);
+            ctx.lineWidth = 0.7 / scale;
+            ctx.strokeStyle = "rgba(30,30,30,0.4)";
+            ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, 2 * Math.PI); ctx.stroke();
+            // subtle labels around the ring
+            ctx.setLineDash([]);
+            const label = Math.round(pct * 100) + "%";
+            ctx.font = `${10 / scale}px Arial`;
+            for (const a of labelAngles) {
+              const lx = node.x + Math.cos(a) * r, ly = node.y + Math.sin(a) * r;
+              ctx.lineWidth = 2.6 / scale; ctx.strokeStyle = "rgba(255,255,255,0.85)";
+              ctx.strokeText(label, lx, ly); // white halo for legibility
+              ctx.fillStyle = "rgba(40,40,40,0.65)";
+              ctx.fillText(label, lx, ly);
+            }
+          }
+          ctx.restore();
+        }
+        // 0) blue glow behind the node, fading to transparent outward. Drawn
+        //    once for search-hover, 3x (denser/stronger) for the current user.
+        const glowPasses = (node.isCurrent ? 3 : 0) + (node.id === highlightId ? 3 : 0);
+        if (glowPasses > 0) {
+          ctx.save();
+          ctx.fillStyle = "rgba(37,99,235,1)";
+          ctx.shadowColor = "rgba(37,99,235,0.95)"; ctx.shadowBlur = (BASE_R * BASE_R * 2.2) / FR; // glow inversely proportional to node size
+          for (let i = 0; i < glowPasses; i++) {
+            roundRect(ctx, bx, by, boxW, boxH, FR * 0.32); ctx.fill();
+            ctx.beginPath(); ctx.arc(node.x, node.y, FR, 0, 2 * Math.PI); ctx.fill();
+          }
+          ctx.restore();
+        }
+        // 1) box
+        roundRect(ctx, bx, by, boxW, boxH, FR * 0.32);
+        ctx.fillStyle = col; ctx.fill();
+        // 2) text: name, then title-abbrev · score · rank — each line shrunk to
+        //    fit the box width so it can never overflow the box.
+        ctx.fillStyle = textOn(node.u.perf); ctx.textAlign = "center"; ctx.textBaseline = "top";
+        const maxTW = boxW - FR * 0.5; // inner width (with padding)
+        const drawFit = (text, baseFs, bold, y) => {
+          let fs = baseFs;
+          const f = (s) => `${bold ? "bold " : ""}${s}px Arial`;
+          ctx.font = f(fs);
+          const w = ctx.measureText(text).width;
+          if (w > maxTW) { fs = fs * maxTW / w; ctx.font = f(fs); }
+          ctx.fillText(text, node.x, y);
+        };
+        drawFit(truncate(node.u.name, 16), FR * 0.5, true, node.y + FR + FR * 0.12);
+        const line2 = SHORT[node.u.designation] + "  ·  " + node.score + (node.rank ? "  ·  #" + node.rank.pos + "/" + node.rank.total : "");
+        drawFit(line2, FR * 0.42, false, node.y + FR + FR * 0.7);
+        // 3) face on top, overlapping the box (brightened)
+        ctx.save();
+        ctx.beginPath(); ctx.arc(node.x, node.y, FR, 0, 2 * Math.PI); ctx.closePath(); ctx.clip();
+        if (img.complete && img.naturalWidth) { ctx.filter = "brightness(1.18)"; ctx.drawImage(img, node.x - FR, node.y - FR, FR * 2, FR * 2); }
+        else { ctx.fillStyle = col; ctx.fillRect(node.x - FR, node.y - FR, FR * 2, FR * 2); }
+        ctx.restore();
+        // 4) border around the photo, same colour as the box
+        ctx.beginPath(); ctx.arc(node.x, node.y, FR, 0, 2 * Math.PI);
+        ctx.lineWidth = Math.max(0.6, FR * 0.16); ctx.strokeStyle = col; ctx.stroke();
+        // selection ring (dark). The current user is shown by glow + badge instead.
+        if (node.id === selectedId) {
+          ctx.beginPath(); ctx.arc(node.x, node.y, FR + FR * 0.22, 0, 2 * Math.PI);
+          ctx.lineWidth = FR * 0.16; ctx.strokeStyle = "#18181b"; ctx.stroke();
+        }
+        // 5) subtle "YOU" badge above the current user
+        if (node.isCurrent) {
+          const pillW = FR * 1.5, pillH = FR * 0.72;
+          const px = node.x - pillW / 2, py = node.y - FR - pillH - FR * 0.28;
+          roundRect(ctx, px, py, pillW, pillH, pillH * 0.5);
+          ctx.fillStyle = "#2563eb"; ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.font = `bold ${FR * 0.42}px Arial`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("YOU", node.x, py + pillH / 2);
+        }
+      }, [selectedId, highlightId, imgTick, getImg]);
+
+      const drawHit = useCallback((node, color, ctx) => {
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(node.x, node.y, (node.sizeR || BASE_R) * HIT_MULT, 0, 2 * Math.PI); ctx.fill();
+      }, []);
+
+      return (
+        <div className="flex h-full flex-col">
+          <header className="border-b border-zinc-200 bg-white px-6 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-semibold text-zinc-900">Your Network · force graph</h1>
+                <p className="text-xs text-zinc-500">
+                  Signed in as {currentUser.name} · {currentUser.designation} · click a node to open it &amp; reveal the level below
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Modeling ≈10.1M users (1 DGSE · 75 BSA · 820 BEO · 112.5k HT · 470k teachers · 9.53M students) — generated on demand
+                </p>
+              </div>
+              <div className="hidden items-center gap-2 text-[11px] text-zinc-500 sm:flex">
+                <span>score</span><span>0</span>
+                <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
+                <span>100</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <ShareField label="Share with Parents" value="https://pp.link/p/8x2k9" hint="Opens the WhatsApp literacy chatbot & onboards the parent." />
+              <ShareField label="Share with Teachers" value="https://pp.link/t/9q4m2" hint="Opens this dashboard & onboards a new BSA / BEO / Head Teacher / Teacher." />
+            </div>
+          </header>
+
+          <div ref={containerRef} className="relative flex-1 overflow-hidden bg-white">
+            {/* search box (scoped to parent + peers + your downline) */}
+            <div className="absolute left-3 top-3 z-20 w-72">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, phone, or rank (HT, BEO…)"
+                className="w-full rounded-lg border border-zinc-300 bg-white/95 px-3 py-2 text-sm shadow outline-none focus:border-emerald-400" />
+              {query.trim() && (
+                <div className="mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
+                  {results.length === 0 && <div className="px-3 py-2 text-xs text-zinc-400">No matches in your network.</div>}
+                  {results.map((u) => {
+                    const vis = visibleSet.has(u.id);
+                    return (
+                      <div key={u.id}
+                        onMouseEnter={() => setHighlightId(u.id)}
+                        onMouseLeave={() => setHighlightId((h) => (h === u.id ? null : h))}
+                        onClick={() => { navigateTo(u.id); setHighlightId(u.id); }}
+                        className="flex cursor-pointer items-center gap-2 border-b border-zinc-100 px-2.5 py-1.5 last:border-0 hover:bg-zinc-50">
+                        <img src={faceUrl(u)} alt="" className="h-7 w-7 rounded-full object-cover brightness-110" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold text-zinc-900">{u.name}</div>
+                          <div className="truncate text-[10px] text-zinc-500">{u.designation} · <span className="font-mono">{u.phone}</span></div>
+                        </div>
+                        <span title={vis ? "In current view" : "Not in view"} className={"shrink-0 text-sm " + (vis ? "text-emerald-600" : "text-zinc-300")}>
+                          {vis ? "◉" : "○"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {results.length >= 40 && <div className="px-3 py-1 text-[10px] text-zinc-400">Showing first 40 matches…</div>}
+                </div>
+              )}
+            </div>
+
+            <ForceGraph2D
+              ref={fgRef}
+              width={size.width}
+              height={size.height}
+              graphData={graphData}
+              backgroundColor="#ffffff"
+              nodeRelSize={5}
+              nodeLabel={(n) => `${n.u.name} · ${SHORT[n.u.designation]} · score ${n.score}`}
+              nodeCanvasObject={drawNode}
+              nodePointerAreaPaint={drawHit}
+              linkColor={() => "#d4d4d8"}
+              linkWidth={0.6}
+              linkDirectionalArrowLength={2.4}
+              linkDirectionalArrowRelPos={1}
+              cooldownTicks={30}
+              d3AlphaDecay={0.2}
+              d3VelocityDecay={0.45}
+              enableNodeDrag={true}
+              onNodeDrag={onNodeDrag}
+              onNodeDragEnd={onNodeDragEnd}
+              onNodeClick={selectNode}
+              onBackgroundClick={() => setSelectedId(null)}
+            />
+            <DetailPanel
+              id={selectedId}
+              ov={ov}
+              editable={selectedId ? isAncestorOf(CURRENT_USER_ID, selectedId, ov) : false}
+              visibleIds={visibleIds}
+              onClose={() => setSelectedId(null)}
+              onWhatsApp={onWhatsApp}
+              onDelete={onDelete}
+              onReattach={onReattach}
+              onOpenDashboard={onOpenDashboard}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
