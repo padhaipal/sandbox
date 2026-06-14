@@ -2153,7 +2153,7 @@
       const TABS = ["force", "tree", "map"];
       const [view, setView] = useState(() => {
         const h = (window.location.hash || "").replace("#", "");
-        return TABS.includes(h) ? h : "force";
+        return TABS.includes(h) ? h : "map";
       });
       useEffect(() => { window.location.hash = view; }, [view]);
       const tab = (id, label) => (
