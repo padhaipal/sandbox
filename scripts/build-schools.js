@@ -1,26 +1,27 @@
 #!/usr/bin/env node
 /*
- * ETL: real primary public-school locations for the map.
+ * ETL: real primary public-school locations for the map (all of India).
  *
  * Source: DataMeet's 2021 UDISE+ scrape (https://github.com/datameet/udise_schools),
  *   extract `data/udise_schools.zip` -> `udise_schools.csv` (~395 MB, not committed).
  *
- * Extract  : stream the national CSV.
+ * Extract  : stream the national CSV once.
  * Transform: keep PRIMARY (school_cat starts "Primary") + PUBLIC (government managements);
  *            clean coordinates (drop empty / 0,0 / out-of-India); assign each school to a
  *            district by point-in-polygon against india-districts.geojson (robust to the
- *            dtcode11 crosswalk errors in the source); slim to {name, lon, lat}.
- * Load     : one GeoJSON per district -> schools/<st>-<dt>.geojson, plus a manifest.
+ *            dtcode11 crosswalk errors in the source).
+ * Load     : one compact JSON per district -> schools/<st>-<dt>.json = {n:[names], c:[[lon,lat]]},
+ *            plus schools/manifest.json. Compact (not GeoJSON) to keep the national set small.
  *
- * Usage: node scripts/build-schools.js [csvPath] [stcode11]
- *   defaults: /tmp/udise/udise_schools.csv  09 (Uttar Pradesh)
+ * Usage: node scripts/build-schools.js [csvPath] [stcode11|all]
+ *   defaults: /tmp/udise/udise_schools.csv  all
  */
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 
 const CSV = process.argv[2] || "/tmp/udise/udise_schools.csv";
-const ST = process.argv[3] || "09";
+const ONLY = process.argv[3] && process.argv[3] !== "all" ? process.argv[3] : null;
 const ROOT = path.join(__dirname, "..");
 const OUT = path.join(ROOT, "schools");
 
@@ -32,15 +33,12 @@ const PUBLIC = new Set([
   "Railway School", "Sainik School", "Ministry of Labor",
 ]);
 
-// minimal quote-aware CSV line parser
-function parseLine(line) {
+function parseLine(line) {                 // minimal quote-aware CSV line parser
   const out = []; let cur = "", q = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (q) {
-      if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
-      else cur += c;
-    } else if (c === '"') q = true;
+    if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
     else if (c === ",") { out.push(cur); cur = ""; }
     else cur += c;
   }
@@ -59,19 +57,19 @@ const ray = (p, ring) => {
 
 function loadDistricts() {
   const g = JSON.parse(fs.readFileSync(path.join(ROOT, "india-districts.geojson"), "utf8"));
-  return g.features.filter((f) => f.properties.st === ST).map((f) => {
+  return g.features.filter((f) => !ONLY || f.properties.st === ONLY).map((f) => {
     const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
     const rings = polys.map((p) => p[0]);
     let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
     for (const r of rings) for (const pt of r) { if (pt[0] < a) a = pt[0]; if (pt[0] > c) c = pt[0]; if (pt[1] < b) b = pt[1]; if (pt[1] > d) d = pt[1]; }
-    return { dt: f.properties.dt, name: f.properties.district, rings, bbox: [a, b, c, d] };
+    return { key: f.properties.st + "-" + f.properties.dt, st: f.properties.st, dt: f.properties.dt, rings, bbox: [a, b, c, d] };
   });
 }
 
 (async () => {
   const districts = loadDistricts();
-  console.log(`districts in state ${ST}: ${districts.length}`);
-  const byDt = new Map();   // dt -> [feature]
+  console.log(`districts: ${districts.length}${ONLY ? " (state " + ONLY + ")" : " (all India)"}`);
+  const byKey = new Map();   // "st-dt" -> { n:[], c:[] }
   const stat = { total: 0, primaryPublic: 0, badCoord: 0, unassigned: 0, kept: 0 };
 
   let header = null, iSchname, iCat, iMgmt, iLon, iLat, iSt;
@@ -87,7 +85,7 @@ function loadDistricts() {
     const f = parseLine(line);
     if (f.length < header.length) continue;
     stat.total++;
-    if (f[iSt] !== ST) continue;
+    if (ONLY && f[iSt] !== ONLY) continue;
     if (!/^Primary/.test(f[iCat]) || !PUBLIC.has(f[iMgmt])) continue;
     stat.primaryPublic++;
     const lon = parseFloat(f[iLon]), lat = parseFloat(f[iLat]);
@@ -102,21 +100,25 @@ function loadDistricts() {
     }
     if (!hit) { stat.unassigned++; continue; }
     stat.kept++;
-    if (!byDt.has(hit.dt)) byDt.set(hit.dt, []);
-    byDt.get(hit.dt).push({ type: "Feature", properties: { n: (f[iSchname] || "").trim() },
-      geometry: { type: "Point", coordinates: [Math.round(lon * 1e5) / 1e5, Math.round(lat * 1e5) / 1e5] } });
+    let e = byKey.get(hit.key);
+    if (!e) { e = { n: [], c: [] }; byKey.set(hit.key, e); }
+    e.n.push((f[iSchname] || "").trim());
+    e.c.push([Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4]);
   }
 
+  // fresh output dir
+  fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
-  const districtsOut = [];
-  for (const [dt, feats] of byDt) {
-    fs.writeFileSync(path.join(OUT, `${ST}-${dt}.geojson`), JSON.stringify({ type: "FeatureCollection", features: feats }));
-    districtsOut.push({ dt, n: feats.length });
+  const out = [];
+  for (const [key, e] of byKey) {
+    fs.writeFileSync(path.join(OUT, key + ".json"), JSON.stringify(e));
+    const [st, dt] = key.split("-");
+    out.push({ st, dt, n: e.n.length });
   }
-  districtsOut.sort((a, b) => (+a.dt) - (+b.dt));
-  fs.writeFileSync(path.join(OUT, "manifest.json"), JSON.stringify({ st: ST, source: "UDISE 2021 (DataMeet)", filter: "primary + government", districts: districtsOut, total: stat.kept }));
+  out.sort((a, b) => a.st.localeCompare(b.st) || (+a.dt) - (+b.dt));
+  fs.writeFileSync(path.join(OUT, "manifest.json"), JSON.stringify({ source: "UDISE 2021 (DataMeet)", filter: "primary + government", total: stat.kept, districts: out }));
 
-  let bytes = 0; for (const e of districtsOut) bytes += fs.statSync(path.join(OUT, `${ST}-${e.dt}.geojson`)).size;
+  let bytes = 0; for (const e of out) bytes += fs.statSync(path.join(OUT, e.st + "-" + e.dt + ".json")).size;
   console.log(JSON.stringify(stat, null, 1));
-  console.log(`wrote ${districtsOut.length} district files + manifest, ${Math.round(bytes / 1024)} KB total`);
+  console.log(`wrote ${out.length} district files + manifest across ${new Set(out.map((d) => d.st)).size} states, ${Math.round(bytes / 1024 / 1024 * 10) / 10} MB total`);
 })();

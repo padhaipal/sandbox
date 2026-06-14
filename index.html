@@ -1687,7 +1687,7 @@
             .then(setGeoBlk).catch(() => setGeoBlk("error"));
           fetch("schools/manifest.json")
             .then((r) => (r.ok ? r.json() : null))
-            .then((m) => { if (m) setSchoolMeta({ st: m.st, dts: new Set(m.districts.map((d) => d.dt)) }); })
+            .then((m) => { if (m) setSchoolMeta(new Set(m.districts.map((d) => d.st + "-" + d.dt))); })
             .catch(() => {});
         }, []);
 
@@ -1779,14 +1779,15 @@
           if (!blocks || bIdx == null || !blocks[bIdx]) return null;
           const blk = blocks[bIdx];
           // real UDISE schools: project, keep those inside this block (point-in-polygon)
-          if (schoolGeo && projd) {
+          if (schoolGeo && schoolGeo.c && projd) {
             const { proj } = projd;
             const real = [];
-            for (const f of schoolGeo.features) {
-              const p = proj(f.geometry.coordinates);
+            const C = schoolGeo.c, N = schoolGeo.n;
+            for (let i = 0; i < C.length; i++) {
+              const p = proj(C[i]);
               if (!p || isNaN(p[0]) || !pointInPoly(p, blk.ring)) continue;
               const id = blk.id + ".s" + real.length;
-              real.push({ k: real.length, id, u: node(id), p, name: f.properties.n, real: true });
+              real.push({ k: real.length, id, u: node(id), p, name: N[i], real: true });
             }
             if (real.length) return real;   // else fall through to the illustrative fallback
           }
@@ -1881,14 +1882,14 @@
 
         // lazy-load real UDISE school points for the focused district (where we ship them)
         useEffect(() => {
-          if (!dst || !schoolMeta || dst.st !== schoolMeta.st || !schoolMeta.dts.has(dst.dt)) { setSchoolGeo(null); return; }
-          const key = dst.st + "-" + dst.dt;
+          const key = dst ? dst.st + "-" + dst.dt : null;
+          if (!key || !schoolMeta || !schoolMeta.has(key)) { setSchoolGeo(null); return; }
           if (schoolCache.current.has(key)) { setSchoolGeo(schoolCache.current.get(key)); return; }
           let cancelled = false;
           setSchoolGeo(null);
-          fetch("schools/" + key + ".geojson")
+          fetch("schools/" + key + ".json")
             .then((r) => (r.ok ? r.json() : null))
-            .then((fc) => { schoolCache.current.set(key, fc); if (!cancelled) setSchoolGeo(fc); })
+            .then((data) => { schoolCache.current.set(key, data); if (!cancelled) setSchoolGeo(data); })
             .catch(() => { schoolCache.current.set(key, null); });
           return () => { cancelled = true; };
         }, [dst, schoolMeta]);
