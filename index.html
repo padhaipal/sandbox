@@ -1314,22 +1314,103 @@
       const ZMIN = 0.7, ZMAX = 9;
       const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+      // --- org model (mirrors the force-graph view): district=BSA, block=BEO, school=Head Teacher ---
+      const LEVELS = ["DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+      const FANOUT = [[75, 75], [8, 14], [120, 150], [2, 7], [12, 28]]; // children-per-node range, by level
+      FACE_COUNT.child = 50;
+      function node(id) {
+        const lvl = id.split(".").length - 1;
+        const h = hashStr("u:" + id);
+        const perf = (h % 1000) / 1000;
+        const student = lvl === LEVELS.length - 1;
+        return {
+          id, lvl, designation: LEVELS[lvl] || "—",
+          name: FIRST[h % FIRST.length] + (student ? "" : " " + LAST[(h >>> 9) % LAST.length]),
+          perf, score: Math.round(perf * 100),
+          face: "faces/" + (student ? "child" : "adult") + "/" + (hashStr("face:" + id) % (student ? FACE_COUNT.child : FACE_COUNT.adult)) + ".jpg",
+          phone: "+9198" + String(1000000 + (h % 9000000)),
+        };
+      }
+      function baseChildCount(id) {
+        const lvl = id.split(".").length - 1;
+        if (lvl >= FANOUT.length) return 0;
+        const [mn, mx] = FANOUT[lvl];
+        return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
+      }
+
+      // --- geometry helpers (operate in projected screen space) ---
+      const stripClose = (r) => (r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.slice(0, -1) : r);
+      const ringArea = (r) => { let s = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return s / 2; };
+      function bboxOf(r) { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const p of r) { if (p[0] < a) a = p[0]; if (p[1] < b) b = p[1]; if (p[0] > c) c = p[0]; if (p[1] > d) d = p[1]; } return [a, b, c, d]; }
+      function largestRing(feature, proj) {
+        const g = feature.geometry;
+        const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+        let best = null, bestA = -1;
+        for (const poly of polys) { const pr = poly[0].map((c) => proj(c)); const a = Math.abs(ringArea(pr)); if (a > bestA) { bestA = a; best = pr; } }
+        return best || [];
+      }
+      const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
+      function pointInPoly(p, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+          if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+      }
+      function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+      function sampleInside(ring, n, seed) {
+        const [minx, miny, maxx, maxy] = bboxOf(ring);
+        const r = rng(seed), out = []; let tries = 0; const cap = n * 400 + 3000;
+        while (out.length < n && tries++ < cap) { const p = [minx + (maxx - minx) * r(), miny + (maxy - miny) * r()]; if (pointInPoly(p, ring)) out.push(p); }
+        return out;
+      }
+      const segInt = (p1, p2, a, b) => {
+        const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1], x3 = a[0], y3 = a[1], x4 = b[0], y4 = b[1];
+        const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (!den) return p2.slice();
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+        return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+      };
+      // Sutherland–Hodgman: clip 'subject' (any simple polygon) by convex 'clip'.
+      function clipPolygon(subject, clip) {
+        clip = stripClose(clip);
+        if (clip.length < 3) return subject;
+        let cx = 0, cy = 0; for (const p of clip) { cx += p[0]; cy += p[1]; } cx /= clip.length; cy /= clip.length;
+        let out = subject;
+        for (let e = 0; e < clip.length && out.length; e++) {
+          const A = clip[e], B = clip[(e + 1) % clip.length];
+          const sgn = ((B[0] - A[0]) * (cy - A[1]) - (B[1] - A[1]) * (cx - A[0])) >= 0 ? 1 : -1;
+          const inside = (p) => sgn * ((B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0])) >= 0;
+          const inp = out; out = [];
+          for (let i = 0; i < inp.length; i++) {
+            const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+            const ci = inside(cur), pi = inside(prev);
+            if (ci) { if (!pi) out.push(segInt(prev, cur, A, B)); out.push(cur); }
+            else if (pi) out.push(segInt(prev, cur, A, B));
+          }
+        }
+        return out;
+      }
+
       function MapApp() {
         const wrapRef = useRef(null);
         const [size, setSize] = useState({ w: 1000, h: 640 });
         const [geo, setGeo] = useState(null);                 // null | "error" | FeatureCollection
-        const [active, setActive] = useState(null);           // hovered/focused district index
+        const [level, setLevel] = useState("districts");      // districts | blocks | schools
+        const [dIdx, setDIdx] = useState(null);               // focused district index
+        const [bIdx, setBIdx] = useState(null);               // focused block index
+        const [active, setActive] = useState(null);           // { u, title, sub } under the cursor
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });    // pan/zoom transform
         const drag = useRef(null);
+        const moved = useRef(false);
 
         useEffect(() => {
           fetch("up-districts.geojson")
             .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(setGeo)
-            .catch(() => setGeo("error"));
+            .then(setGeo).catch(() => setGeo("error"));
         }, []);
 
-        // track container size
         useEffect(() => {
           const el = wrapRef.current; if (!el) return;
           const measure = () => { const r = el.getBoundingClientRect(); setSize({ w: Math.max(320, r.width), h: Math.max(320, r.height) }); };
@@ -1338,55 +1419,104 @@
           return () => ro.disconnect();
         }, []);
 
-        // project once per (geo,size): district paths + label centroids + BSA
+        // LEVEL 0 — districts (each = a BSA), projected once per geo/size
         const districts = useMemo(() => {
           if (!geo || geo === "error" || !d3) return null;
           const proj = d3.geoMercator().fitSize([size.w, size.h], geo);
           const path = d3.geoPath(proj);
-          return geo.features.map((f, i) => ({
-            i, name: f.properties.district, u: bsa(i),
-            d: path(f), c: path.centroid(f),
-          }));
+          return geo.features.map((f, i) => {
+            const ring = stripClose(largestRing(f, proj));
+            return { i, id: "r." + i, name: f.properties.district, u: node("r." + i),
+              d: path(f), c: path.centroid(f), ring, bbox: bboxOf(ring) };
+          });
         }, [geo, size]);
 
-        // wheel zoom toward cursor
+        // LEVEL 1 — blocks (each = a BEO): Voronoi subdivision of the focused district.
+        // Block count = the BSA's child count in the org model (the "right" number).
+        const blocks = useMemo(() => {
+          if (!districts || dIdx == null) return null;
+          const dst = districts[dIdx];
+          const n = baseChildCount(dst.id);
+          const seeds = sampleInside(dst.ring, n, hashStr("seed:" + dst.id));
+          if (seeds.length < 1) return [];
+          const [minx, miny, maxx, maxy] = dst.bbox;
+          const vor = d3.Delaunay.from(seeds).voronoi([minx - 5, miny - 5, maxx + 5, maxy + 5]);
+          return seeds.map((s, j) => {
+            const id = dst.id + "." + j;
+            const cell = vor.cellPolygon(j);
+            const poly = cell ? clipPolygon(dst.ring, cell) : [];
+            return { j, id, u: node(id), seed: s, ring: poly, d: poly.length >= 3 ? toPath(poly) : "", bbox: bboxOf(poly.length ? poly : [s]) };
+          }).filter((b) => b.ring.length >= 3);
+        }, [districts, dIdx]);
+
+        // LEVEL 2 — schools (each = a Head Teacher): random points inside the focused block.
+        // School count = the BEO's child count in the org model (the "right" number).
+        const schools = useMemo(() => {
+          if (!blocks || bIdx == null || !blocks[bIdx]) return null;
+          const blk = blocks[bIdx];
+          const m = baseChildCount(blk.id);
+          return sampleInside(blk.ring, m, hashStr("sch:" + blk.id)).map((p, k) => {
+            const id = blk.id + "." + k;
+            return { k, id, u: node(id), p };
+          });
+        }, [blocks, bIdx]);
+
+        const frame = useCallback((bbox, pad) => {
+          const [minx, miny, maxx, maxy] = bbox;
+          const bw = Math.max(1, maxx - minx), bh = Math.max(1, maxy - miny);
+          const k = clamp(Math.min(size.w / bw, size.h / bh) * (pad || 0.82), ZMIN, ZMAX);
+          return { k, x: size.w / 2 - ((minx + maxx) / 2) * k, y: size.h / 2 - ((miny + maxy) / 2) * k };
+        }, [size]);
+
+        const drillDistrict = useCallback((i) => { setDIdx(i); setBIdx(null); setActive(null); setLevel("blocks"); setTf(frame(districts[i].bbox)); }, [districts, frame]);
+        const drillBlock = useCallback((j) => { if (!blocks || !blocks[j]) return; setBIdx(j); setActive(null); setLevel("schools"); setTf(frame(blocks[j].bbox)); }, [blocks, frame]);
+        const popUp = useCallback(() => {
+          if (level === "schools") { setLevel("blocks"); setBIdx(null); setActive(null); setTf(frame(districts[dIdx].bbox)); }
+          else if (level === "blocks") { setLevel("districts"); setDIdx(null); setActive(null); setTf({ k: 1, x: 0, y: 0 }); }
+        }, [level, dIdx, districts, frame]);
+
         const onWheel = useCallback((e) => {
           e.preventDefault();
           const rect = e.currentTarget.getBoundingClientRect();
           const px = e.clientX - rect.left, py = e.clientY - rect.top;
-          setTf((t) => {
-            const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX);
-            const s = k / t.k;
-            return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s };
-          });
+          setTf((t) => { const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX); const s = k / t.k; return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s }; });
         }, []);
-        const onPointerDown = useCallback((e) => {
-          drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y };
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }, [tf]);
+        const onPointerDown = useCallback((e) => { drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; e.currentTarget.setPointerCapture(e.pointerId); }, [tf]);
         const onPointerMove = useCallback((e) => {
           if (!drag.current) return;
-          setTf((t) => ({ ...t, x: drag.current.tx + (e.clientX - drag.current.x), y: drag.current.ty + (e.clientY - drag.current.y) }));
+          const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
+          if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
+          setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
         }, []);
-        const onPointerUp = useCallback((e) => {
-          if (drag.current) { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {} }
-          drag.current = null;
-        }, []);
+        const onPointerUp = useCallback((e) => { if (drag.current) { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {} } drag.current = null; }, []);
+        const onBgClick = useCallback(() => { if (!moved.current) popUp(); }, [popUp]);   // empty-space click = up one level
 
-        const sel = active != null && districts ? districts[active] : null;
+        const gStyle = { transition: drag.current ? "none" : "transform .35s ease" };
+        const dst = dIdx != null && districts ? districts[dIdx] : null;
+        const blk = bIdx != null && blocks ? blocks[bIdx] : null;
 
         return (
           <div className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
               <div>
-                <h1 className="text-lg font-semibold text-zinc-900">Uttar Pradesh · BSA performance by district</h1>
-                <p className="text-xs text-zinc-500">Each district is coloured by the score of its BSA · hover a district for detail · scroll to zoom, drag to pan</p>
+                <h1 className="flex items-center gap-1.5 text-lg font-semibold text-zinc-900">
+                  <button onClick={popUp} disabled={level === "districts"} className={level === "districts" ? "text-zinc-900" : "text-blue-600 hover:underline"}>Uttar Pradesh</button>
+                  {dst && <span className="text-zinc-300">›</span>}
+                  {dst && <button onClick={() => level === "schools" && popUp()} className={level === "schools" ? "text-blue-600 hover:underline" : "text-zinc-900"}>{dst.name}</button>}
+                  {blk && <span className="text-zinc-300">›</span>}
+                  {blk && <span className="text-zinc-900">Block {blk.j + 1}</span>}
+                </h1>
+                <p className="text-xs text-zinc-500">
+                  {level === "districts" && "75 districts · coloured by BSA score · click a district to see its blocks"}
+                  {level === "blocks" && `${blocks ? blocks.length : 0} blocks (BEOs) · click a block to see its schools · click empty space to go up`}
+                  {level === "schools" && `≈${blk ? baseChildCount(blk.id) : 0} schools · each dot is a school (Head Teacher) at a random location · click empty space to go up`}
+                </p>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
                 <span>score</span><span>0</span>
                 <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
                 <span>100</span>
-                <button onClick={() => setTf({ k: 1, x: 0, y: 0 })}
+                <button onClick={() => setTf(level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : { k: 1, x: 0, y: 0 })}
                   className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
               </div>
             </header>
@@ -1399,68 +1529,91 @@
               ) : (
                 <svg width={size.w} height={size.h} className="block touch-none select-none"
                   onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
+                  onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onClick={onBgClick}
                   style={{ cursor: drag.current ? "grabbing" : "grab" }}>
-                  <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`}>
-                    {/* district shapes — the choropleth */}
-                    {districts.map((dst) => (
-                      <path key={dst.i} d={dst.d}
-                        fill={scoreColor(dst.u.perf)}
-                        stroke={active === dst.i ? "#0f172a" : "#ffffff"}
-                        strokeWidth={(active === dst.i ? 1.6 : 0.6) / tf.k}
-                        style={{ cursor: "pointer", transition: "stroke .1s" }}
-                        onMouseEnter={() => setActive(dst.i)} />
+                  <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={gStyle}>
+
+                    {/* LEVEL: districts */}
+                    {level === "districts" && districts.map((d0) => (
+                      <path key={d0.i} d={d0.d} fill={scoreColor(d0.u.perf)}
+                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillDistrict(d0.i); }} />
                     ))}
-                    {/* per-district UI element: face + district + BSA name + score */}
-                    {[...districts].sort((a, b) => (a.i === active ? 1 : 0) - (b.i === active ? 1 : 0)).map((dst) => {
-                      const on = active === dst.i;
-                      const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k;   // chip holds a constant screen size, enlarges on hover
-                      const w = BW * s, h = BH * s;
-                      const fx = dst.c[0] - w / 2, fy = dst.c[1] - h / 2;
-                      return (
-                        <foreignObject key={"c" + dst.i} x={fx} y={fy} width={w} height={h}
-                          style={{ overflow: "visible", pointerEvents: "none" }}>
-                          <div onMouseEnter={() => setActive(dst.i)}
-                            className="flex items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
-                            style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left",
-                                     pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
-                            <img src={dst.u.face} alt="" loading="lazy"
-                              className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110"
-                              style={{ boxShadow: "0 0 0 2px " + scoreColor(dst.u.perf) }} />
-                            <div className="min-w-0 leading-tight">
-                              <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{dst.name}</div>
-                              <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{dst.u.name}</div>
+
+                    {/* LEVEL: blocks (subdivision of focused district) */}
+                    {level === "blocks" && blocks && blocks.map((b) => (
+                      <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
+                        stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: b.u, title: "Block " + (b.j + 1) + " · " + dst.name, sub: "BEO · " + b.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillBlock(b.j); }} />
+                    ))}
+
+                    {/* LEVEL: schools (dots inside focused block) */}
+                    {level === "schools" && blk && (
+                      <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} style={{ pointerEvents: "none" }} />
+                    )}
+                    {level === "schools" && schools && schools.map((sc) => (
+                      <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 5 : 3) / tf.k}
+                        fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={0.8 / tf.k} style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: sc.u, title: "School " + (sc.k + 1), sub: "Head Teacher · " + sc.u.name })}
+                        onClick={(e) => e.stopPropagation()} />
+                    ))}
+
+                    {/* chips (districts & blocks): face + name + score, click to drill */}
+                    {(level === "districts" || level === "blocks") && (() => {
+                      const items = level === "districts"
+                        ? districts.map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillDistrict(d0.i), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name }) }))
+                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: "Block " + (b.j + 1), c: b.seed, go: () => drillBlock(b.j), set: () => setActive({ u: b.u, title: "Block " + (b.j + 1) + " · " + dst.name, sub: "BEO · " + b.u.name }) }));
+                      return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
+                        const on = active && active.u.id === it.id;
+                        const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
+                        return (
+                          <foreignObject key={"c" + it.id} x={it.c[0] - w / 2} y={it.c[1] - h / 2} width={w} height={h} style={{ overflow: "visible", pointerEvents: "none" }}>
+                            <div onMouseEnter={it.set} onClick={(e) => { e.stopPropagation(); it.go(); }}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
+                              style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left", pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
+                              <img src={it.u.face} alt="" loading="lazy" className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 2px " + scoreColor(it.u.perf) }} />
+                              <div className="min-w-0 leading-tight">
+                                <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{it.name}</div>
+                                <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{it.u.name}</div>
+                              </div>
+                              <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(it.u.perf), color: textOn(it.u.perf) }}>{it.u.score}</span>
                             </div>
-                            <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold"
-                              style={{ background: scoreColor(dst.u.perf), color: textOn(dst.u.perf) }}>{dst.u.score}</span>
-                          </div>
-                        </foreignObject>
-                      );
-                    })}
+                          </foreignObject>
+                        );
+                      });
+                    })()}
                   </g>
                 </svg>
               )}
 
-              {/* readout panel for the active district (always legible regardless of overlap) */}
-              {sel && (
+              {/* readout panel for the active element */}
+              {active && (
                 <div className="pointer-events-none absolute left-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
                   <div className="flex items-center gap-3">
-                    <img src={sel.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110"
-                      style={{ boxShadow: "0 0 0 3px " + scoreColor(sel.u.perf) }} />
+                    <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-zinc-900">{sel.name}</div>
-                      <div className="truncate text-xs text-zinc-500">BSA · {sel.u.name}</div>
-                      <div className="text-[11px] text-zinc-400">{sel.u.phone}</div>
+                      <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                      <div className="truncate text-xs text-zinc-500">{active.sub}</div>
+                      <div className="text-[11px] text-zinc-400">{active.u.phone}</div>
                     </div>
-                    <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold"
-                      style={{ background: scoreColor(sel.u.perf), color: textOn(sel.u.perf) }}>{sel.u.score}</span>
+                    <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-600">
-                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + sel.u.perf * 160)}</span></div>
-                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(sel.u.perf * 100)}%</span></div>
-                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + sel.u.perf * 1400)}</span></div>
-                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{sel.u.score}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + active.u.perf * 160)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(active.u.perf * 100)}%</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + active.u.perf * 1400)}</span></div>
+                    <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{active.u.score}</span></div>
                   </div>
+                </div>
+              )}
+
+              {level !== "districts" && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
+                  click empty space to go up one level
                 </div>
               )}
             </div>
