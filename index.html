@@ -2892,6 +2892,9 @@
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
         const onBgClick = useCallback(() => { if (!moved.current && level !== "world") popUp(); }, [popUp, level]);
+        const zoomBy = useCallback((factor) => {
+          setTf((t) => { const k = clamp(t.k * factor, ZMIN, ZMAX); const s = k / t.k; const cx = size.w / 2, cy = size.h / 2; return { k, x: cx - (cx - t.x) * s, y: cy - (cy - t.y) * s }; });
+        }, [size]);
 
         const gStyle = { transition: drag.current ? "none" : "transform .35s ease" };
         const a1f = a1Idx != null && adm1 ? adm1[a1Idx] : null;
@@ -3182,8 +3185,15 @@
                 </div>
               )}
 
+              {/* zoom controls */}
+              <div className="absolute bottom-4 right-4 z-30 flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
+                <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
+                <div className="h-px bg-zinc-200" />
+                <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
+              </div>
+
               {toast && (
-                <div className="absolute bottom-4 right-4 z-40 max-w-xs rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl">{toast}</div>
+                <div className="absolute bottom-4 right-16 z-40 max-w-xs rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl">{toast}</div>
               )}
 
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
