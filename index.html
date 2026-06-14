@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css" /> <!-- VIEW 2: tree -->
   <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
   <script src="https://unpkg.com/d3@7"></script>                              <!-- VIEW 3: UP district map -->
+  <script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script> <!-- report PDF export -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -19,6 +20,10 @@
     body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #18181b; }
     @keyframes livedot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
     .live-dot { animation: livedot 1.4s ease-in-out infinite; }
+    @keyframes glowpulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .glowpulse { animation: glowpulse 1s ease-in-out infinite; }
+    @keyframes barglow { 0%,100% { box-shadow: 0 0 4px 1px rgba(37,99,235,.55); } 50% { box-shadow: 0 0 9px 2px rgba(37,99,235,.95); } }
+    .bar-sel { animation: barglow 1.2s ease-in-out infinite; }
     /* VIEW 2 (React Flow) card chrome */
     .react-flow__node-card { background: transparent; border: none; padding: 0; width: auto; }
     .react-flow__handle { background: #a1a1aa; width: 6px; height: 6px; border: none; }
@@ -1398,6 +1403,263 @@
         return out;
       }
 
+      // =====================================================================
+      //  Messaging: professional templates + token replacement (<name> etc.)
+      // =====================================================================
+      const TEMPLATES = [
+        { id: "welcome", title: "Welcome / onboarding", tags: [], body: "Dear <name>,\n\nWelcome to the PadhaiPal network as <level> for <area>. We're glad to have you on board and look forward to supporting your work.\n\nWarm regards,\nOffice of the DGSE" },
+        { id: "checkin", title: "Performance check-in", tags: ["report"], body: "Hi <name>,\n\nA quick check-in on <area>. Your current performance score is <score> (rank <rank>). Let's connect this week to discuss priorities.\n\nThanks,\nDGSE Office" },
+        { id: "congrats", title: "Top-performer recognition", tags: ["image"], body: "Congratulations, <name>! 🎉\n\n<area> is among our top performers with a score of <score> (rank <rank>). Thank you for the outstanding leadership — keep it up!" },
+        { id: "nudge", title: "Engagement nudge", tags: [], body: "Hello <name>,\n\nWe've noticed engagement in <area> has dipped recently. Could you share what support would help? We're here to assist." },
+        { id: "monthly", title: "Monthly report summary", tags: ["image", "report"], body: "Dear <name>,\n\nMonthly summary for <area> (<level>):\n• Performance score: <score>\n• Rank: <rank>\n• Status: on track\n\nThe full dashboard is linked below." },
+        { id: "escalation", title: "Action required", tags: ["report"], body: "Dear <name>,\n\n<area> needs attention: the current score (<score>, rank <rank>) is below target. Please review the attached report and respond within 3 working days." },
+      ];
+      function fillTemplate(body, r) {
+        if (!r) return body || "";
+        return (body || "")
+          .replace(/<name>/g, r.uname || r.name || "there")
+          .replace(/<area>/g, r.area || r.name || "your area")
+          .replace(/<location>/g, r.location || "")
+          .replace(/<level>/g, r.level || "")
+          .replace(/<score>/g, r.score != null ? String(r.score) : "—")
+          .replace(/<rank>/g, r.rank != null ? String(r.rank) : "—");
+      }
+
+      // =====================================================================
+      //  Bottom bar graph — every entity ranked by score; hover→glow on map,
+      //  click→add to send list, drag→multi-select.
+      // =====================================================================
+      function BarGraph({ entities, selectedIds, hoverId, onHover, onToggle, onAddRange }) {
+        const bars = useMemo(() => [...entities].sort((a, b) => b.score - a.score), [entities]);
+        const [drag, setDrag] = useState(null);   // { a, b } bar indices
+        const dragging = useRef(false);
+        useEffect(() => {
+          const up = () => {
+            if (!dragging.current) return;
+            dragging.current = false;
+            setDrag((d) => {
+              if (d) { const lo = Math.min(d.a, d.b), hi = Math.max(d.a, d.b); if (lo === hi) onToggle(bars[lo]); else onAddRange(bars.slice(lo, hi + 1)); }
+              return null;
+            });
+          };
+          window.addEventListener("mouseup", up);
+          return () => window.removeEventListener("mouseup", up);
+        }, [bars, onToggle, onAddRange]);
+
+        const hovIdx = hoverId != null ? bars.findIndex((b) => b.id === hoverId) : -1;
+        const hov = hovIdx >= 0 ? bars[hovIdx] : null;
+        return (
+          <div className="relative shrink-0 select-none border-t border-zinc-200 bg-white" style={{ height: 150 }} onMouseLeave={() => onHover(null)}>
+            <div className="flex items-center justify-between px-3 py-1 text-[11px] text-zinc-500">
+              <span>{bars.length} entities · ranked by score · click a bar to add to the send list · drag across bars to multi-select</span>
+              <span className="text-zinc-400">hover a bar for details</span>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 flex items-end gap-px px-2" style={{ top: 26 }}>
+              {bars.map((e, i) => {
+                const sel = selectedIds.has(e.id);
+                const inDrag = drag && i >= Math.min(drag.a, drag.b) && i <= Math.max(drag.a, drag.b);
+                return (
+                  <div key={e.id} title={e.u.name}
+                    onMouseEnter={() => { onHover(e.id); if (dragging.current) setDrag((d) => ({ a: d ? d.a : i, b: i })); }}
+                    onMouseDown={(ev) => { ev.preventDefault(); dragging.current = true; setDrag({ a: i, b: i }); }}
+                    className={"min-w-0 flex-1 cursor-pointer rounded-t-sm " + (sel ? "bar-sel" : "")}
+                    style={{ height: Math.max(2, e.score) + "%", background: scoreColor(e.u.perf),
+                      outline: sel || inDrag ? "2px solid #2563eb" : "none", outlineOffset: "-1px",
+                      opacity: hovIdx >= 0 && i !== hovIdx ? 0.5 : 1 }} />
+                );
+              })}
+            </div>
+            {hov && (
+              <div className="pointer-events-none absolute z-10 w-48 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl"
+                style={{ left: "max(96px, min(calc(100% - 96px), " + ((hovIdx + 0.5) / bars.length * 100) + "%))", bottom: 132 }}>
+                <div className="flex items-center gap-2">
+                  <img src={hov.u.face} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-semibold text-zinc-900">{hov.name}</div>
+                    <div className="truncate text-[10px] text-zinc-500">{hov.sub}</div>
+                  </div>
+                  <span className="ml-auto rounded px-1 py-0.5 text-[10px] font-bold" style={{ background: scoreColor(hov.u.perf), color: textOn(hov.u.perf) }}>{hov.score}</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] text-zinc-600">
+                  <div>Rank <b>#{hov.rank}</b></div>
+                  <div className="truncate">{hov.location}</div>
+                  <div>{hov.level}</div>
+                  <div className={selectedIds.has(hov.id) ? "font-semibold text-blue-600" : "text-zinc-400"}>{selectedIds.has(hov.id) ? "✓ in send list" : "click to add"}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // =====================================================================
+      //  Compose drawer — templates, editable message, recipient search with
+      //  filters, recipient list, AI follow-up, send, generate report.
+      // =====================================================================
+      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport }) {
+        const [tplId, setTplId] = useState(null);
+        const [text, setText] = useState("");
+        const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "" });
+        const allTemplates = useMemo(() => [...TEMPLATES, ...savedTemplates], [savedTemplates]);
+        const levels = useMemo(() => ["All", ...Array.from(new Set(entities.map((e) => e.level)))], [entities]);
+        const recipIds = useMemo(() => new Set(recipients.map((r) => r.id)), [recipients]);
+        const tpl = allTemplates.find((t) => t.id === tplId);
+
+        const results = useMemo(() => {
+          const q = filters.q.trim().toLowerCase(), loc = filters.location.trim().toLowerCase();
+          return entities.filter((e) => {
+            if (q && !((e.u.name || "").toLowerCase().includes(q) || (e.name || "").toLowerCase().includes(q))) return false;
+            if (filters.level !== "All" && e.level !== filters.level) return false;
+            if (loc && !(e.location || "").toLowerCase().includes(loc)) return false;
+            if (e.score < filters.scoreMin || e.score > filters.scoreMax) return false;
+            if (filters.rankMax !== "" && e.rank > +filters.rankMax) return false;
+            return true;
+          }).sort((a, b) => a.rank - b.rank);
+        }, [entities, filters]);
+
+        const selectTpl = (t) => { setTplId(t.id); setText(t.body); };
+        const preview = fillTemplate(text, recipients[0]);
+        const inp = "w-full rounded border border-zinc-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none";
+
+        // minimized — an accordion-like bar pinned to the left edge
+        if (!open) return (
+          <button onClick={onToggle} title="Open compose"
+            className="absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50">
+            <span className="text-blue-600">»</span>
+            <span className="text-[11px] font-semibold tracking-wide text-zinc-700" style={{ writingMode: "vertical-rl" }}>✉ Compose{recipients.length ? " · " + recipients.length : ""}</span>
+          </button>
+        );
+
+        return (
+          <aside className="absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2">
+              <span className="text-sm font-semibold text-zinc-900">Compose message</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{recipients.length} recipient{recipients.length === 1 ? "" : "s"}</span>
+              <button onClick={onToggle} title="Minimize" className="ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">«</button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto p-3">
+              <section>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Templates</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {allTemplates.map((t) => (
+                    <button key={t.id} onClick={() => selectTpl(t)}
+                      className={"rounded-full border px-2 py-1 text-[11px] " + (tplId === t.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}>
+                      {t.title}{t.tags && t.tags.includes("image") ? " 🖼" : ""}{t.tags && t.tags.includes("report") ? " 📊" : ""}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Message</span>
+                  <span className="text-[10px] text-zinc-400">tokens: &lt;name&gt; &lt;area&gt; &lt;level&gt; &lt;score&gt; &lt;rank&gt;</span>
+                </div>
+                <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} placeholder="Write a message, or pick a template above…" className={inp + " resize-y font-mono leading-relaxed"} />
+                {tpl && tpl.tags && tpl.tags.length > 0 && (
+                  <div className="mt-1 flex gap-1.5 text-[10px]">
+                    {tpl.tags.includes("image") && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600">🖼 image attached</span>}
+                    {tpl.tags.includes("report") && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600">📊 report summary attached</span>}
+                  </div>
+                )}
+                {text.trim() && (
+                  <div className="mt-1.5 rounded border border-zinc-100 bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600">
+                    <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Preview {recipients[0] ? "· " + recipients[0].uname : "(add a recipient)"}</div>
+                    <div className="whitespace-pre-wrap">{preview}</div>
+                  </div>
+                )}
+                <button onClick={() => { if (!text.trim()) return; const n = savedTemplates.length + 1; setSavedTemplates([...savedTemplates, { id: "saved-" + n, title: "Saved " + n, tags: [], body: text }]); }}
+                  className="mt-1.5 rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">Save as template</button>
+              </section>
+
+              <section>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Find recipients</div>
+                <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name…" className={inp} />
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <select value={filters.level} onChange={(e) => setFilters({ ...filters, level: e.target.value })} className={inp}>
+                    {levels.map((l) => <option key={l} value={l}>{l === "All" ? "Any level" : l}</option>)}
+                  </select>
+                  <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} placeholder="Location…" className={inp} />
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                  <span>score</span>
+                  <input type="number" value={filters.scoreMin} min={0} max={100} onChange={(e) => setFilters({ ...filters, scoreMin: +e.target.value || 0 })} className={inp + " w-14"} />
+                  <span>–</span>
+                  <input type="number" value={filters.scoreMax} min={0} max={100} onChange={(e) => setFilters({ ...filters, scoreMax: e.target.value === "" ? 100 : +e.target.value })} className={inp + " w-14"} />
+                  <span className="ml-2">rank ≤</span>
+                  <input type="number" value={filters.rankMax} min={1} onChange={(e) => setFilters({ ...filters, rankMax: e.target.value })} placeholder="any" className={inp + " w-14"} />
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <button onClick={() => setSavedFilters([...savedFilters, { name: "Filter " + (savedFilters.length + 1), filters: { ...filters } }])}
+                    className="rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">Save filters</button>
+                  {savedFilters.map((sf, i) => (
+                    <button key={i} onClick={() => setFilters({ ...sf.filters })} className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-200">{sf.name}</button>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
+                  <span>{results.length} match{results.length === 1 ? "" : "es"}</span>
+                  <button onClick={() => onAddMany(results)} disabled={!results.length} className="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-40">Add all</button>
+                </div>
+                <div className="mt-1 max-h-44 space-y-1 overflow-y-auto">
+                  {results.slice(0, 200).map((e) => {
+                    const added = recipIds.has(e.id);
+                    return (
+                      <div key={e.id} className="flex items-center gap-2 rounded border border-zinc-100 px-2 py-1">
+                        <img src={e.u.face} alt="" className="h-6 w-6 rounded-full object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[11px] font-medium text-zinc-800">{e.u.name}</div>
+                          <div className="truncate text-[9px] text-zinc-500">{e.name} · {e.level} · #{e.rank}</div>
+                        </div>
+                        <span className="rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(e.u.perf), color: textOn(e.u.perf) }}>{e.score}</span>
+                        <button onClick={() => onAddMany([e])} disabled={added} className={"rounded px-1.5 py-0.5 text-[10px] font-semibold " + (added ? "text-blue-600" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200")}>{added ? "✓" : "Add"}</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Send list ({recipients.length})</span>
+                  {recipients.length > 0 && <button onClick={onClear} className="text-[11px] text-zinc-400 hover:text-red-600">Clear</button>}
+                </div>
+                {recipients.length === 0 ? (
+                  <div className="rounded border border-dashed border-zinc-200 p-3 text-center text-[11px] text-zinc-400">Click bars in the graph below, or add from search.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {recipients.map((r) => (
+                      <span key={r.id} className="flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-1 pr-1.5 text-[11px] text-zinc-700">
+                        <img src={r.face} alt="" className="h-4 w-4 rounded-full object-cover" />
+                        {r.uname}
+                        <button onClick={() => onRemove(r.id)} className="text-zinc-400 hover:text-red-600">✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="space-y-2 border-t border-zinc-200 p-3">
+              <label className="flex items-center gap-2 text-[11px] text-zinc-600">
+                <input type="checkbox" checked={ai.on} onChange={(e) => setAi({ ...ai, on: e.target.checked })} />
+                <span className="font-medium">AI auto follow-up</span> if no response within
+                <select value={ai.window} onChange={(e) => setAi({ ...ai, window: e.target.value })} className="rounded border border-zinc-300 px-1 py-0.5 text-[11px]">
+                  <option>24 h</option><option>48 h</option><option>72 h</option><option>1 week</option>
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button onClick={onGenerateReport} className="rounded-md border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">⤓ Report</button>
+                <button onClick={() => onSend(text, ai)} disabled={!recipients.length || !text.trim()}
+                  className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+                  Send to {recipients.length} recipient{recipients.length === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
       function MapApp() {
         const wrapRef = useRef(null);
         const [size, setSize] = useState({ w: 1000, h: 640 });
@@ -1598,6 +1860,74 @@
         const dst = dIdx != null && districts ? districts[dIdx] : null;
         const blk = bIdx != null && blocks ? blocks[bIdx] : null;
 
+        // ===== messaging + bar-graph state =====
+        const [composeOpen, setComposeOpen] = useState(true);
+        const [sendList, setSendList] = useState(() => new Map());   // id -> recipient snapshot
+        const [hoverId, setHoverId] = useState(null);                // bar hovered -> glow on map
+        const [savedTemplates, setSavedTemplates] = useState([]);
+        const [savedFilters, setSavedFilters] = useState([]);
+        const [ai, setAi] = useState({ on: true, window: "48 h" });
+        const [toast, setToastState] = useState(null);
+        const toastTimer = useRef(null);
+        const setToast = useCallback((msg) => { setToastState(msg); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToastState(null), 4200); }, []);
+
+        // entities at the current level — drive the bar graph, search and glow; ranked by score
+        const entities = useMemo(() => {
+          let arr = [];
+          if (level === "states" && states) arr = states.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: "DGSE · " + s.u.name, location: "India", level: "DGSE", anchor: s.c }));
+          else if (level === "districts" && districts) arr = districts.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "BSA · " + d.u.name, location: st ? st.name : "", level: "BSA", anchor: d.c, pathD: d.d }));
+          else if (level === "blocks" && blocks) arr = blocks.map((b) => ({ id: b.id, u: b.u, name: b.name, sub: "BEO · " + b.u.name, location: dst ? dst.name : "", level: "BEO", anchor: b.seed, pathD: b.d }));
+          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: "School " + (s.k + 1), sub: "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", anchor: s.p, dot: true }));
+          else if (level === "school" && school) arr = school.nodes.map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: [n.x, n.y], dot: true }));
+          arr = arr.map((e) => ({ ...e, score: e.u.score }));
+          const order = [...arr].sort((a, b) => b.score - a.score);
+          const rank = new Map(); order.forEach((e, i) => rank.set(e.id, i + 1));
+          return arr.map((e) => ({ ...e, rank: rank.get(e.id) }));
+        }, [level, states, districts, blocks, schools, school, st, dst, blk]);
+
+        const snap = useCallback((e) => ({ id: e.id, uname: e.u.name, name: e.name, area: e.name, location: e.location, level: e.level, score: e.score, rank: e.rank, face: e.u.face, perf: e.u.perf, phone: e.u.phone }), []);
+        const toggleSend = useCallback((e) => setSendList((prev) => { const m = new Map(prev); if (m.has(e.id)) m.delete(e.id); else m.set(e.id, snap(e)); return m; }), [snap]);
+        const addEntities = useCallback((es) => setSendList((prev) => { const m = new Map(prev); es.forEach((e) => m.set(e.id, snap(e))); return m; }), [snap]);
+        const removeSend = useCallback((id) => setSendList((prev) => { const m = new Map(prev); m.delete(id); return m; }), []);
+        const clearSend = useCallback(() => setSendList(new Map()), []);
+        const selectedIds = useMemo(() => new Set(sendList.keys()), [sendList]);
+
+        const onSend = useCallback((text, aiCfg) => {
+          const n = sendList.size;
+          if (!n) { setToast("Add recipients before sending."); return; }
+          setToast(`✓ Message sent to ${n} recipient${n > 1 ? "s" : ""}.` + (aiCfg.on ? ` AI will follow up non-responders in ${aiCfg.window}.` : ""));
+          if (aiCfg.on) setTimeout(() => setToast(`🤖 AI follow-up sent to ${Math.max(1, Math.round(n * 0.4))} non-responder${n > 1 ? "s" : ""}.`), 3600);
+        }, [sendList, setToast]);
+
+        const genReport = useCallback(() => {
+          const JsPDF = window.jspdf && window.jspdf.jsPDF;
+          if (!JsPDF) { setToast("PDF library not loaded."); return; }
+          const doc = new JsPDF({ unit: "pt", format: "a4" });
+          const W = doc.internal.pageSize.getWidth();
+          const crumb = ["All India", st && st.name, dst && dst.name, blk && blk.name, level === "school" ? "School" : null].filter(Boolean).join("  >  ");
+          let y = 56;
+          doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(24); doc.text("PadhaiPal — Network Report", 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(120);
+          y += 18; doc.text(crumb, 40, y);
+          y += 14; doc.text(`${entities.length} ${level === "states" ? "state DGSEs" : level} | ranked by performance score`, 40, y);
+          y += 30; doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(24); doc.text("Top performers by score", 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+          [...entities].sort((a, b) => b.score - a.score).slice(0, 15).forEach((e, i) => {
+            y += 16; doc.setTextColor(90); doc.text(`${i + 1}.  ${e.name} — ${e.u.name} (${e.level}, ${e.location})`, 48, y);
+            doc.setTextColor(24); doc.text(String(e.score), W - 56, y, { align: "right" });
+          });
+          y += 30; doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(`Send list (${sendList.size})`, 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(90);
+          [...sendList.values()].slice(0, 18).forEach((r) => { y += 15; doc.text(`-  ${r.uname} — ${r.name} (${r.level})`, 48, y); });
+          y += 34; doc.setFontSize(11); doc.setTextColor(37, 99, 235);
+          const fakeId = (hashStr("rep:" + crumb + sendList.size) % 0xffffff).toString(16).padStart(6, "0");
+          doc.textWithLink("> Open the live dashboard for this view", 40, y, { url: "https://dashboard.padhaipal.com/r/" + fakeId });
+          y += 22; doc.setFontSize(8); doc.setTextColor(150);
+          doc.text("Demo report — figures are illustrative and not real data.", 40, y);
+          doc.save("padhaipal-report.pdf");
+          setToast("Report generated — PDF downloaded.");
+        }, [entities, sendList, st, dst, blk, level, setToast]);
+
         return (
           <div className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
@@ -1627,6 +1957,10 @@
                 <span>100</span>
                 <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "blocks" && dst ? frame(dst.bbox) : level === "districts" && st ? frame(st.bbox) : { k: 1, x: 0, y: 0 })}
                   className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
+                <button onClick={genReport} className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">⤓ Report</button>
+                <button onClick={() => setComposeOpen((v) => !v)} className="rounded-md bg-blue-600 px-2.5 py-1 font-semibold text-white hover:bg-blue-700">
+                  ✉ Compose{sendList.size ? <span className="ml-1 rounded-full bg-white/25 px-1.5">{sendList.size}</span> : null}
+                </button>
               </div>
             </header>
 
@@ -1673,13 +2007,15 @@
                         onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
                     ))}
 
-                    {/* LEVEL: schools (dots inside focused block) */}
+                    {/* LEVEL: schools (dots inside focused block). The block fill swallows
+                        clicks so clicking empty space *inside* the block does not pop out. */}
                     {level === "schools" && blk && (
-                      <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} style={{ pointerEvents: "none" }} />
+                      <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k}
+                        style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()} />
                     )}
                     {level === "schools" && schools && schools.map((sc) => (
-                      <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 5 : 3) / tf.k}
-                        fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={0.8 / tf.k} style={{ cursor: "pointer" }}
+                      <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 9 : 6) / tf.k}
+                        fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={1.2 / tf.k} style={{ cursor: "pointer" }}
                         onMouseEnter={() => setActive({ u: sc.u, title: "School " + (sc.k + 1), sub: "Head Teacher · " + sc.u.name })}
                         onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
                     ))}
@@ -1703,6 +2039,18 @@
                         })}
                       </g>
                     )}
+
+                    {/* glow on the map element matching the hovered bar in the bottom graph */}
+                    {hoverId && (() => {
+                      const e = entities.find((x) => x.id === hoverId);
+                      if (!e || !e.anchor) return null;
+                      return (
+                        <g pointerEvents="none">
+                          {e.pathD && <path d={e.pathD} fill="none" stroke="#2563eb" strokeWidth={4 / tf.k} className="glowpulse" />}
+                          <circle cx={e.anchor[0]} cy={e.anchor[1]} r={(e.dot ? 13 : 18) / tf.k} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} className="glowpulse" />
+                        </g>
+                      );
+                    })()}
 
                     {/* chips (states, districts & blocks): face + name + score, click to drill */}
                     {(level === "states" || level === "districts" || level === "blocks") && (() => {
@@ -1736,7 +2084,7 @@
 
               {/* readout panel for the active element */}
               {active && (
-                <div className="pointer-events-none absolute left-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
+                <div className="pointer-events-none absolute right-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
                   <div className="flex items-center gap-3">
                     <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />
                     <div className="min-w-0">
@@ -1775,7 +2123,21 @@
               {level === "blocks" && blocks && blocks.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400">No block data for {dst ? dst.name : "this district"} · click empty space to go back</div>
               )}
+
+              <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((o) => !o)}
+                entities={entities} recipients={[...sendList.values()]}
+                onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
+                savedTemplates={savedTemplates} setSavedTemplates={setSavedTemplates}
+                savedFilters={savedFilters} setSavedFilters={setSavedFilters}
+                ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} />
+
+              {toast && (
+                <div className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-xl">{toast}</div>
+              )}
             </div>
+
+            <BarGraph entities={entities} selectedIds={selectedIds} hoverId={hoverId}
+              onHover={setHoverId} onToggle={toggleSend} onAddRange={addEntities} />
           </div>
         );
       }
