@@ -2146,14 +2146,1056 @@
     })();
 
     // #####################################################################
+    // ## VIEW 4 — Global map (geoBoundaries ADM1/2/3, live-loaded).        ##
+    // ## World -> Country -> ADM1(DGSE) -> ADM2(BSA) -> ADM3(BEO, w/       ##
+    // ## Voronoi fallback) -> school dots -> HT/teacher/student force      ##
+    // ## graph. Boundaries fetched on demand from the geoBoundaries CDN;   ##
+    // ## countries with no district (ADM2) data are greyed out.            ##
+    // #####################################################################
+    const WorldMapApp = (function () {
+      const d3 = window.d3;
+      const API = "https://www.geoboundaries.org/api/current/gbOpen/";
+      const WORLD_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
+
+      // --- helpers (mirror the other views; IIFEs stay independent) ---
+      function hashStr(s) {
+        let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
+        for (let i = 0; i < s.length; i++) {
+          const ch = s.charCodeAt(i);
+          h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return (h1 >>> 0);
+      }
+      const FIRST = ["Aarav","Diya","Kabir","Ishaan","Ananya","Riya","Aditya","Rohan","Saanvi","Arjun",
+        "Priya","Myra","Vivaan","Kiara","Reyansh","Anvi","Tara","Dev","Ira","Yuvan","Sara","Krish",
+        "Anil","Meena","Vikram","Sita","Deepak","Asha","Ravi","Neha","Manish","Geeta","Pooja","Rahul",
+        "Sunil","Kavita","Pramod","Rajesh","Om","Nisha","Sanjay","Rekha","Amit","Sunita","Vijay","Lata",
+        "Mohan","Usha","Suresh","Gita"];
+      const LAST = ["Sharma","Gupta","Singh","Yadav","Joshi","Verma","Pal","Rao","Lal","Bose","Kumar",
+        "Prakash","Devi","Mishra","Tiwari","Pandey","Chauhan","Saxena","Nair","Reddy"];
+      const FACE_COUNT = { adult: 300, child: 50 };
+
+      const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+      function scoreRGB(p) {
+        const red = [239, 68, 68], yellow = [234, 179, 8], green = [34, 197, 94];
+        return (p < 0.5 ? lerp(red, yellow, p / 0.5) : lerp(yellow, green, (p - 0.5) / 0.5)).map((v) => v | 0);
+      }
+      const scoreColor = (p) => `rgb(${scoreRGB(p).join(",")})`;
+      const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
+
+      // --- org model: country=National Director, ADM1=DGSE, ADM2=BSA, ADM3=BEO, school=Head Teacher ---
+      const LEVELS = ["World", "Country", "DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+      const SUB = { Country: "National Director", DGSE: "DGSE", BSA: "BSA", BEO: "BEO" };
+      // children-per-node range, by org level. Only school->teacher->student are procedural;
+      // country/ADM1/ADM2/ADM3 counts come from the live map data.
+      const FANOUT = [null, null, null, null, null, [2, 7], [12, 28]];
+      function node(id) {
+        const lvl = id.split(".").length - 1;
+        const h = hashStr("u:" + id);
+        const perf = (h % 1000) / 1000;
+        const student = lvl === LEVELS.length - 1;
+        return {
+          id, lvl, designation: LEVELS[lvl] || "—",
+          name: FIRST[h % FIRST.length] + (student ? "" : " " + LAST[(h >>> 9) % LAST.length]),
+          perf, score: Math.round(perf * 100),
+          face: "faces/" + (student ? "child" : "adult") + "/" + (hashStr("face:" + id) % (student ? FACE_COUNT.child : FACE_COUNT.adult)) + ".jpg",
+          phone: "+9198" + String(1000000 + (h % 9000000)),
+        };
+      }
+      function baseChildCount(id) {
+        const lvl = id.split(".").length - 1;
+        const f = FANOUT[lvl];
+        if (!f) return 0;
+        const [mn, mx] = f;
+        return mn === mx ? mn : mn + (hashStr("fan:" + id) % (mx - mn + 1));
+      }
+
+      // --- geometry helpers (projected screen space) ---
+      const stripClose = (r) => (r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.slice(0, -1) : r);
+      const ringArea = (r) => { let s = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return s / 2; };
+      function bboxOf(r) { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const p of r) { if (p[0] < a) a = p[0]; if (p[1] < b) b = p[1]; if (p[0] > c) c = p[0]; if (p[1] > d) d = p[1]; } return [a, b, c, d]; }
+      function largestRing(feature, proj) {
+        const g = feature.geometry; if (!g) return [];
+        const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+        let best = null, bestA = -1;
+        for (const poly of polys) { const pr = poly[0].map((c) => proj(c)).filter((p) => p && !isNaN(p[0])); if (pr.length < 3) continue; const a = Math.abs(ringArea(pr)); if (a > bestA) { bestA = a; best = pr; } }
+        return best || [];
+      }
+      const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
+      function pointInPoly(p, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+          if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+      }
+      function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+      function sampleInside(ring, n, seed) {
+        const [minx, miny, maxx, maxy] = bboxOf(ring);
+        const r = rng(seed), out = []; let tries = 0; const cap = n * 400 + 3000;
+        while (out.length < n && tries++ < cap) { const p = [minx + (maxx - minx) * r(), miny + (maxy - miny) * r()]; if (pointInPoly(p, ring)) out.push(p); }
+        return out;
+      }
+      const segInt = (p1, p2, a, b) => {
+        const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1], x3 = a[0], y3 = a[1], x4 = b[0], y4 = b[1];
+        const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (!den) return p2.slice();
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+        return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+      };
+      function clipPolygon(subject, clip) {
+        clip = stripClose(clip);
+        if (clip.length < 3) return subject;
+        let cx = 0, cy = 0; for (const p of clip) { cx += p[0]; cy += p[1]; } cx /= clip.length; cy /= clip.length;
+        let out = subject;
+        for (let e = 0; e < clip.length && out.length; e++) {
+          const A = clip[e], B = clip[(e + 1) % clip.length];
+          const sgn = ((B[0] - A[0]) * (cy - A[1]) - (B[1] - A[1]) * (cx - A[0])) >= 0 ? 1 : -1;
+          const inside = (p) => sgn * ((B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0])) >= 0;
+          const inp = out; out = [];
+          for (let i = 0; i < inp.length; i++) {
+            const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+            const ci = inside(cur), pi = inside(prev);
+            if (ci) { if (!pi) out.push(segInt(prev, cur, A, B)); out.push(cur); }
+            else if (pi) out.push(segInt(prev, cur, A, B));
+          }
+        }
+        return out;
+      }
+
+      // geoBoundaries rings are wound clockwise, so d3's SPHERICAL helpers
+      // (geoBounds/fitExtent, geoPath.centroid, geoArea, geoContains) treat each
+      // region as its global complement. Everything below stays planar instead.
+      const centroidOf = (ring) => { let x = 0, y = 0; for (const p of ring) { x += p[0]; y += p[1]; } const n = ring.length || 1; return [x / n, y / n]; };
+      // every exterior ring of a feature, projected (for containment of multi-part regions: enclaves, islands)
+      function exteriorRings(feature, proj) {
+        const g = feature && feature.geometry; if (!g) return [];
+        const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+        const out = [];
+        for (const poly of polys) { const pr = stripClose(poly[0].map((c) => proj(c)).filter((p) => p && !isNaN(p[0]))); if (pr.length >= 3) out.push(pr); }
+        return out;
+      }
+      const inAnyRing = (pt, rings) => { for (const r of rings) if (pointInPoly(pt, r)) return true; return false; };
+      // manual mercator fit using PROJECTED bounds of raw coords (not geoBounds)
+      function fitMercator(features, w, h, pad) {
+        const proj = d3.geoMercator().scale(1).translate([0, 0]);
+        let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+        for (const f of features) {
+          const g = f.geometry; if (!g) continue;
+          const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+          for (const poly of polys) for (const ring of poly) for (const c of ring) {
+            const p = proj(c); if (!p || isNaN(p[0])) continue;
+            if (p[0] < minx) minx = p[0]; if (p[1] < miny) miny = p[1];
+            if (p[0] > maxx) maxx = p[0]; if (p[1] > maxy) maxy = p[1];
+          }
+        }
+        if (!isFinite(minx)) return null;
+        const bw = Math.max(1e-9, maxx - minx), bh = Math.max(1e-9, maxy - miny);
+        const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+        proj.scale(s).translate([(w - s * (minx + maxx)) / 2, (h - s * (miny + maxy)) / 2]);
+        return proj;
+      }
+      // planar km² from lon/lat rings (cos-lat corrected) — winding-independent
+      function planarAreaKm2(feature) {
+        const g = feature && feature.geometry; if (!g) return 0;
+        const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+        let total = 0;
+        for (const poly of polys) {
+          const ring = poly[0]; if (!ring || ring.length < 3) continue;
+          let s = 0, latSum = 0;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { s += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1]; latSum += ring[i][1]; }
+          total += Math.abs(s / 2) * Math.cos(latSum / ring.length * Math.PI / 180);
+        }
+        return total * 111.32 * 110.57;
+      }
+
+      // =====================================================================
+      //  Demographics (population modeled from real polygon area; language
+      //  from a country table). Honestly flagged as demo estimates in the UI.
+      // =====================================================================
+      const COUNTRY_LANG = {
+        USA: ["English", "Spanish"], IND: ["Hindi", "English", "+21 official"], CHN: ["Mandarin"], BRA: ["Portuguese"],
+        FRA: ["French"], DEU: ["German"], GBR: ["English"], NGA: ["English", "Hausa", "Yoruba", "Igbo"],
+        PAK: ["Urdu", "English", "Punjabi"], IDN: ["Indonesian", "Javanese"], MEX: ["Spanish"], JPN: ["Japanese"],
+        RUS: ["Russian"], BGD: ["Bengali"], ETH: ["Amharic", "Oromo"], PHL: ["Filipino", "English"], EGY: ["Arabic"],
+        VNM: ["Vietnamese"], COD: ["French", "Lingala", "Swahili"], TUR: ["Turkish"], IRN: ["Persian"], THA: ["Thai"],
+        ZAF: ["Zulu", "Xhosa", "Afrikaans", "English", "+7"], TZA: ["Swahili", "English"], KEN: ["Swahili", "English"],
+        ESP: ["Spanish", "Catalan", "Galician"], COL: ["Spanish"], ARG: ["Spanish"], DZA: ["Arabic", "Berber"],
+        CAN: ["English", "French"], UGA: ["English", "Swahili"], IRQ: ["Arabic", "Kurdish"], MAR: ["Arabic", "Berber"],
+        AFG: ["Pashto", "Dari"], SAU: ["Arabic"], UKR: ["Ukrainian"], AUS: ["English"], NPL: ["Nepali"],
+        GHA: ["English", "Akan"], LKA: ["Sinhala", "Tamil"], MMR: ["Burmese"], MOZ: ["Portuguese"], ITA: ["Italian"],
+        POL: ["Polish"], KOR: ["Korean"], CHE: ["German", "French", "Italian", "Romansh"],
+        BEL: ["Dutch", "French", "German"], MYS: ["Malay", "English"], PER: ["Spanish", "Quechua"],
+      };
+      // a few India ADM1 overrides to demonstrate per-region language variation
+      const REGION_LANG = {
+        "Tamil Nadu": ["Tamil"], "Kerala": ["Malayalam"], "Karnataka": ["Kannada"], "Andhra Pradesh": ["Telugu"],
+        "Telangana": ["Telugu"], "West Bengal": ["Bengali"], "Maharashtra": ["Marathi"], "Gujarat": ["Gujarati"],
+        "Punjab": ["Punjabi"], "Odisha": ["Odia"], "Assam": ["Assamese"], "Quebec": ["French"], "Catalonia": ["Catalan"],
+      };
+      const langFor = (iso, regionName) => {
+        if (regionName && REGION_LANG[regionName]) return { langs: REGION_LANG[regionName], real: true };
+        if (COUNTRY_LANG[iso]) return { langs: COUNTRY_LANG[iso], real: false };
+        return { langs: ["—"], real: false };
+      };
+      function demoFor(feature, iso, regionName) {
+        const areaKm2 = planarAreaKm2(feature);
+        const dens = 12 + (hashStr("dens:" + (regionName || "") + iso) % 1100);
+        const pop = Math.max(1, Math.round(areaKm2 * dens));
+        return { pop, areaKm2, ...langFor(iso, regionName) };
+      }
+      const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
+      const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
+
+      const iso3Of = (p) => {
+        const a = p.ISO_A3_EH, b = p.ISO_A3;
+        if (a && a !== "-99") return a;
+        if (b && b !== "-99") return b;
+        return null;
+      };
+
+      const ZMIN = 0.5, ZMAX = 900;
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+      // =====================================================================
+      //  Messaging templates + token replacement
+      // =====================================================================
+      const TEMPLATES = [
+        { id: "welcome", title: "Welcome / onboarding", tags: [], body: "Dear <name>,\n\nWelcome to the PadhaiPal network as <level> for <area>. We're glad to have you on board and look forward to supporting your work.\n\nWarm regards,\nOffice of the DGSE" },
+        { id: "checkin", title: "Performance check-in", tags: ["report"], body: "Hi <name>,\n\nA quick check-in on <area>. Your current performance score is <score> (rank <rank>). Let's connect this week to discuss priorities.\n\nThanks,\nDGSE Office" },
+        { id: "congrats", title: "Top-performer recognition", tags: ["image"], body: "Congratulations, <name>! 🎉\n\n<area> is among our top performers with a score of <score> (rank <rank>). Thank you for the outstanding leadership — keep it up!" },
+        { id: "nudge", title: "Engagement nudge", tags: [], body: "Hello <name>,\n\nWe've noticed engagement in <area> has dipped recently. Could you share what support would help? We're here to assist." },
+        { id: "monthly", title: "Monthly report summary", tags: ["image", "report"], body: "Dear <name>,\n\nMonthly summary for <area> (<level>):\n• Performance score: <score>\n• Rank: <rank>\n• Status: on track\n\nThe full dashboard is linked below." },
+        { id: "escalation", title: "Action required", tags: ["report"], body: "Dear <name>,\n\n<area> needs attention: the current score (<score>, rank <rank>) is below target. Please review the attached report and respond within 3 working days." },
+      ];
+      function fillTemplate(body, r) {
+        if (!r) return body || "";
+        return (body || "")
+          .replace(/<name>/g, r.uname || r.name || "there")
+          .replace(/<area>/g, r.area || r.name || "your area")
+          .replace(/<location>/g, r.location || "")
+          .replace(/<level>/g, r.level || "")
+          .replace(/<score>/g, r.score != null ? String(r.score) : "—")
+          .replace(/<rank>/g, r.rank != null ? String(r.rank) : "—");
+      }
+
+      // =====================================================================
+      //  Bottom bar graph — every entity ranked by score
+      // =====================================================================
+      function BarGraph({ entities, selectedIds, hoverId, onHover, onToggle, onAddRange }) {
+        const bars = useMemo(() => [...entities].sort((a, b) => b.score - a.score), [entities]);
+        const [drag, setDrag] = useState(null);
+        const dragging = useRef(false);
+        useEffect(() => {
+          const up = () => {
+            if (!dragging.current) return;
+            dragging.current = false;
+            setDrag((d) => {
+              if (d) { const lo = Math.min(d.a, d.b), hi = Math.max(d.a, d.b); if (lo === hi) onToggle(bars[lo]); else onAddRange(bars.slice(lo, hi + 1)); }
+              return null;
+            });
+          };
+          window.addEventListener("mouseup", up);
+          return () => window.removeEventListener("mouseup", up);
+        }, [bars, onToggle, onAddRange]);
+
+        const hovIdx = hoverId != null ? bars.findIndex((b) => b.id === hoverId) : -1;
+        const hov = hovIdx >= 0 ? bars[hovIdx] : null;
+        return (
+          <div className="relative shrink-0 select-none border-t border-zinc-200 bg-white" style={{ height: 150 }} onMouseLeave={() => onHover(null)}>
+            <div className="flex items-center justify-between px-3 py-1 text-[11px] text-zinc-500">
+              <span>{bars.length} entities · ranked by score · click a bar to add to the send list · drag across bars to multi-select</span>
+              <span className="text-zinc-400">hover a bar for details</span>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 flex items-end gap-px px-2" style={{ top: 26 }}>
+              {bars.map((e, i) => {
+                const sel = selectedIds.has(e.id);
+                const inDrag = drag && i >= Math.min(drag.a, drag.b) && i <= Math.max(drag.a, drag.b);
+                return (
+                  <div key={e.id} title={e.u.name}
+                    onMouseEnter={() => { onHover(e.id); if (dragging.current) setDrag((d) => ({ a: d ? d.a : i, b: i })); }}
+                    onMouseDown={(ev) => { ev.preventDefault(); dragging.current = true; setDrag({ a: i, b: i }); }}
+                    className={"min-w-0 flex-1 cursor-pointer rounded-t-sm " + (sel ? "bar-sel" : "")}
+                    style={{ height: Math.max(2, e.score) + "%", background: scoreColor(e.u.perf),
+                      outline: sel || inDrag ? "2px solid #2563eb" : "none", outlineOffset: "-1px",
+                      opacity: hovIdx >= 0 && i !== hovIdx ? 0.5 : 1 }} />
+                );
+              })}
+            </div>
+            {hov && (
+              <div className="pointer-events-none absolute z-10 w-48 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl"
+                style={{ left: "max(96px, min(calc(100% - 96px), " + ((hovIdx + 0.5) / bars.length * 100) + "%))", bottom: 132 }}>
+                <div className="flex items-center gap-2">
+                  <img src={hov.u.face} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-semibold text-zinc-900">{hov.name}</div>
+                    <div className="truncate text-[10px] text-zinc-500">{hov.sub}</div>
+                  </div>
+                  <span className="ml-auto rounded px-1 py-0.5 text-[10px] font-bold" style={{ background: scoreColor(hov.u.perf), color: textOn(hov.u.perf) }}>{hov.score}</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1 text-[10px] text-zinc-600">
+                  <div>Rank <b>#{hov.rank}</b></div>
+                  <div className="truncate">{hov.location}</div>
+                  <div>{hov.level}</div>
+                  <div className={selectedIds.has(hov.id) ? "font-semibold text-blue-600" : "text-zinc-400"}>{selectedIds.has(hov.id) ? "✓ in send list" : "click to add"}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // =====================================================================
+      //  Compose drawer
+      // =====================================================================
+      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport }) {
+        const [tplId, setTplId] = useState(null);
+        const [text, setText] = useState("");
+        const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "" });
+        const allTemplates = useMemo(() => [...TEMPLATES, ...savedTemplates], [savedTemplates]);
+        const levels = useMemo(() => ["All", ...Array.from(new Set(entities.map((e) => e.level)))], [entities]);
+        const recipIds = useMemo(() => new Set(recipients.map((r) => r.id)), [recipients]);
+        const tpl = allTemplates.find((t) => t.id === tplId);
+
+        const results = useMemo(() => {
+          const q = filters.q.trim().toLowerCase(), loc = filters.location.trim().toLowerCase();
+          return entities.filter((e) => {
+            if (q && !((e.u.name || "").toLowerCase().includes(q) || (e.name || "").toLowerCase().includes(q))) return false;
+            if (filters.level !== "All" && e.level !== filters.level) return false;
+            if (loc && !(e.location || "").toLowerCase().includes(loc)) return false;
+            if (e.score < filters.scoreMin || e.score > filters.scoreMax) return false;
+            if (filters.rankMax !== "" && e.rank > +filters.rankMax) return false;
+            return true;
+          }).sort((a, b) => a.rank - b.rank);
+        }, [entities, filters]);
+
+        const selectTpl = (t) => { setTplId(t.id); setText(t.body); };
+        const preview = fillTemplate(text, recipients[0]);
+        const inp = "w-full rounded border border-zinc-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none";
+
+        if (!open) return (
+          <button onClick={onToggle} title="Open compose"
+            className="absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50">
+            <span className="text-blue-600">»</span>
+            <span className="text-[11px] font-semibold tracking-wide text-zinc-700" style={{ writingMode: "vertical-rl" }}>✉ Compose{recipients.length ? " · " + recipients.length : ""}</span>
+          </button>
+        );
+
+        return (
+          <aside className="absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2">
+              <span className="text-sm font-semibold text-zinc-900">Compose message</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{recipients.length} recipient{recipients.length === 1 ? "" : "s"}</span>
+              <button onClick={onToggle} title="Minimize" className="ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">«</button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto p-3">
+              <section>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Templates</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {allTemplates.map((t) => (
+                    <button key={t.id} onClick={() => selectTpl(t)}
+                      className={"rounded-full border px-2 py-1 text-[11px] " + (tplId === t.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}>
+                      {t.title}{t.tags && t.tags.includes("image") ? " 🖼" : ""}{t.tags && t.tags.includes("report") ? " 📊" : ""}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Message</span>
+                  <span className="text-[10px] text-zinc-400">tokens: &lt;name&gt; &lt;area&gt; &lt;level&gt; &lt;score&gt; &lt;rank&gt;</span>
+                </div>
+                <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} placeholder="Write a message, or pick a template above…" className={inp + " resize-y font-mono leading-relaxed"} />
+                {tpl && tpl.tags && tpl.tags.length > 0 && (
+                  <div className="mt-1 flex gap-1.5 text-[10px]">
+                    {tpl.tags.includes("image") && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600">🖼 image attached</span>}
+                    {tpl.tags.includes("report") && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600">📊 report summary attached</span>}
+                  </div>
+                )}
+                {text.trim() && (
+                  <div className="mt-1.5 rounded border border-zinc-100 bg-zinc-50 p-2 text-[11px] leading-relaxed text-zinc-600">
+                    <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-400">Preview {recipients[0] ? "· " + recipients[0].uname : "(add a recipient)"}</div>
+                    <div className="whitespace-pre-wrap">{preview}</div>
+                  </div>
+                )}
+                <button onClick={() => { if (!text.trim()) return; const n = savedTemplates.length + 1; setSavedTemplates([...savedTemplates, { id: "saved-" + n, title: "Saved " + n, tags: [], body: text }]); }}
+                  className="mt-1.5 rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">Save as template</button>
+              </section>
+
+              <section>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Find recipients</div>
+                <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name…" className={inp} />
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <select value={filters.level} onChange={(e) => setFilters({ ...filters, level: e.target.value })} className={inp}>
+                    {levels.map((l) => <option key={l} value={l}>{l === "All" ? "Any level" : l}</option>)}
+                  </select>
+                  <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} placeholder="Location…" className={inp} />
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                  <span>score</span>
+                  <input type="number" value={filters.scoreMin} min={0} max={100} onChange={(e) => setFilters({ ...filters, scoreMin: +e.target.value || 0 })} className={inp + " w-14"} />
+                  <span>–</span>
+                  <input type="number" value={filters.scoreMax} min={0} max={100} onChange={(e) => setFilters({ ...filters, scoreMax: e.target.value === "" ? 100 : +e.target.value })} className={inp + " w-14"} />
+                  <span className="ml-2">rank ≤</span>
+                  <input type="number" value={filters.rankMax} min={1} onChange={(e) => setFilters({ ...filters, rankMax: e.target.value })} placeholder="any" className={inp + " w-14"} />
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <button onClick={() => setSavedFilters([...savedFilters, { name: "Filter " + (savedFilters.length + 1), filters: { ...filters } }])}
+                    className="rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">Save filters</button>
+                  {savedFilters.map((sf, i) => (
+                    <button key={i} onClick={() => setFilters({ ...sf.filters })} className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-200">{sf.name}</button>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
+                  <span>{results.length} match{results.length === 1 ? "" : "es"}</span>
+                  <button onClick={() => onAddMany(results)} disabled={!results.length} className="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-40">Add all</button>
+                </div>
+                <div className="mt-1 max-h-44 space-y-1 overflow-y-auto">
+                  {results.slice(0, 200).map((e) => {
+                    const added = recipIds.has(e.id);
+                    return (
+                      <div key={e.id} className="flex items-center gap-2 rounded border border-zinc-100 px-2 py-1">
+                        <img src={e.u.face} alt="" className="h-6 w-6 rounded-full object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[11px] font-medium text-zinc-800">{e.u.name}</div>
+                          <div className="truncate text-[9px] text-zinc-500">{e.name} · {e.level} · #{e.rank}</div>
+                        </div>
+                        <span className="rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(e.u.perf), color: textOn(e.u.perf) }}>{e.score}</span>
+                        <button onClick={() => onAddMany([e])} disabled={added} className={"rounded px-1.5 py-0.5 text-[10px] font-semibold " + (added ? "text-blue-600" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200")}>{added ? "✓" : "Add"}</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Send list ({recipients.length})</span>
+                  {recipients.length > 0 && <button onClick={onClear} className="text-[11px] text-zinc-400 hover:text-red-600">Clear</button>}
+                </div>
+                {recipients.length === 0 ? (
+                  <div className="rounded border border-dashed border-zinc-200 p-3 text-center text-[11px] text-zinc-400">Click bars in the graph below, or add from search.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {recipients.map((r) => (
+                      <span key={r.id} className="flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-1 pr-1.5 text-[11px] text-zinc-700">
+                        <img src={r.face} alt="" className="h-4 w-4 rounded-full object-cover" />
+                        {r.uname}
+                        <button onClick={() => onRemove(r.id)} className="text-zinc-400 hover:text-red-600">✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="space-y-2 border-t border-zinc-200 p-3">
+              <label className="flex items-center gap-2 text-[11px] text-zinc-600">
+                <input type="checkbox" checked={ai.on} onChange={(e) => setAi({ ...ai, on: e.target.checked })} />
+                <span className="font-medium">AI auto follow-up</span> if no response within
+                <select value={ai.window} onChange={(e) => setAi({ ...ai, window: e.target.value })} className="rounded border border-zinc-300 px-1 py-0.5 text-[11px]">
+                  <option>24 h</option><option>48 h</option><option>72 h</option><option>1 week</option>
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button onClick={onGenerateReport} className="rounded-md border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">⤓ Report</button>
+                <button onClick={() => onSend(text, ai)} disabled={!recipients.length || !text.trim()}
+                  className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+                  Send to {recipients.length} recipient{recipients.length === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
+      // =====================================================================
+      //  The map app
+      // =====================================================================
+      function WorldMap() {
+        const wrapRef = useRef(null);
+        const [size, setSize] = useState({ w: 1000, h: 640 });
+        const [worldGeo, setWorldGeo] = useState(null);     // null | "error" | FeatureCollection
+        const [coverage, setCoverage] = useState(null);     // Set<ISO3> with ADM2 data
+        const gbCache = useRef(new Map());                  // "ISO|ADMx" -> FeatureCollection | null
+        const [busy, setBusy] = useState(false);
+
+        const [level, setLevel] = useState("world");        // world | adm1 | adm2 | adm3 | schools | school
+        const [country, setCountry] = useState(null);       // { iso, name, feature, orgId }
+        const [adm1FC, setAdm1FC] = useState(null);
+        const [adm2FC, setAdm2FC] = useState(null);
+        const [adm3FC, setAdm3FC] = useState(null);         // FeatureCollection | null (no ADM3 layer)
+        const [a1Idx, setA1Idx] = useState(null);
+        const [a2Idx, setA2Idx] = useState(null);
+        const [a3Idx, setA3Idx] = useState(null);
+        const [selHt, setSelHt] = useState(null);
+        const [active, setActive] = useState(null);         // { u, title, sub, demo }
+        const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
+        const drag = useRef(null);
+        const moved = useRef(false);
+
+        // --- one-time loads: world countries + ADM2 coverage list ---
+        useEffect(() => {
+          fetch(WORLD_URL).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(setWorldGeo).catch(() => setWorldGeo("error"));
+          fetch(API + "ALL/ADM2/").then((r) => (r.ok ? r.json() : null))
+            .then((arr) => { if (Array.isArray(arr)) setCoverage(new Set(arr.map((x) => x.boundaryISO))); })
+            .catch(() => setCoverage(new Set()));
+        }, []);
+
+        useEffect(() => {
+          const el = wrapRef.current; if (!el) return;
+          const measure = () => { const r = el.getBoundingClientRect(); setSize({ w: Math.max(320, r.width), h: Math.max(320, r.height) }); };
+          measure();
+          const ro = new ResizeObserver(measure); ro.observe(el);
+          return () => ro.disconnect();
+        }, []);
+
+        async function fetchGB(iso, lvl) {
+          const key = iso + "|" + lvl;
+          if (gbCache.current.has(key)) return gbCache.current.get(key);
+          let fc = null;
+          try {
+            const meta = await fetch(API + iso + "/" + lvl + "/").then((r) => (r.ok ? r.json() : null));
+            let url = meta && (meta.simplifiedGeometryGeoJSON || meta.gjDownloadURL);
+            // geoBoundaries geojson is git-LFS; github.com/raw 302-redirects to the LFS host,
+            // which fails CORS in the browser. Rewrite straight to the (CORS-clean) media host.
+            if (url) {
+              url = url.replace("https://github.com/", "https://media.githubusercontent.com/media/").replace("/raw/", "/");
+              fc = await fetch(url).then((r) => (r.ok ? r.json() : null));
+            }
+          } catch (e) { fc = null; }
+          gbCache.current.set(key, fc || null);
+          return fc || null;
+        }
+
+        // world projection (fit to all land except Antarctica), or country projection
+        const worldFit = useMemo(() => {
+          if (!worldGeo || worldGeo === "error") return null;
+          return { type: "FeatureCollection", features: worldGeo.features.filter((f) => f.properties.ADMIN !== "Antarctica") };
+        }, [worldGeo]);
+
+        const isWorld = level === "world";
+        const projd = useMemo(() => {
+          if (!d3 || !size) return null;
+          if (isWorld) {
+            if (!worldFit) return null;
+            const proj = d3.geoNaturalEarth1().fitExtent([[6, 6], [size.w - 6, size.h - 6]], worldFit); // Natural Earth data is well-wound
+            return { proj, path: d3.geoPath(proj) };
+          }
+          if (!adm1FC || adm1FC === "error" || !adm1FC.features) return null;
+          const proj = fitMercator(adm1FC.features, size.w, size.h, 10); // planar fit — geoBoundaries winding breaks fitExtent
+          if (!proj) return null;
+          return { proj, path: d3.geoPath(proj) };
+        }, [isWorld, worldFit, adm1FC, size]);
+
+        // ---- WORLD level: every country, coloured by its national score (grey = no ADM2 data) ----
+        const worldPaths = useMemo(() => {
+          if (!projd || !isWorld || !worldGeo || worldGeo === "error") return null;
+          const { path } = projd;
+          return worldGeo.features.map((f, i) => {
+            if (f.properties.ADMIN === "Antarctica") return null;
+            const iso = iso3Of(f.properties);
+            const covered = !!(iso && coverage && coverage.has(iso));
+            const u = iso ? node("r." + iso) : null;
+            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), u };
+          }).filter(Boolean);
+        }, [projd, isWorld, worldGeo, coverage]);
+
+        // ---- ADM1 (DGSE) of the focused country ----
+        const adm1 = useMemo(() => {
+          if (isWorld || !projd || !country || !adm1FC || adm1FC === "error") return null;
+          const { proj, path } = projd;
+          return adm1FC.features.map((f, i) => {
+            const ring = stripClose(largestRing(f, proj));
+            const id = country.orgId + "." + i;
+            const nm = f.properties.shapeName || ("Region " + (i + 1));
+            return { i, id, feature: f, name: nm, d: path(f), c: centroidOf(ring), ring, rings: exteriorRings(f, proj), bbox: bboxOf(ring),
+              u: node(id), demo: demoFor(f, country.iso, nm) };
+          });
+        }, [isWorld, projd, country, adm1FC]);
+
+        // ---- ADM2 (BSA): children of the focused ADM1, nested by centroid containment ----
+        const adm2 = useMemo(() => {
+          if (!adm1 || a1Idx == null || !adm2FC || adm2FC === "error" || !projd) return null;
+          const { proj, path } = projd;
+          const parent = adm1[a1Idx]; if (!parent || parent.ring.length < 3) return null;
+          // Nest by planar centroid-in-parent test (projected ring). NOT d3.geoContains:
+          // geoBoundaries clockwise winding makes spherical containment match ~everything.
+          const pr = parent.rings && parent.rings.length ? parent.rings : [parent.ring];
+          const kids = adm2FC.features.map((f) => ({ f, ring: stripClose(largestRing(f, proj)) }))
+            .filter((o) => o.ring.length >= 3 && inAnyRing(centroidOf(o.ring), pr));
+          return kids.map((o, j) => {
+            const f = o.f, ring = o.ring;
+            const id = parent.id + "." + j;
+            const nm = f.properties.shapeName || ("District " + (j + 1));
+            return { j, id, feature: f, name: nm, d: path(f), c: centroidOf(ring), ring, rings: exteriorRings(f, proj), bbox: bboxOf(ring),
+              u: node(id), demo: demoFor(f, country.iso, nm) };
+          });
+        }, [adm1, a1Idx, adm2FC, projd, country]);
+
+        // ---- ADM3 (BEO / "block"): real ADM3 where the layer exists, else a synthesised
+        //      Voronoi subdivision of the ADM2 polygon. This is the ADM3 fallback. ----
+        const blocks = useMemo(() => {
+          if (!adm2 || a2Idx == null || !projd) return null;
+          const dst = adm2[a2Idx]; if (!dst) return null;
+          const { proj, path } = projd;
+          let real = [];
+          if (adm3FC && adm3FC !== "error" && adm3FC.features && dst.ring.length >= 3) {
+            const dr = dst.rings && dst.rings.length ? dst.rings : [dst.ring];
+            real = adm3FC.features.map((f) => ({ f, ring: stripClose(largestRing(f, proj)) }))
+              .filter((o) => o.ring.length >= 3 && inAnyRing(centroidOf(o.ring), dr));
+          }
+          if (real.length) {
+            return real.map((o, k) => {
+              const f = o.f, ring = o.ring;
+              const id = dst.id + "." + k;
+              const nm = f.properties.shapeName || ("Block " + (k + 1));
+              return { k, id, u: node(id), name: nm, feature: f, ring, d: path(f), seed: centroidOf(ring), bbox: bboxOf(ring), synthetic: false,
+                demo: demoFor(f, country.iso, nm) };
+            });
+          }
+          // fallback: subdivide the ADM2 polygon into a plausible number of blocks
+          if (!dst.ring || dst.ring.length < 3) return [];
+          const n = 6 + (hashStr("nblk:" + dst.id) % 9);
+          const seeds = sampleInside(dst.ring, n, hashStr("seed:" + dst.id));
+          if (!seeds.length) return [];
+          const [minx, miny, maxx, maxy] = dst.bbox;
+          const vor = d3.Delaunay.from(seeds).voronoi([minx - 5, miny - 5, maxx + 5, maxy + 5]);
+          return seeds.map((s, k) => {
+            const id = dst.id + "." + k; const cell = vor.cellPolygon(k);
+            const poly = cell ? clipPolygon(dst.ring, cell) : [];
+            return { k, id, u: node(id), name: "Block " + (k + 1), ring: poly, d: poly.length >= 3 ? toPath(poly) : "", seed: s,
+              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, real: dst.demo.real } };
+          }).filter((b) => b.ring.length >= 3);
+        }, [adm2, a2Idx, adm3FC, projd, country]);
+
+        // ---- schools (Head Teacher): illustrative points inside the focused block ----
+        const schools = useMemo(() => {
+          if (!blocks || a3Idx == null || !blocks[a3Idx]) return null;
+          const blk = blocks[a3Idx];
+          const m = 80 + (hashStr("sch:" + blk.id) % 70);
+          return sampleInside(blk.ring, m, hashStr("schpts:" + blk.id)).map((p, k) => {
+            const id = blk.id + ".s" + k;
+            return { k, id, u: node(blk.id + "." + (k % 7)), p, name: "School " + (k + 1) };
+          });
+        }, [blocks, a3Idx]);
+
+        // ---- one school (force graph) ----
+        const school = useMemo(() => {
+          if (!selHt || !d3) return null;
+          const htU = node(selHt);
+          const nodes = [{ id: selHt, u: htU, group: "ht", r: 15 }];
+          const links = [];
+          const teachers = baseChildCount(selHt);
+          for (let t = 0; t < teachers; t++) {
+            const tid = selHt + "." + t;
+            nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9 });
+            links.push({ source: selHt, target: tid });
+            const sc = baseChildCount(tid);
+            for (let s = 0; s < sc; s++) {
+              const sid = tid + "." + s;
+              nodes.push({ id: sid, u: node(sid), group: "student", r: 5 });
+              links.push({ source: tid, target: sid });
+            }
+          }
+          const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
+            .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
+            .force("collide", d3.forceCollide().radius((d) => d.r + 2).iterations(2))
+            .force("x", d3.forceX(0).strength(0.045)).force("y", d3.forceY(0).strength(0.045))
+            .stop();
+          for (let i = 0; i < 300; i++) sim.tick();
+          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+          for (const n of nodes) { if (n.x < minx) minx = n.x; if (n.x > maxx) maxx = n.x; if (n.y < miny) miny = n.y; if (n.y > maxy) maxy = n.y; }
+          return { nodes, links, htU, bbox: [minx - 24, miny - 24, maxx + 24, maxy + 24],
+            counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
+        }, [selHt]);
+
+        const frame = useCallback((bbox, pad) => {
+          const [minx, miny, maxx, maxy] = bbox;
+          const bw = Math.max(1, maxx - minx), bh = Math.max(1, maxy - miny);
+          const k = clamp(Math.min(size.w / bw, size.h / bh) * (pad || 0.82), ZMIN, ZMAX);
+          return { k, x: size.w / 2 - ((minx + maxx) / 2) * k, y: size.h / 2 - ((miny + maxy) / 2) * k };
+        }, [size]);
+
+        // --- drill handlers ---
+        const pickCountry = useCallback(async (item) => {
+          if (moved.current || !item.iso || busy) return;
+          if (!item.covered) { setActive({ u: item.u || node("r." + (item.iso || "x")), title: item.name, sub: "No district (ADM2) boundary data", demo: demoFor(item.feature, item.iso, item.name) }); return; }
+          setBusy(true);
+          const a1 = await fetchGB(item.iso, "ADM1");
+          if (!a1 || !a1.features || !a1.features.length) { setBusy(false); return; }
+          const [a2, a3] = await Promise.all([fetchGB(item.iso, "ADM2"), fetchGB(item.iso, "ADM3")]);
+          setCountry({ iso: item.iso, name: item.name, feature: item.feature, orgId: "r." + item.iso });
+          setAdm1FC(a1); setAdm2FC(a2); setAdm3FC(a3);
+          setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null);
+          setLevel("adm1"); setTf({ k: 1, x: 0, y: 0 });
+          setBusy(false);
+        }, [busy]);
+
+        const drillA1 = useCallback((i) => { if (moved.current || !adm1 || !adm1[i]) return; setA1Idx(i); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null); setLevel("adm2"); setTf(frame(adm1[i].bbox)); }, [adm1, frame]);
+        const drillA2 = useCallback((j) => { if (moved.current || !adm2 || !adm2[j]) return; setA2Idx(j); setA3Idx(null); setSelHt(null); setActive(null); setLevel("adm3"); setTf(frame(adm2[j].bbox)); }, [adm2, frame]);
+        const drillBlock = useCallback((k) => { if (moved.current || !blocks || !blocks[k]) return; setA3Idx(k); setActive(null); setLevel("schools"); setTf(frame(blocks[k].bbox)); }, [blocks, frame]);
+        const drillSchool = useCallback((sc) => { if (moved.current) return; setSelHt(sc.u.id); setActive(null); setLevel("school"); }, []);
+
+        const goLevel = useCallback((target) => {
+          setActive(null);
+          if (target === "world") { setLevel("world"); setCountry(null); setAdm1FC(null); setAdm2FC(null); setAdm3FC(null); setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
+          else if (target === "adm1") { setLevel("adm1"); setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
+          else if (target === "adm2") { setLevel("adm2"); setA2Idx(null); setA3Idx(null); setSelHt(null); if (adm1 && a1Idx != null && adm1[a1Idx]) setTf(frame(adm1[a1Idx].bbox)); }
+          else if (target === "adm3") { setLevel("adm3"); setA3Idx(null); setSelHt(null); if (adm2 && a2Idx != null && adm2[a2Idx]) setTf(frame(adm2[a2Idx].bbox)); }
+          else if (target === "schools") { setLevel("schools"); setSelHt(null); if (blocks && a3Idx != null && blocks[a3Idx]) setTf(frame(blocks[a3Idx].bbox)); }
+        }, [adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, frame]);
+
+        const popUp = useCallback(() => {
+          if (level === "school") goLevel("schools");
+          else if (level === "schools") goLevel("adm3");
+          else if (level === "adm3") goLevel("adm2");
+          else if (level === "adm2") goLevel("adm1");
+          else if (level === "adm1") goLevel("world");
+        }, [level, goLevel]);
+
+        useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox)); }, [school, level, frame]);
+
+        const onWheel = useCallback((e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const px = e.clientX - rect.left, py = e.clientY - rect.top;
+          setTf((t) => { const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX); const s = k / t.k; return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s }; });
+        }, []);
+        const onPointerDown = useCallback((e) => { drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; }, [tf]);
+        const onPointerMove = useCallback((e) => {
+          if (!drag.current) return;
+          const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
+          if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
+          setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
+        }, []);
+        const onPointerUp = useCallback(() => { drag.current = null; }, []);
+        const onBgClick = useCallback(() => { if (!moved.current && level !== "world") popUp(); }, [popUp, level]);
+
+        const gStyle = { transition: drag.current ? "none" : "transform .35s ease" };
+        const a1f = a1Idx != null && adm1 ? adm1[a1Idx] : null;
+        const a2f = a2Idx != null && adm2 ? adm2[a2Idx] : null;
+        const blk = a3Idx != null && blocks ? blocks[a3Idx] : null;
+        const synthBlocks = blocks && blocks[0] && blocks[0].synthetic;
+
+        // ===== messaging + bar-graph state =====
+        const [composeOpen, setComposeOpen] = useState(true);
+        const [sendList, setSendList] = useState(() => new Map());
+        const [hoverId, setHoverId] = useState(null);
+        const [savedTemplates, setSavedTemplates] = useState([]);
+        const [savedFilters, setSavedFilters] = useState([]);
+        const [ai, setAi] = useState({ on: true, window: "48 h" });
+        const [toast, setToastState] = useState(null);
+        const toastTimer = useRef(null);
+        const setToast = useCallback((msg) => { setToastState(msg); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToastState(null), 4200); }, []);
+
+        const entities = useMemo(() => {
+          let arr = [];
+          if (level === "world" && worldPaths) arr = worldPaths.filter((p) => p.covered).map((p) => ({ id: p.u.id, u: p.u, name: p.name, sub: "National Director · " + p.u.name, location: "World", level: "Country", anchor: p.c, pathD: p.d }));
+          else if (level === "adm1" && adm1) arr = adm1.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "DGSE · " + d.u.name, location: country ? country.name : "", level: "DGSE", anchor: d.c, pathD: d.d, demo: d.demo }));
+          else if (level === "adm2" && adm2) arr = adm2.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "BSA · " + d.u.name, location: a1f ? a1f.name : "", level: "BSA", anchor: d.c, pathD: d.d, demo: d.demo }));
+          else if (level === "adm3" && blocks) arr = blocks.map((b) => ({ id: b.id, u: b.u, name: b.name, sub: "BEO · " + b.u.name, location: a2f ? a2f.name : "", level: "BEO", anchor: b.seed, pathD: b.d, demo: b.demo }));
+          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", anchor: s.p, dot: true }));
+          else if (level === "school" && school) arr = school.nodes.map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: [n.x, n.y], dot: true }));
+          arr = arr.map((e) => ({ ...e, score: e.u.score }));
+          const order = [...arr].sort((a, b) => b.score - a.score);
+          const rank = new Map(); order.forEach((e, i) => rank.set(e.id, i + 1));
+          return arr.map((e) => ({ ...e, rank: rank.get(e.id) }));
+        }, [level, worldPaths, adm1, adm2, blocks, schools, school, country, a1f, a2f, blk]);
+
+        const snap = useCallback((e) => ({ id: e.id, uname: e.u.name, name: e.name, area: e.name, location: e.location, level: e.level, score: e.score, rank: e.rank, face: e.u.face, perf: e.u.perf, phone: e.u.phone }), []);
+        const toggleSend = useCallback((e) => setSendList((prev) => { const m = new Map(prev); if (m.has(e.id)) m.delete(e.id); else m.set(e.id, snap(e)); return m; }), [snap]);
+        const addEntities = useCallback((es) => setSendList((prev) => { const m = new Map(prev); es.forEach((e) => m.set(e.id, snap(e))); return m; }), [snap]);
+        const removeSend = useCallback((id) => setSendList((prev) => { const m = new Map(prev); m.delete(id); return m; }), []);
+        const clearSend = useCallback(() => setSendList(new Map()), []);
+        const selectedIds = useMemo(() => new Set(sendList.keys()), [sendList]);
+
+        const onSend = useCallback((text, aiCfg) => {
+          const n = sendList.size;
+          if (!n) { setToast("Add recipients before sending."); return; }
+          setToast(`✓ Message sent to ${n} recipient${n > 1 ? "s" : ""}.` + (aiCfg.on ? ` AI will follow up non-responders in ${aiCfg.window}.` : ""));
+          if (aiCfg.on) setTimeout(() => setToast(`🤖 AI follow-up sent to ${Math.max(1, Math.round(n * 0.4))} non-responder${n > 1 ? "s" : ""}.`), 3600);
+        }, [sendList, setToast]);
+
+        const genReport = useCallback(() => {
+          const JsPDF = window.jspdf && window.jspdf.jsPDF;
+          if (!JsPDF) { setToast("PDF library not loaded."); return; }
+          const doc = new JsPDF({ unit: "pt", format: "a4" });
+          const W = doc.internal.pageSize.getWidth();
+          const crumb = ["World", country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name, level === "school" ? "School" : null].filter(Boolean).join("  >  ");
+          let y = 56;
+          doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(24); doc.text("PadhaiPal — Global Network Report", 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(120);
+          y += 18; doc.text(crumb, 40, y);
+          y += 14; doc.text(`${entities.length} ${level === "world" ? "countries" : level} | ranked by performance score`, 40, y);
+          y += 30; doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(24); doc.text("Top performers by score", 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+          [...entities].sort((a, b) => b.score - a.score).slice(0, 15).forEach((e, i) => {
+            y += 16; doc.setTextColor(90); doc.text(`${i + 1}.  ${e.name} — ${e.u.name} (${e.level}, ${e.location})`, 48, y);
+            doc.setTextColor(24); doc.text(String(e.score), W - 56, y, { align: "right" });
+          });
+          y += 30; doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(`Send list (${sendList.size})`, 40, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(90);
+          [...sendList.values()].slice(0, 18).forEach((r) => { y += 15; doc.text(`-  ${r.uname} — ${r.name} (${r.level})`, 48, y); });
+          y += 34; doc.setFontSize(11); doc.setTextColor(37, 99, 235);
+          const fakeId = (hashStr("rep:" + crumb + sendList.size) % 0xffffff).toString(16).padStart(6, "0");
+          doc.textWithLink("> Open the live dashboard for this view", 40, y, { url: "https://dashboard.padhaipal.com/r/" + fakeId });
+          y += 22; doc.setFontSize(8); doc.setTextColor(150);
+          doc.text("Demo report — boundaries are real (geoBoundaries); scores & demographics are illustrative.", 40, y);
+          doc.save("padhaipal-global-report.pdf");
+          setToast("Report generated — PDF downloaded.");
+        }, [entities, sendList, country, a1f, a2f, blk, level, setToast]);
+
+        const loadFailed = worldGeo === "error";
+        const ready = worldGeo && worldGeo !== "error";
+
+        const bannerText = (() => {
+          if (level === "world") return "Signed in as Global Education Secretary · every country is a National Director · grey = no district (ADM2) data · click a country to drill in";
+          if (level === "adm1") return `${country ? country.name : ""} · ${adm1 ? adm1.length : 0} ADM1 regions (DGSEs) · click a region · click empty space to go up`;
+          if (level === "adm2") return `${a1f ? a1f.name : ""} · ${adm2 ? adm2.length : 0} districts (BSAs) · click a district · click empty space to go up`;
+          if (level === "adm3") return `${adm2 && a2Idx != null && adm2[a2Idx] ? adm2[a2Idx].name : ""} · ${blocks ? blocks.length : 0} blocks (BEOs) · ${synthBlocks ? "synthesised — no ADM3 layer for this country (ADM3 fallback)" : "real ADM3 boundaries (block proxy)"} · click a block`;
+          if (level === "schools") return `≈${schools ? schools.length : 0} schools · illustrative (Giga-style points) — positions not real · click a school`;
+          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`;
+          return "";
+        })();
+
+        return (
+          <div className="flex h-full flex-col">
+            <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
+              <div>
+                <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
+                  <button onClick={() => goLevel("world")} className={level === "world" ? "text-zinc-900" : "text-blue-600 hover:underline"}>World</button>
+                  {country && <span className="text-zinc-300">›</span>}
+                  {country && <button onClick={() => goLevel("adm1")} className={level === "adm1" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{country.name}</button>}
+                  {a1f && <span className="text-zinc-300">›</span>}
+                  {a1f && <button onClick={() => goLevel("adm2")} className={level === "adm2" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{a1f.name}</button>}
+                  {a2f && <span className="text-zinc-300">›</span>}
+                  {a2f && <button onClick={() => goLevel("adm3")} className={level === "adm3" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{a2f.name}</button>}
+                  {blk && <span className="text-zinc-300">›</span>}
+                  {blk && <button onClick={() => goLevel("schools")} className={level === "schools" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{blk.name}</button>}
+                  {level === "school" && <span className="text-zinc-300">›</span>}
+                  {level === "school" && <span className="text-zinc-900">School</span>}
+                </h1>
+                <p className="text-xs text-zinc-500">{bannerText}</p>
+              </div>
+              <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <span>score</span><span>0</span>
+                <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
+                <span>100</span>
+                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "adm3" && a2f ? frame(a2f.bbox) : level === "adm2" && a1f ? frame(a1f.bbox) : { k: 1, x: 0, y: 0 })}
+                  className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
+                <button onClick={genReport} className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">⤓ Report</button>
+                <button onClick={() => setComposeOpen((v) => !v)} className="rounded-md bg-blue-600 px-2.5 py-1 font-semibold text-white hover:bg-blue-700">
+                  ✉ Compose{sendList.size ? <span className="ml-1 rounded-full bg-white/25 px-1.5">{sendList.size}</span> : null}
+                </button>
+              </div>
+            </header>
+
+            <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#eaf0f6]">
+              {!ready ? (
+                <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+                  {loadFailed ? "Could not load the world map — check your connection (boundaries are fetched live)." : "Loading world map…"}
+                </div>
+              ) : (
+                <svg width={size.w} height={size.h} className="block touch-none select-none"
+                  onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onClick={onBgClick}
+                  style={{ cursor: drag.current ? "grabbing" : "grab" }}>
+                  <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={gStyle}>
+
+                    {/* WORLD: every country */}
+                    {level === "world" && worldPaths && worldPaths.map((p) => {
+                      const on = active && p.u && active.u.id === p.u.id;
+                      const fill = p.covered ? scoreColor(p.u.perf) : "#d4d4d8";
+                      return (
+                        <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={fill} fillOpacity={p.covered ? 1 : 0.55}
+                          stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
+                          style={{ cursor: p.covered ? "pointer" : "not-allowed" }}
+                          onMouseEnter={() => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name), greyed: !p.covered })}
+                          onClick={(e) => { e.stopPropagation(); pickCountry(p); }} />
+                      );
+                    })}
+
+                    {/* ADM1 */}
+                    {level === "adm1" && adm1 && adm1.map((d0) => (
+                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
+                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo })}
+                        onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
+                    ))}
+
+                    {/* ADM2 */}
+                    {level === "adm2" && adm2 && adm2.map((d0) => (
+                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
+                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo })}
+                        onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
+                    ))}
+
+                    {/* ADM3 / blocks */}
+                    {level === "adm3" && blocks && blocks.map((b) => (
+                      <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
+                        stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo })}
+                        onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                    ))}
+
+                    {/* schools */}
+                    {level === "schools" && blk && (
+                      <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k}
+                        style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()} />
+                    )}
+                    {level === "schools" && schools && schools.map((sc) => (
+                      <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 9 : 6) / tf.k}
+                        fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={1.2 / tf.k} style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setActive({ u: sc.u, title: sc.name, sub: "Head Teacher · " + sc.u.name })}
+                        onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
+                    ))}
+
+                    {/* school force graph */}
+                    {level === "school" && school && (
+                      <g>
+                        {school.links.map((l, idx) => (
+                          <line key={"l" + idx} x1={l.source.x} y1={l.source.y} x2={l.target.x} y2={l.target.y}
+                            stroke="#cbd5e1" strokeWidth={(l.source.group === "ht" ? 1.6 : 0.8) / tf.k} />
+                        ))}
+                        {school.nodes.map((n) => {
+                          const on = active && active.u.id === n.id;
+                          return (
+                            <circle key={n.id} cx={n.x} cy={n.y} r={n.r}
+                              fill={scoreColor(n.u.perf)} stroke={on || n.group === "ht" ? "#0f172a" : "#ffffff"}
+                              strokeWidth={(n.group === "ht" ? 2.5 : on ? 2 : 0.8) / tf.k} style={{ cursor: "pointer" }}
+                              onMouseEnter={() => setActive({ u: n.u, title: n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student", sub: n.u.name })}
+                              onClick={(e) => e.stopPropagation()} />
+                          );
+                        })}
+                      </g>
+                    )}
+
+                    {/* hover glow from the bar graph */}
+                    {hoverId && (() => {
+                      const e = entities.find((x) => x.id === hoverId);
+                      if (!e || !e.anchor) return null;
+                      return (
+                        <g pointerEvents="none">
+                          {e.pathD && <path d={e.pathD} fill="none" stroke="#2563eb" strokeWidth={4 / tf.k} className="glowpulse" />}
+                          <circle cx={e.anchor[0]} cy={e.anchor[1]} r={(e.dot ? 13 : 18) / tf.k} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} className="glowpulse" />
+                        </g>
+                      );
+                    })()}
+
+                    {/* chips (ADM1 / ADM2 / ADM3): face + name + score */}
+                    {(level === "adm1" || level === "adm2" || level === "adm3") && (() => {
+                      const items = level === "adm1"
+                        ? (adm1 || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillA1(d0.i), set: () => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo }) }))
+                        : level === "adm2"
+                        ? (adm2 || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillA2(d0.j), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo }) }))
+                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.k), set: () => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo }) }));
+                      return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
+                        if (!it.c || isNaN(it.c[0])) return null;
+                        const on = active && active.u.id === it.id;
+                        const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
+                        return (
+                          <foreignObject key={"c" + it.id} x={it.c[0] - w / 2} y={it.c[1] - h / 2} width={w} height={h} style={{ overflow: "visible", pointerEvents: "none" }}>
+                            <div onMouseEnter={it.set} onClick={(e) => { e.stopPropagation(); it.go(); }}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
+                              style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left", pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
+                              <img src={it.u.face} alt="" loading="lazy" className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 2px " + scoreColor(it.u.perf) }} />
+                              <div className="min-w-0 leading-tight">
+                                <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{it.name}</div>
+                                <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{it.u.name}</div>
+                              </div>
+                              <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(it.u.perf), color: textOn(it.u.perf) }}>{it.u.score}</span>
+                            </div>
+                          </foreignObject>
+                        );
+                      });
+                    })()}
+                  </g>
+                </svg>
+              )}
+
+              {busy && (
+                <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-1.5 text-[12px] font-medium text-white shadow-lg">
+                  Loading boundaries from geoBoundaries…
+                </div>
+              )}
+
+              {/* readout panel with demographics */}
+              {active && (
+                <div className="pointer-events-none absolute right-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + (active.greyed ? "#a1a1aa" : scoreColor(active.u.perf)) }} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                      <div className="truncate text-xs text-zinc-500">{active.sub}</div>
+                      <div className="text-[11px] text-zinc-400">{active.u.phone}</div>
+                    </div>
+                    {!active.greyed && <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>}
+                  </div>
+                  {active.demo && (
+                    <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Area</span><span className="font-semibold">{fmtArea(active.demo.areaKm2)}</span></div>
+                      <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span>Language{active.demo.langs.length > 1 ? "s" : ""}</span><span className="truncate text-right font-semibold">{active.demo.langs.join(", ")}</span></div>
+                      <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: modeled (WorldPop-style, demo). Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}.</div>
+                    </div>
+                  )}
+                  {!active.demo && (
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-600">
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + active.u.perf * 160)}</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(active.u.perf * 100)}%</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + active.u.perf * 1400)}</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{active.u.score}</span></div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {level !== "world" && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
+                  click empty space to go up one level
+                </div>
+              )}
+
+              {toast && (
+                <div className="absolute bottom-4 right-4 z-40 max-w-xs rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl">{toast}</div>
+              )}
+
+              <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
+                recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
+                savedTemplates={savedTemplates} setSavedTemplates={setSavedTemplates} savedFilters={savedFilters} setSavedFilters={setSavedFilters}
+                ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} />
+            </div>
+
+            <BarGraph entities={entities} selectedIds={selectedIds} hoverId={hoverId}
+              onHover={setHoverId} onToggle={toggleSend} onAddRange={addEntities} />
+          </div>
+        );
+      }
+
+      return WorldMap;
+    })();
+
+    // #####################################################################
     // ## Top-level shell: a toggle that switches between the two views.   ##
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      const TABS = ["force", "tree", "map"];
+      const TABS = ["force", "tree", "map", "world"];
       const [view, setView] = useState(() => {
         const h = (window.location.hash || "").replace("#", "");
-        return TABS.includes(h) ? h : "map";
+        return TABS.includes(h) ? h : "world";
       });
       useEffect(() => { window.location.hash = view; }, [view]);
       const tab = (id, label) => (
@@ -2170,11 +3212,12 @@
             <div className="ml-auto flex rounded-lg bg-zinc-800 p-0.5">
               {tab("force", "Force graph")}
               {tab("tree", "Tree")}
-              {tab("map", "Map")}
+              {tab("map", "Map (India)")}
+              {tab("world", "World")}
             </div>
           </div>
           <div className="relative min-h-0 flex-1">
-            {view === "force" ? <ForceGraphApp /> : view === "tree" ? <TreeFlowApp /> : <MapApp />}
+            {view === "force" ? <ForceGraphApp /> : view === "tree" ? <TreeFlowApp /> : view === "map" ? <MapApp /> : <WorldMapApp />}
           </div>
         </div>
       );
