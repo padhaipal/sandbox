@@ -2814,6 +2814,90 @@
         );
       }
 
+      // "Fund this location" CTA — visible to donors, residents, peers and officials.
+      // Tabs: individual (payment portal) | government | philanthropic org (intake forms).
+      function FundModal({ data, onClose }) {
+        const [tab, setTab] = useState("individual");
+        const [amount, setAmount] = useState(25);
+        const [custom, setCustom] = useState("");
+        const [monthly, setMonthly] = useState(false);
+        const [done, setDone] = useState(null);
+        const amt = custom ? Math.max(0, parseFloat(custom) || 0) : amount;
+        const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
+        const TABS = [["individual", "Individual"], ["government", "Government"], ["philanthropy", "Philanthropic org"]];
+        return (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-zinc-900">Fund {data.title}</div>
+                  <div className="text-xs text-zinc-500">Goes straight to this location's bucket — fully committed, not pledged. Anyone viewing (residents, peers, donors or officials) can fund it.</div>
+                </div>
+                <button onClick={onClose} className="-mr-1 rounded-md px-2 py-0.5 text-lg leading-none text-zinc-400 hover:bg-zinc-100">×</button>
+              </div>
+              <div className="mt-3 flex gap-1 rounded-lg bg-zinc-100 p-0.5">
+                {TABS.map(([k, lbl]) => (
+                  <button key={k} onClick={() => { setTab(k); setDone(null); }} className={"flex-1 rounded-md px-2 py-1.5 text-xs font-semibold " + (tab === k ? "bg-white text-zinc-900 shadow" : "text-zinc-500 hover:text-zinc-700")}>{lbl}</button>
+                ))}
+              </div>
+              {done ? (
+                <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-center">
+                  <div className="text-2xl">✅</div>
+                  <div className="mt-1 text-sm font-semibold text-emerald-800">{done === "individual" ? "Thank you! " + (monthly ? "$" + amt + "/mo" : "$" + amt) + " to " + data.title + "." : "Request received"}</div>
+                  <div className="mt-1 text-xs text-emerald-700">{done === "individual" ? "A receipt is on its way to your email." : "Our partnerships team will reach out to start the funding process."}</div>
+                  <button onClick={onClose} className="mt-3 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Done</button>
+                </div>
+              ) : tab === "individual" ? (
+                <div className="mt-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    {[10, 25, 50, 100].map((v) => (
+                      <button key={v} onClick={() => { setAmount(v); setCustom(""); }} className={"rounded-lg border px-2 py-2 text-sm font-semibold " + (!custom && amount === v ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-300 text-zinc-700 hover:bg-zinc-50")}>${v}</button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-sm text-zinc-400">$</span>
+                    <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="decimal" placeholder="Other amount" className={inputCls} />
+                  </div>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
+                    <input type="checkbox" checked={monthly} onChange={(e) => setMonthly(e.target.checked)} /> Make this a monthly gift
+                  </label>
+                  <button onClick={() => amt > 0 && setDone("individual")} disabled={!(amt > 0)}
+                    className="mt-3 flex w-full items-center justify-center gap-1 rounded-full py-2.5 text-base font-bold shadow-sm hover:brightness-95 disabled:opacity-50" style={{ background: "#ffc439" }}>
+                    <span style={{ color: "#003087" }}>Pay</span><span style={{ color: "#0070ba" }}>Pal</span>
+                  </button>
+                  <button onClick={() => amt > 0 && setDone("individual")} disabled={!(amt > 0)}
+                    className="mt-2 w-full rounded-full bg-zinc-900 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">Debit or Credit Card</button>
+                  <div className="mt-2 text-[10px] text-zinc-400">Demo portal — connect the live PayPal/Stripe SDK here for real payments.</div>
+                </div>
+              ) : (
+                <form key={tab} onSubmit={(e) => { e.preventDefault(); setDone(tab); }} className="mt-4 space-y-2">
+                  <div className="text-xs text-zinc-500">{tab === "government" ? "For government officials sponsoring this jurisdiction." : "For foundations, corporates, overseas NGOs or major individual donors."}</div>
+                  {tab === "government" ? (
+                    <React.Fragment>
+                      <input required placeholder="Department / ministry" className={inputCls} />
+                      <input required placeholder="Official name & role" className={inputCls} />
+                      <input required type="email" placeholder="Official email" className={inputCls} />
+                      <input placeholder="Jurisdiction" defaultValue={data.title} className={inputCls} />
+                      <input placeholder="Indicative annual budget (USD)" inputMode="numeric" className={inputCls} />
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <input required placeholder="Organisation name" className={inputCls} />
+                      <select defaultValue="" className={inputCls}><option value="" disabled>Organisation type…</option><option>Foundation</option><option>Corporate / CSR</option><option>Overseas NGO</option><option>Major individual donor</option></select>
+                      <input required placeholder="Contact name" className={inputCls} />
+                      <input required type="email" placeholder="Contact email" className={inputCls} />
+                      <input placeholder="Indicative pledge (USD)" inputMode="numeric" className={inputCls} />
+                    </React.Fragment>
+                  )}
+                  <textarea placeholder="Anything we should know?" rows={2} className={inputCls} />
+                  <button type="submit" className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700">Start the funding process</button>
+                </form>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       const iso3Of = (p) => {
         const a = p.ISO_A3_EH, b = p.ISO_A3;
         if (a && a !== "-99") return a;
@@ -3437,6 +3521,7 @@
         const [pendingInvites, setPendingInvites] = useState(() => new Map());   // nodeId -> { name, phone } (last invite sent)
         const recordInvite = (id, person) => setPendingInvites((m) => { const n = new Map(m); n.set(id, person); return n; });
         const [petition, setPetition] = useState(null);   // { title, count, signups } -> full-screen petition page
+        const [fund, setFund] = useState(null);            // { title, id } -> Fund-this-location modal
 
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
@@ -3817,6 +3902,9 @@
                               <div className="text-[10px] font-semibold text-amber-700">{fmtPop(js.paused)} learners paused for lack of funds</div>
                               <div className="mt-0.5 text-[9px] leading-snug text-amber-700/90">Forgone by 2050 (WWHGE): {fmtMoney(pi.gdp)} GDP · {fmtMoney(pi.tax)} tax · {fmtPop(pi.lives)} lives saved · {fmtPop(pi.marriages)} child marriages averted · {fmtPop(pi.secondary)} reaching secondary · {fmtPop(pi.employed)} youth employed</div>
                             </div>
+                            <button onClick={() => setFund({ title: active.title, id: active.u.id })}
+                              className="mt-1.5 w-full rounded-md bg-emerald-600 px-2 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">💚 Fund this location</button>
+                            <div className="mt-0.5 text-center text-[9px] text-zinc-400">Open to residents, peers, donors &amp; officials</div>
                             <button onClick={() => setPetition({ title: active.title, count: js.petitionCount, signups: js.petitionSignups })}
                               className="mt-1.5 flex w-full items-center justify-between gap-2 rounded bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100">
                               <span className="truncate">{js.petitionCount.toLocaleString()} citizens petitioned the government to fund this</span>
@@ -3959,6 +4047,7 @@
 
               {invite && <InviteModal key={invite.id} data={invite} initial={pendingInvites.get(invite.id) || null} onClose={() => setInvite(null)} onSent={(person) => recordInvite(invite.id, person)} />}
               {petition && <PetitionPage title={petition.title} count={petition.count} signups={petition.signups} onClose={() => setPetition(null)} />}
+              {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
 
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                 recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
