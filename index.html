@@ -2578,6 +2578,28 @@
       const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
       const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
 
+      // National foundational-literacy assessment each government prefers (ACER is shown everywhere).
+      // India = NIPUN; others use their own; unlisted countries show no second test.
+      const NAT_TEST = {
+        IND: "NIPUN", USA: "NAEP", GBR: "KS1 phonics", AUS: "NAPLAN", BRA: "SAEB", ZAF: "EGRA",
+        KEN: "KPSEA", NGA: "NECO", FRA: "Évaluations", DEU: "VERA", IDN: "AKM", PHL: "NAT",
+        PAK: "ASER", BGD: "NSA", NPL: "NASA", LKA: "NEREC", MEX: "PLANEA", COL: "Saber", PER: "ECE",
+      };
+      // illustrative learning stats (deterministic per node; scales with population & score)
+      function learnStats(u, demo, iso) {
+        const h = hashStr("learn:" + u.id);
+        const students = Math.max(50, Math.round(demo.pop * 0.12));     // school-age, rough
+        const active = students * (0.35 + u.perf * 0.5);
+        const perDay = 2 + (h % 5) + u.perf * 3;                        // letters / active student / day
+        const yest = Math.round(active * perDay);
+        const week = Math.round(yest * (5 + (h % 3) * 0.3));
+        const month = Math.round(week * 4.3);
+        const year = Math.round(month * (10 + (h % 3)));
+        const band = (salt) => Math.max(0, Math.min(100, Math.round(32 + u.perf * 58 + ((hashStr(salt + u.id)) % 13) - 6)));
+        const natName = NAT_TEST[iso] || null;
+        return { yest, week, month, year, acer: band("acer:"), nat: natName ? { name: natName, score: band("nat:") } : null };
+      }
+
       const iso3Of = (p) => {
         const a = p.ISO_A3_EH, b = p.ISO_A3;
         if (a && a !== "-99") return a;
@@ -3324,7 +3346,7 @@
                     {/* WORLD: every country */}
                     {level === "world" && worldPaths && worldPaths.map((p) => {
                       const on = active && p.u && active.u.id === p.u.id;
-                      const onEnter = () => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered });
+                      const onEnter = () => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered, iso: p.iso });
                       const onClick = (e) => { e.stopPropagation(); pickCountry(p); };
                       if (!p.covered) {
                         return (
@@ -3351,7 +3373,7 @@
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo })}
+                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
                         {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE" })} />}
                       </g>
@@ -3364,7 +3386,7 @@
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo })}
+                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
                         {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA" })} />}
                       </g>
@@ -3377,7 +3399,7 @@
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo })}
+                          onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
                         {isDimmed(b.id, b.demo.phon) && <PlusButton c={b.seed} k={tf.k} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO" })} />}
                       </g>
@@ -3459,7 +3481,6 @@
                   {active.demo && (
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
-                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Area</span><span className="font-semibold">{fmtArea(active.demo.areaKm2)}</span></div>
                       {(() => {
                         const { ph, non } = splitLangs(active.demo.pairs);
                         return (
@@ -3475,7 +3496,24 @@
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
-                      <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script.</div>
+                      {(() => {
+                        const ls = learnStats(active.u, active.demo, active.iso);
+                        return (
+                          <React.Fragment>
+                            <div className="rounded bg-zinc-50 px-2 py-1.5">
+                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">Letters learnt</div>
+                              <div className="grid grid-cols-4 gap-1 text-center">
+                                {[["Yest", ls.yest], ["Week", ls.week], ["Month", ls.month], ["Year", ls.year]].map(([k, v]) => (
+                                  <div key={k}><div className="text-[9px] text-zinc-400">{k}</div><div className="text-[11px] font-semibold text-zinc-800">{fmtPop(v)}</div></div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>ACER avg</span><span className="font-semibold">{ls.acer} / 100</span></div>
+                            {ls.nat && <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{ls.nat.name} avg</span><span className="font-semibold">{ls.nat.score} / 100</span></div>}
+                          </React.Fragment>
+                        );
+                      })()}
+                      <div className="text-[9px] text-zinc-400">Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script. Learning stats: illustrative.</div>
                     </div>
                   )}
                   {!active.demo && (
