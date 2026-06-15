@@ -2066,12 +2066,24 @@
                         ))}
                         {school.nodes.map((n) => {
                           const on = active && active.u.id === n.id;
+                          const s = 1 / tf.k;
+                          const faceR = n.group === "ht" ? 22 : n.group === "teacher" ? 15 : 10;
+                          const ring = n.group === "ht" ? 3 : 2;
+                          const W = 76, lbl = n.group === "ht" ? "HT" : n.group === "teacher" ? "Tchr" : "Std";
+                          const nm = n.u.name.length > 14 ? n.u.name.slice(0, 13) + "…" : n.u.name;
+                          const title = n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student";
                           return (
-                            <circle key={n.id} cx={n.x} cy={n.y} r={n.r}
-                              fill={scoreColor(n.u.perf)} stroke={on || n.group === "ht" ? "#0f172a" : "#ffffff"}
-                              strokeWidth={(n.group === "ht" ? 2.5 : on ? 2 : 0.8) / tf.k} style={{ cursor: "pointer" }}
-                              onMouseEnter={() => setActive({ u: n.u, title: n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student", sub: n.u.name })}
-                              onClick={(e) => e.stopPropagation()} />
+                            <foreignObject key={n.id} x={n.x - (W * s) / 2} y={n.y - faceR * s} width={W * s} height={(faceR * 2 + 32) * s} style={{ overflow: "visible", pointerEvents: "none" }}>
+                              <div style={{ width: W, transform: `scale(${s})`, transformOrigin: "top left" }} className="flex flex-col items-center"
+                                onMouseEnter={() => setActive({ u: n.u, title, sub: n.u.name })} onClick={(e) => e.stopPropagation()}>
+                                <img src={n.u.face} alt="" loading="lazy" className="rounded-full object-cover brightness-110"
+                                  style={{ width: faceR * 2, height: faceR * 2, boxShadow: "0 0 0 " + ring + "px " + scoreColor(n.u.perf), outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
+                                <div className="mt-0.5 max-w-full rounded bg-white/85 px-1 text-center leading-tight shadow-sm" style={{ pointerEvents: "auto" }}>
+                                  <div className="truncate font-semibold text-zinc-900" style={{ fontSize: 10 }}>{nm}</div>
+                                  <div className="text-zinc-500" style={{ fontSize: 9 }}>{lbl} · {n.u.score}</div>
+                                </div>
+                              </div>
+                            </foreignObject>
                           );
                         })}
                       </g>
@@ -2294,17 +2306,17 @@
         return `M${cx.toFixed(1)},${cy.toFixed(1)}L${x0},${y0}A${r.toFixed(1)},${r.toFixed(1)} 0 ${large} 1 ${x1},${y1}Z`;
       };
       // clipped pie group (no border / interactions — those stay on the area path).
-      // 3 segments: covered-phonetic (colored) | phonetic-but-uncovered (grey) | non-phonetic (dark).
-      function pieEls(key, d, c, R, frac, perf, cover) {
+      // 3 segments by teachability: taught today (colored) | buildable later (grey) | never (dark).
+      function pieEls(key, d, c, R, phon, perf, teach) {
         if (!c || !d || !(R > 0)) return null;
         const cid = "pie-" + String(key).replace(/[^\w-]/g, "_");
         const color = scoreColor(perf), cx = c[0], cy = c[1];
-        const f = frac < 0 ? 0 : frac > 1 ? 1 : frac;
-        const cv = cover == null ? 1 : cover < 0 ? 0 : cover > 1 ? 1 : cover;
+        const f = phon < 0 ? 0 : phon > 1 ? 1 : phon;            // phonetic share (teachable today + later)
+        const t = teach == null ? 0 : teach < 0 ? 0 : teach > f ? f : teach;  // taught today (<= phonetic)
         const segs = [
-          { f: f * cv, fill: color },           // phonetic + in PadhaiPal network
-          { f: f * (1 - cv), fill: UNCOVERED },  // phonetic but outside coverage
-          { f: 1 - f, fill: NONPHON },           // non-phonetic
+          { f: t, fill: color },               // languages we teach today (Hindi)
+          { f: f - t, fill: UNCOVERED },        // languages we can build next (phonetic)
+          { f: 1 - f, fill: NONPHON },          // languages beyond the method
         ].filter((s) => s.f > 0.0005);
         let wedges;
         if (segs.length <= 1) wedges = <circle cx={cx} cy={cy} r={R} fill={(segs[0] || { fill: NONPHON }).fill} />;
@@ -2321,8 +2333,8 @@
       }
       // pie for an area; if the node is NOT in the PadhaiPal network, lay a translucent
       // grey filter over it so the underlying pie still shows through.
-      function areaPie(clipKey, nodeId, d, c, R, frac, perf) {
-        const pie = pieEls(clipKey, d, c, R, frac, perf, coverShare(nodeId));
+      function areaPie(clipKey, nodeId, d, c, R, frac, perf, teach) {
+        const pie = pieEls(clipKey, d, c, R, frac, perf, teach);
         if (!isDimmed(nodeId, frac)) return pie;
         return (
           <React.Fragment>
@@ -2360,15 +2372,27 @@
       }
       // modal to invite the (missing) lead for an unregistered area via WhatsApp / shareable link
       function InviteModal({ data, initial, onClose, onSent }) {
+        const [tab, setTab] = useState("single");
         const [name, setName] = useState(initial ? initial.name : "");
         const [phone, setPhone] = useState(initial ? initial.phone : "");
         const [copied, setCopied] = useState(false);
+        const [bulk, setBulk] = useState(null);   // { fileName, count } | null
+        const [bulkSent, setBulkSent] = useState(false);
         const digits = phone.replace(/[^\d]/g, "");
         const who = name.trim() ? name.trim() + ", you're" : "Hi! You're";
         const msg = who + " invited to join the PadhaiPal network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
         const waHref = "https://wa.me/" + digits + "?text=" + encodeURIComponent(msg);
         const copy = () => { try { navigator.clipboard.writeText(data.link); } catch (e) {} setCopied(true); };
         const send = (e) => { if (!digits) { e.preventDefault(); return; } onSent({ name: name.trim(), phone: phone.trim() }); onClose(); };
+        const onFile = (e) => {
+          const f = e.target.files && e.target.files[0]; if (!f) return;
+          setBulkSent(false);
+          if (/csv/i.test(f.type) || /\.csv$/i.test(f.name)) {
+            const r = new FileReader();
+            r.onload = () => { const rows = String(r.result || "").split(/\r?\n/).filter((l) => l.trim()).length; setBulk({ fileName: f.name, count: Math.max(0, rows - 1) }); };
+            r.readAsText(f);
+          } else { setBulk({ fileName: f.name, count: 6 + (f.size % 28) }); }   // mock OCR extraction from a screenshot
+        };
         return (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
             <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -2379,22 +2403,57 @@
                 </div>
                 <button onClick={onClose} className="-mr-1 rounded-md px-2 py-0.5 text-lg leading-none text-zinc-400 hover:bg-zinc-100">×</button>
               </div>
-              <label className="mt-4 block text-[11px] font-semibold text-zinc-600">Name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
-              <label className="mt-3 block text-[11px] font-semibold text-zinc-600">WhatsApp phone number</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel"
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
-              <a href={digits ? waHref : undefined} target="_blank" rel="noreferrer" onClick={send}
-                className={"mt-3 block w-full rounded-lg px-3 py-2 text-center text-sm font-semibold text-white " + (digits ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-blue-300")}>
-                Send WhatsApp invite message
-              </a>
-              <div className="mt-4 text-[11px] font-semibold text-zinc-600">Or copy a link to share via another channel</div>
-              <div className="mt-1 flex items-center gap-2">
-                <input readOnly value={data.link} onFocus={(e) => e.target.select()}
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-600" />
-                <button onClick={copy} className="flex-shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">{copied ? "Copied" : "Copy"}</button>
+              <div className="mt-3 flex gap-1 rounded-lg bg-zinc-100 p-0.5">
+                {[["single", "Invite one"], ["bulk", "Bulk upload"]].map(([k, l]) => (
+                  <button key={k} onClick={() => setTab(k)} className={"flex-1 rounded-md px-2 py-1.5 text-xs font-semibold " + (tab === k ? "bg-white text-zinc-900 shadow" : "text-zinc-500 hover:text-zinc-700")}>{l}</button>
+                ))}
               </div>
+              {tab === "single" ? (
+                <React.Fragment>
+                  <label className="mt-4 block text-[11px] font-semibold text-zinc-600">Name</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+                  <label className="mt-3 block text-[11px] font-semibold text-zinc-600">WhatsApp phone number</label>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel"
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+                  <a href={digits ? waHref : undefined} target="_blank" rel="noreferrer" onClick={send}
+                    className={"mt-3 block w-full rounded-lg px-3 py-2 text-center text-sm font-semibold text-white " + (digits ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-blue-300")}>
+                    Send WhatsApp invite message
+                  </a>
+                  <div className="mt-4 text-[11px] font-semibold text-zinc-600">Or copy a link to share via another channel</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input readOnly value={data.link} onFocus={(e) => e.target.select()}
+                      className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-600" />
+                    <button onClick={copy} className="flex-shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">{copied ? "Copied" : "Copy"}</button>
+                  </div>
+                </React.Fragment>
+              ) : (
+                <div className="mt-4">
+                  <div className="text-xs text-zinc-600">Add a whole group at once. Upload either:</div>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[11px] text-zinc-500">
+                    <li>a <span className="font-semibold">CSV</span> with name &amp; phone columns, or</li>
+                    <li>a <span className="font-semibold">screenshot</span> of a WhatsApp group's participant list.</li>
+                  </ul>
+                  <div className="mt-1 text-[11px] text-zinc-500">We extract every name–phone pair and message each person on WhatsApp.</div>
+                  <label className="mt-3 block cursor-pointer rounded-xl border-2 border-dashed border-zinc-300 p-4 text-center hover:border-blue-400">
+                    <input type="file" accept=".csv,text/csv,image/*" className="hidden" onChange={onFile} />
+                    <div className="text-2xl">⬆️</div>
+                    <div className="text-sm font-semibold text-zinc-700">Drop a CSV or WhatsApp screenshot</div>
+                    <div className="text-[11px] text-zinc-400">…or click to choose a file</div>
+                  </label>
+                  {bulk && !bulkSent && (
+                    <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-center">
+                      <div className="text-sm font-semibold text-emerald-800">Found {bulk.count} name–phone pairs</div>
+                      <div className="truncate text-[11px] text-emerald-700">in {bulk.fileName}</div>
+                      <button onClick={() => setBulkSent(true)} disabled={!bulk.count} className="mt-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Send WhatsApp invites to all {bulk.count}</button>
+                    </div>
+                  )}
+                  {bulkSent && (
+                    <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800">✅ Queued {bulk.count} WhatsApp invitations.</div>
+                  )}
+                  <div className="mt-2 text-[10px] text-zinc-400">Demo — wire CSV parsing + screenshot OCR to extract real contacts.</div>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -2574,6 +2633,10 @@
       const REGION_LANGS = {
         "Uttar Pradesh": [["Hindi", .80], ["Urdu", .14], ["English", .06]],
       };
+      // languages PadhaiPal can teach today. A phonetic (>=PHON_MIN) language is buildable
+      // later (shown as "on the roadmap" — the criterion is not surfaced to users).
+      const TEACHABLE_NOW = new Set(["Hindi"]);
+      const teachFrac = (pairs) => { let tot = 0, t = 0; for (const [l, s] of pairs) { tot += s; if (TEACHABLE_NOW.has(l)) t += s; } return tot > 0 ? t / tot : 0; };
       // share of the population speaking a "phonetic" (score ≥ PHON_MIN) language
       const phonFrac = (pairs) => {
         let tot = 0, ph = 0;
@@ -2581,23 +2644,19 @@
         return tot > 0 ? ph / tot : 0;
       };
       const langFor = (iso, regionName) => {
-        if (regionName && REGION_LANGS[regionName]) {
-          const pairs = REGION_LANGS[regionName];
-          return { langs: pairs.map((p) => p[0]), pairs, real: true, phon: phonFrac(pairs) };
-        }
-        if (regionName && REGION_LANG[regionName]) {
-          const ls = REGION_LANG[regionName], pairs = ls.map((l) => [l, 1 / ls.length]);
-          return { langs: ls, pairs, real: true, phon: phonFrac(pairs) };
-        }
-        if (COUNTRY_LANGS[iso]) { const pairs = COUNTRY_LANGS[iso]; return { langs: pairs.map((p) => p[0]), pairs, real: false, phon: phonFrac(pairs) }; }
-        return { langs: ["—"], pairs: [], real: false, phon: 0 };
+        const wrap = (pairs, real) => ({ langs: pairs.map((p) => p[0]), pairs, real, phon: phonFrac(pairs), teach: teachFrac(pairs) });
+        if (regionName && REGION_LANGS[regionName]) return wrap(REGION_LANGS[regionName], true);
+        if (regionName && REGION_LANG[regionName]) { const ls = REGION_LANG[regionName]; return wrap(ls.map((l) => [l, 1 / ls.length]), true); }
+        if (COUNTRY_LANGS[iso]) return wrap(COUNTRY_LANGS[iso], false);
+        return { langs: ["—"], pairs: [], real: false, phon: 0, teach: 0 };
       };
-      // top-3 languages per group (phonetic vs not), share >= 10%, dropping "Other"/"—"
+      // top-3 languages per teachability group, dropping "Other"/"—":
+      // now = taught today; soon = phonetic (buildable later); never = beyond the method.
       function splitLangs(pairs) {
-        const ph = [], non = [];
-        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (isPhonetic(l) ? ph : non).push([l, s]); });
+        const now = [], soon = [], never = [];
+        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (TEACHABLE_NOW.has(l) ? now : isPhonetic(l) ? soon : never).push([l, s]); });
         const top3 = (a) => a.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([l, s]) => l + " " + Math.round(s * 100) + "%");
-        return { ph: top3(ph), non: top3(non) };
+        return { now: top3(now), soon: top3(soon), never: top3(never) };
       }
       function demoFor(feature, iso, regionName, isCountry, inherit) {
         const areaKm2 = planarAreaKm2(feature);
@@ -3298,7 +3357,8 @@
             const iso = iso3Of(f.properties);
             const covered = !!(iso && coverage && coverage.has(iso));
             const u = iso ? node("r." + iso) : null;
-            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: langFor(iso, f.properties.ADMIN).phon, u };
+            const lf = langFor(iso, f.properties.ADMIN);
+            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: lf.phon, teach: lf.teach, u };
           }).filter(Boolean);
         }, [projd, isWorld, worldGeo, coverage]);
 
@@ -3369,7 +3429,7 @@
             const id = dst.id + "." + k; const cell = vor.cellPolygon(k);
             const poly = cell ? clipPolygon(dst.ring, cell) : [];
             return { k, id, u: node(id), name: "Block " + (k + 1), ring: poly, d: poly.length >= 3 ? toPath(poly) : "", seed: s,
-              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, pairs: dst.demo.pairs, real: dst.demo.real, phon: dst.demo.phon } };
+              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, pairs: dst.demo.pairs, real: dst.demo.real, phon: dst.demo.phon, teach: dst.demo.teach } };
           }).filter((b) => b.ring.length >= 3);
         }, [adm2, a2Idx, adm3FC, projd, country]);
 
@@ -3737,7 +3797,7 @@
                       }
                       return (
                         <g key={p.i}>
-                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf)}
+                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, p.teach)}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
@@ -3748,7 +3808,7 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3760,7 +3820,7 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3772,7 +3832,7 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf)}
+                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, b.demo.teach)}
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3812,12 +3872,24 @@
                         ))}
                         {school.nodes.map((n) => {
                           const on = active && active.u.id === n.id;
+                          const s = 1 / tf.k;
+                          const faceR = n.group === "ht" ? 22 : n.group === "teacher" ? 15 : 10;
+                          const ring = n.group === "ht" ? 3 : 2;
+                          const W = 76, lbl = n.group === "ht" ? "HT" : n.group === "teacher" ? "Tchr" : "Std";
+                          const nm = n.u.name.length > 14 ? n.u.name.slice(0, 13) + "…" : n.u.name;
+                          const title = n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student";
                           return (
-                            <circle key={n.id} cx={n.x} cy={n.y} r={n.r}
-                              fill={scoreColor(n.u.perf)} stroke={on || n.group === "ht" ? "#0f172a" : "#ffffff"}
-                              strokeWidth={(n.group === "ht" ? 2.5 : on ? 2 : 0.8) / tf.k} style={{ cursor: "pointer" }}
-                              onMouseEnter={() => setActive({ u: n.u, title: n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student", sub: n.u.name })}
-                              onClick={(e) => e.stopPropagation()} />
+                            <foreignObject key={n.id} x={n.x - (W * s) / 2} y={n.y - faceR * s} width={W * s} height={(faceR * 2 + 32) * s} style={{ overflow: "visible", pointerEvents: "none" }}>
+                              <div style={{ width: W, transform: `scale(${s})`, transformOrigin: "top left" }} className="flex flex-col items-center"
+                                onMouseEnter={() => setActive({ u: n.u, title, sub: n.u.name })} onClick={(e) => e.stopPropagation()}>
+                                <img src={n.u.face} alt="" loading="lazy" className="rounded-full object-cover brightness-110"
+                                  style={{ width: faceR * 2, height: faceR * 2, boxShadow: "0 0 0 " + ring + "px " + scoreColor(n.u.perf), outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
+                                <div className="mt-0.5 max-w-full rounded bg-white/85 px-1 text-center leading-tight shadow-sm" style={{ pointerEvents: "auto" }}>
+                                  <div className="truncate font-semibold text-zinc-900" style={{ fontSize: 10 }}>{nm}</div>
+                                  <div className="text-zinc-500" style={{ fontSize: 9 }}>{lbl} · {n.u.score}</div>
+                                </div>
+                              </div>
+                            </foreignObject>
                           );
                         })}
                       </g>
@@ -3922,16 +3994,17 @@
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       {(() => {
-                        const { ph, non } = splitLangs(active.demo.pairs);
+                        const { now, soon, never } = splitLangs(active.demo.pairs);
                         return (
                           <React.Fragment>
-                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic langs</span><span className="min-w-0 break-words text-right font-semibold">{ph.length ? ph.join(", ") : "—"}</span></div>
-                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Non-phonetic langs</span><span className="min-w-0 break-words text-right font-semibold">{non.length ? non.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-emerald-700">Teaching today</span><span className="min-w-0 break-words text-right font-semibold">{now.length ? now.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">On the roadmap</span><span className="min-w-0 break-words text-right font-semibold">{soon.length ? soon.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">Beyond our method</span><span className="min-w-0 break-words text-right font-semibold">{never.length ? never.join(", ") : "—"}</span></div>
                           </React.Fragment>
                         );
                       })()}
-                      {active.demo.phon != null && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop</span></div>
+                      {active.demo.teach != null && (
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(active.demo.teach * 100)}% taught today · {Math.round(active.demo.phon * 100)}% in time</span></div>
                       )}
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
@@ -3951,8 +4024,17 @@
                         if ((level === "adm2" || level === "adm3") && a1f) locChain.push(a1f.name);
                         if (level !== "world" && country) locChain.push(country.name);
                         const locTitle = locChain.join(" · ");
+                        // funding runway at linear projected usage: green = 365+ days, red = run out
+                        const dailyBurn = js.spendNow / 365;
+                        const daysLeft = live && dailyBurn > 0 ? Math.round(js.budget.total / dailyBurn) : 0;
+                        const fp = clamp(daysLeft / 365, 0, 1);
+                        const bg = live ? "rgba(" + scoreRGB(fp).join(",") + ",0.22)" : "rgba(228,228,231,0.5)";
+                        const fundClass = daysLeft <= 0 ? "text-red-700" : daysLeft < 120 ? "text-amber-700" : "text-emerald-700";
                         return (
-                          <div className="rounded bg-zinc-50 px-2 py-1.5">
+                          <div className="rounded px-2 py-1.5" style={{ background: bg }}>
+                            <div className={"mb-1 text-[11px] font-bold " + (live ? fundClass : "text-zinc-500")}>
+                              {!live ? "No funding allocated here yet" : daysLeft >= 365 ? "365+ days of funding left" : daysLeft <= 0 ? "Funding has run out" : daysLeft + " days of funding left"}
+                            </div>
                             {!live && <div className="mb-1 rounded bg-zinc-100 px-2 py-1 text-[9px] font-medium text-zinc-500">No PadhaiPal data collected at this level yet — metrics shown zeroed.</div>}
                             <div className="mb-1 text-[10px] font-semibold text-zinc-500">Budget <span className="font-normal text-zinc-400">· committed &amp; allocated to this location</span></div>
                             <div className="flex items-center gap-3">
@@ -4093,15 +4175,15 @@
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                      <span>Speaks a phonetic script <span className="text-zinc-400">(colour = avg score 0–100)</span></span>
+                      <span>Speaks a language we teach today <span className="text-zinc-400">(colour = avg score)</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                      <span>Phonetic, but outside PadhaiPal coverage</span>
+                      <span>Speaks a language on our roadmap</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
-                      <span>Non-phonetic script (or no district data)</span>
+                      <span>Speaks a language beyond our method (or no data)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
@@ -4110,7 +4192,7 @@
                       <span>Dimmed = node not registered in PadhaiPal</span>
                     </div>
                   </div>
-                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · phonetic = script ≥{PHON_MIN} transparency · coverage is demo/random</div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · today PadhaiPal teaches Hindi · demo data</div>
                 </div>
               </div>
 
