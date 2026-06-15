@@ -2505,12 +2505,19 @@
       };
       const langFor = (iso, regionName) => {
         if (regionName && REGION_LANG[regionName]) {
-          const ls = REGION_LANG[regionName];
-          return { langs: ls, real: true, phon: phonFrac(ls.map((l) => [l, 1 / ls.length])) };
+          const ls = REGION_LANG[regionName], pairs = ls.map((l) => [l, 1 / ls.length]);
+          return { langs: ls, pairs, real: true, phon: phonFrac(pairs) };
         }
-        if (COUNTRY_LANGS[iso]) return { langs: COUNTRY_LANGS[iso].map((p) => p[0]), real: false, phon: phonFrac(COUNTRY_LANGS[iso]) };
-        return { langs: ["—"], real: false, phon: 0 };
+        if (COUNTRY_LANGS[iso]) { const pairs = COUNTRY_LANGS[iso]; return { langs: pairs.map((p) => p[0]), pairs, real: false, phon: phonFrac(pairs) }; }
+        return { langs: ["—"], pairs: [], real: false, phon: 0 };
       };
+      // top-3 languages per group (phonetic vs not), share >= 10%, dropping "Other"/"—"
+      function splitLangs(pairs) {
+        const ph = [], non = [];
+        (pairs || []).forEach(([l, s]) => { if (s < 0.10 || l === "Other" || l === "—") return; (isPhonetic(l) ? ph : non).push([l, s]); });
+        const top3 = (a) => a.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([l, s]) => l + " " + Math.round(s * 100) + "%");
+        return { ph: top3(ph), non: top3(non) };
+      }
       function demoFor(feature, iso, regionName, isCountry) {
         const areaKm2 = planarAreaKm2(feature);
         const dens = 12 + (hashStr("dens:" + (regionName || "") + iso) % 1100);
@@ -2977,7 +2984,7 @@
             const id = dst.id + "." + k; const cell = vor.cellPolygon(k);
             const poly = cell ? clipPolygon(dst.ring, cell) : [];
             return { k, id, u: node(id), name: "Block " + (k + 1), ring: poly, d: poly.length >= 3 ? toPath(poly) : "", seed: s,
-              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, real: dst.demo.real, phon: dst.demo.phon } };
+              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, pairs: dst.demo.pairs, real: dst.demo.real, phon: dst.demo.phon } };
           }).filter((b) => b.ring.length >= 3);
         }, [adm2, a2Idx, adm3FC, projd, country]);
 
@@ -3388,7 +3395,15 @@
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Area</span><span className="font-semibold">{fmtArea(active.demo.areaKm2)}</span></div>
-                      <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Language{active.demo.langs.length > 1 ? "s" : ""}</span><span className="min-w-0 break-words text-right font-semibold">{active.demo.langs.join(", ")}</span></div>
+                      {(() => {
+                        const { ph, non } = splitLangs(active.demo.pairs);
+                        return (
+                          <React.Fragment>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic langs</span><span className="min-w-0 break-words text-right font-semibold">{ph.length ? ph.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Non-phonetic langs</span><span className="min-w-0 break-words text-right font-semibold">{non.length ? non.join(", ") : "—"}</span></div>
+                          </React.Fragment>
+                        );
+                      })()}
                       {active.demo.phon != null && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie colored share)</span></span></div>
                       )}
