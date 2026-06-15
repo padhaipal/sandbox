@@ -2265,6 +2265,45 @@
         return best || [];
       }
       const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
+
+      // --- phonetic pie: fill each area with a 2-segment pie (colored=phonetic share,
+      //     black=rest) centered at its centroid, radius > the polygon so the border
+      //     clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
+      function cornerRadius(c, bbox) {
+        if (!c || !bbox) return 0;
+        const x0 = Array.isArray(bbox[0]) ? bbox[0][0] : bbox[0], y0 = Array.isArray(bbox[0]) ? bbox[0][1] : bbox[1];
+        const x1 = Array.isArray(bbox[0]) ? bbox[1][0] : bbox[2], y1 = Array.isArray(bbox[0]) ? bbox[1][1] : bbox[3];
+        let m = 0;
+        for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) { const d = Math.hypot(x - c[0], y - c[1]); if (d > m) m = d; }
+        return m * 1.06;
+      }
+      const wedgePath = (cx, cy, r, a0, a1) => {
+        const large = (a1 - a0) > Math.PI ? 1 : 0;
+        const x0 = (cx + r * Math.cos(a0)).toFixed(1), y0 = (cy + r * Math.sin(a0)).toFixed(1);
+        const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy + r * Math.sin(a1)).toFixed(1);
+        return `M${cx.toFixed(1)},${cy.toFixed(1)}L${x0},${y0}A${r.toFixed(1)},${r.toFixed(1)} 0 ${large} 1 ${x1},${y1}Z`;
+      };
+      // clipped pie group (no border / interactions — those stay on the area path)
+      function pieEls(key, d, c, R, frac, perf) {
+        if (!c || !d || !(R > 0)) return null;
+        const cid = "pie-" + String(key).replace(/[^\w-]/g, "_");
+        const color = scoreColor(perf), cx = c[0], cy = c[1];
+        const f = frac < 0 ? 0 : frac > 1 ? 1 : frac;
+        let wedges;
+        if (f <= 0.0005) wedges = <circle cx={cx} cy={cy} r={R} fill="#000" />;
+        else if (f >= 0.9995) wedges = <circle cx={cx} cy={cy} r={R} fill={color} />;
+        else {
+          const a = -Math.PI / 2, am = a + 2 * Math.PI * f, ae = a + 2 * Math.PI;
+          wedges = [<path key="c" d={wedgePath(cx, cy, R, a, am)} fill={color} />,
+                    <path key="b" d={wedgePath(cx, cy, R, am, ae)} fill="#000" />];
+        }
+        return (
+          <React.Fragment>
+            <defs><clipPath id={cid}><path d={d} /></clipPath></defs>
+            <g clipPath={`url(#${cid})`} pointerEvents="none">{wedges}</g>
+          </React.Fragment>
+        );
+      }
       function pointInPoly(p, ring) {
         let inside = false;
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -2370,19 +2409,51 @@
       //  Demographics (population modeled from real polygon area; language
       //  from a country table). Honestly flagged as demo estimates in the UI.
       // =====================================================================
-      const COUNTRY_LANG = {
-        USA: ["English", "Spanish"], IND: ["Hindi", "English", "+21 official"], CHN: ["Mandarin"], BRA: ["Portuguese"],
-        FRA: ["French"], DEU: ["German"], GBR: ["English"], NGA: ["English", "Hausa", "Yoruba", "Igbo"],
-        PAK: ["Urdu", "English", "Punjabi"], IDN: ["Indonesian", "Javanese"], MEX: ["Spanish"], JPN: ["Japanese"],
-        RUS: ["Russian"], BGD: ["Bengali"], ETH: ["Amharic", "Oromo"], PHL: ["Filipino", "English"], EGY: ["Arabic"],
-        VNM: ["Vietnamese"], COD: ["French", "Lingala", "Swahili"], TUR: ["Turkish"], IRN: ["Persian"], THA: ["Thai"],
-        ZAF: ["Zulu", "Xhosa", "Afrikaans", "English", "+7"], TZA: ["Swahili", "English"], KEN: ["Swahili", "English"],
-        ESP: ["Spanish", "Catalan", "Galician"], COL: ["Spanish"], ARG: ["Spanish"], DZA: ["Arabic", "Berber"],
-        CAN: ["English", "French"], UGA: ["English", "Swahili"], IRQ: ["Arabic", "Kurdish"], MAR: ["Arabic", "Berber"],
-        AFG: ["Pashto", "Dari"], SAU: ["Arabic"], UKR: ["Ukrainian"], AUS: ["English"], NPL: ["Nepali"],
-        GHA: ["English", "Akan"], LKA: ["Sinhala", "Tamil"], MMR: ["Burmese"], MOZ: ["Portuguese"], ITA: ["Italian"],
-        POL: ["Polish"], KOR: ["Korean"], CHE: ["German", "French", "Italian", "Romansh"],
-        BEL: ["Dutch", "French", "German"], MYS: ["Malay", "English"], PER: ["Spanish", "Quechua"],
+      // Phonetic-orthography score per language (0–100): how predictably the
+      // WRITTEN script maps to pronunciation (shallow/transparent = high).
+      // Curated from orthographic-depth literature; demo estimates. ≥80 = "phonetic".
+      const LANG_PHON = {
+        Spanish:95, Italian:95, Finnish:98, Turkish:95, Indonesian:92, Javanese:88, Malay:92,
+        Swahili:90, Vietnamese:90, Korean:90, German:82, Hungarian:90, Czech:90, Polish:85,
+        Croatian:96, Serbian:96, Georgian:96, Greek:84, Catalan:90, Galician:90, Romanian:85,
+        Quechua:92, Zulu:88, Xhosa:88, Afrikaans:85, Amharic:85, Oromo:85, Filipino:90, Tagalog:90,
+        Lingala:88, Hausa:82, Yoruba:80, Igbo:80, Berber:85, Esperanto:100, Akan:82, Romansh:88,
+        Hindi:88, Bengali:86, Tamil:85, Telugu:88, Kannada:88, Malayalam:88, Marathi:88,
+        Gujarati:88, Punjabi:86, Odia:86, Assamese:85, Nepali:88, Sinhala:85, Urdu:45,
+        English:30, French:35, Portuguese:72, Russian:72, Ukrainian:78, Dutch:75, Danish:35,
+        Arabic:60, Persian:45, Dari:45, Pashto:50, Kurdish:70, Hebrew:40,
+        Mandarin:5, Japanese:35, Thai:70, Burmese:60, "—":0,
+      };
+      const PHON_MIN = 80;                                   // a language is "phonetic" at/above this
+      const phonScore = (l) => LANG_PHON[l] ?? 50;
+      // Per-country language mix as population shares (0–1). Demo estimates.
+      const COUNTRY_LANGS = {
+        USA:[["English",.78],["Spanish",.13],["Other",.09]],
+        IND:[["Hindi",.44],["Bengali",.08],["Marathi",.07],["Telugu",.07],["Tamil",.06],["Gujarati",.05],["Urdu",.04],["Kannada",.04],["Odia",.03],["English",.12]],
+        CHN:[["Mandarin",1]], BRA:[["Portuguese",1]], FRA:[["French",1]], DEU:[["German",1]], GBR:[["English",1]],
+        NGA:[["Hausa",.3],["Yoruba",.2],["Igbo",.18],["English",.32]], PAK:[["Urdu",.5],["Punjabi",.38],["English",.12]],
+        IDN:[["Indonesian",.7],["Javanese",.3]], MEX:[["Spanish",1]], JPN:[["Japanese",1]], RUS:[["Russian",1]],
+        BGD:[["Bengali",1]], ETH:[["Amharic",.5],["Oromo",.5]], PHL:[["Filipino",.7],["English",.3]], EGY:[["Arabic",1]],
+        VNM:[["Vietnamese",1]], COD:[["French",.3],["Lingala",.4],["Swahili",.3]], TUR:[["Turkish",1]], IRN:[["Persian",1]],
+        THA:[["Thai",1]], ZAF:[["Zulu",.25],["Xhosa",.18],["Afrikaans",.13],["English",.1],["Other",.34]],
+        TZA:[["Swahili",.9],["English",.1]], KEN:[["Swahili",.7],["English",.3]],
+        ESP:[["Spanish",.74],["Catalan",.17],["Galician",.09]], COL:[["Spanish",1]], ARG:[["Spanish",1]],
+        DZA:[["Arabic",.72],["Berber",.28]], CAN:[["English",.78],["French",.22]], UGA:[["English",.7],["Swahili",.3]],
+        IRQ:[["Arabic",.78],["Kurdish",.22]], MAR:[["Arabic",.66],["Berber",.34]], AFG:[["Pashto",.5],["Dari",.5]],
+        SAU:[["Arabic",1]], UKR:[["Ukrainian",1]], AUS:[["English",1]], NPL:[["Nepali",1]],
+        GHA:[["English",.5],["Akan",.5]], LKA:[["Sinhala",.75],["Tamil",.25]], MMR:[["Burmese",1]], MOZ:[["Portuguese",1]],
+        ITA:[["Italian",1]], POL:[["Polish",1]], KOR:[["Korean",1]],
+        CHE:[["German",.63],["French",.23],["Italian",.08],["Romansh",.06]],
+        BEL:[["Dutch",.59],["French",.4],["German",.01]], MYS:[["Malay",.7],["English",.3]],
+        PER:[["Spanish",.83],["Quechua",.17]],
+      };
+      // Real-ish national populations (demo; round UN-era figures).
+      const COUNTRY_POP = {
+        USA:331e6, IND:1417e6, CHN:1412e6, BRA:215e6, FRA:68e6, DEU:84e6, GBR:67e6, NGA:218e6, PAK:235e6,
+        IDN:275e6, MEX:127e6, JPN:125e6, RUS:144e6, BGD:171e6, ETH:123e6, PHL:115e6, EGY:111e6, VNM:98e6,
+        COD:99e6, TUR:85e6, IRN:88e6, THA:72e6, ZAF:60e6, TZA:65e6, KEN:54e6, ESP:48e6, COL:51e6, ARG:46e6,
+        DZA:45e6, CAN:39e6, UGA:47e6, IRQ:43e6, MAR:37e6, AFG:41e6, SAU:36e6, UKR:38e6, AUS:26e6, NPL:30e6,
+        GHA:33e6, LKA:22e6, MMR:54e6, MOZ:33e6, ITA:59e6, POL:38e6, KOR:52e6, CHE:9e6, BEL:12e6, MYS:33e6, PER:34e6,
       };
       // a few India ADM1 overrides to demonstrate per-region language variation
       const REGION_LANG = {
@@ -2390,15 +2461,25 @@
         "Telangana": ["Telugu"], "West Bengal": ["Bengali"], "Maharashtra": ["Marathi"], "Gujarat": ["Gujarati"],
         "Punjab": ["Punjabi"], "Odisha": ["Odia"], "Assam": ["Assamese"], "Quebec": ["French"], "Catalonia": ["Catalan"],
       };
-      const langFor = (iso, regionName) => {
-        if (regionName && REGION_LANG[regionName]) return { langs: REGION_LANG[regionName], real: true };
-        if (COUNTRY_LANG[iso]) return { langs: COUNTRY_LANG[iso], real: false };
-        return { langs: ["—"], real: false };
+      // share of the population speaking a "phonetic" (score ≥ PHON_MIN) language
+      const phonFrac = (pairs) => {
+        let tot = 0, ph = 0;
+        for (const [l, s] of pairs) { tot += s; if (phonScore(l) >= PHON_MIN) ph += s; }
+        return tot > 0 ? ph / tot : 0;
       };
-      function demoFor(feature, iso, regionName) {
+      const langFor = (iso, regionName) => {
+        if (regionName && REGION_LANG[regionName]) {
+          const ls = REGION_LANG[regionName];
+          return { langs: ls, real: true, phon: phonFrac(ls.map((l) => [l, 1 / ls.length])) };
+        }
+        if (COUNTRY_LANGS[iso]) return { langs: COUNTRY_LANGS[iso].map((p) => p[0]), real: false, phon: phonFrac(COUNTRY_LANGS[iso]) };
+        return { langs: ["—"], real: false, phon: 0 };
+      };
+      function demoFor(feature, iso, regionName, isCountry) {
         const areaKm2 = planarAreaKm2(feature);
         const dens = 12 + (hashStr("dens:" + (regionName || "") + iso) % 1100);
-        const pop = Math.max(1, Math.round(areaKm2 * dens));
+        // country level -> real national population; sub-levels -> area-disaggregated (peers split by area)
+        const pop = isCountry && COUNTRY_POP[iso] ? COUNTRY_POP[iso] : Math.max(1, Math.round(areaKm2 * dens));
         return { pop, areaKm2, ...langFor(iso, regionName) };
       }
       const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
@@ -2791,7 +2872,7 @@
             const iso = iso3Of(f.properties);
             const covered = !!(iso && coverage && coverage.has(iso));
             const u = iso ? node("r." + iso) : null;
-            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), u };
+            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: langFor(iso, f.properties.ADMIN).phon, u };
           }).filter(Boolean);
         }, [projd, isWorld, worldGeo, coverage]);
 
@@ -2860,7 +2941,7 @@
             const id = dst.id + "." + k; const cell = vor.cellPolygon(k);
             const poly = cell ? clipPolygon(dst.ring, cell) : [];
             return { k, id, u: node(id), name: "Block " + (k + 1), ring: poly, d: poly.length >= 3 ? toPath(poly) : "", seed: s,
-              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, real: dst.demo.real } };
+              bbox: bboxOf(poly.length ? poly : [s]), synthetic: true, demo: { pop: Math.round(dst.demo.pop / n), areaKm2: dst.demo.areaKm2 / n, langs: dst.demo.langs, real: dst.demo.real, phon: dst.demo.phon } };
           }).filter((b) => b.ring.length >= 3);
         }, [adm2, a2Idx, adm3FC, projd, country]);
 
@@ -3146,41 +3227,59 @@
                     {/* WORLD: every country */}
                     {level === "world" && worldPaths && worldPaths.map((p) => {
                       const on = active && p.u && active.u.id === p.u.id;
-                      const fill = p.covered ? scoreColor(p.u.perf) : "#d4d4d8";
+                      const onEnter = () => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered });
+                      const onClick = (e) => { e.stopPropagation(); pickCountry(p); };
+                      if (!p.covered) {
+                        return (
+                          <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="#d4d4d8" fillOpacity={0.55}
+                            stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
+                            style={{ cursor: "not-allowed" }} onMouseEnter={onEnter} onClick={onClick} />
+                        );
+                      }
                       return (
-                        <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={fill} fillOpacity={p.covered ? 1 : 0.55}
-                          stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                          style={{ cursor: p.covered ? "pointer" : "not-allowed" }}
-                          onMouseEnter={() => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name), greyed: !p.covered })}
-                          onClick={(e) => { e.stopPropagation(); pickCountry(p); }} />
+                        <g key={p.i}>
+                          {pieEls(p.iso || p.i, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf)}
+                          <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
+                            stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
+                            style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
+                        </g>
                       );
                     })}
 
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
-                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
-                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
-                        style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo })}
-                        onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
+                      <g key={d0.id}>
+                        {pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        <path d={d0.d} fill="none" pointerEvents="all"
+                          stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo })}
+                          onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
+                      </g>
                     ))}
 
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
-                      <path key={d0.id} d={d0.d} fill={scoreColor(d0.u.perf)}
-                        stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
-                        style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo })}
-                        onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
+                      <g key={d0.id}>
+                        {pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        <path d={d0.d} fill="none" pointerEvents="all"
+                          stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo })}
+                          onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
+                      </g>
                     ))}
 
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
-                      <path key={b.id} d={b.d} fill={scoreColor(b.u.perf)}
-                        stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
-                        style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo })}
-                        onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                      <g key={b.id}>
+                        {pieEls(b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf)}
+                        <path d={b.d} fill="none" pointerEvents="all"
+                          stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo })}
+                          onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                      </g>
                     ))}
 
                     {/* schools */}
@@ -3281,7 +3380,10 @@
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Area</span><span className="font-semibold">{fmtArea(active.demo.areaKm2)}</span></div>
                       <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span>Language{active.demo.langs.length > 1 ? "s" : ""}</span><span className="truncate text-right font-semibold">{active.demo.langs.join(", ")}</span></div>
-                      <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: modeled (WorldPop-style, demo). Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}.</div>
+                      {active.demo.phon != null && (
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span>Phonetic script</span><span className="font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie = colored share)</span></span></div>
+                      )}
+                      <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script.</div>
                     </div>
                   )}
                   {!active.demo && (
