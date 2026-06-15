@@ -2332,23 +2332,25 @@
       }
       // "+" invite button at an area's centroid (greyscale, no border, constant screen size).
       // Hover shows a tooltip explaining the area has no user yet. geo = country/region/district/block.
-      function PlusButton({ c, k, geo, onClick }) {
+      function PlusButton({ c, k, geo, pending, onClick }) {
         const [hov, setHov] = useState(false);
         if (!c || isNaN(c[0])) return null;
         const r = 8.8 / k, sw = 1.8 / k, len = 4.4 / k;           // 20% smaller than before, no border
-        const s = 1 / k, tw = 168, th = 56;
+        const s = 1 / k, tw = 176, th = pending ? 64 : 56;
         return (
           <g transform={`translate(${c[0]},${c[1]})`} style={{ cursor: "pointer" }} pointerEvents="auto"
             onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-            <circle r={r} fill="#71717a" />
+            <circle r={r} fill={pending ? "#d97706" : "#71717a"} />
             <line x1={-len} y1={0} x2={len} y2={0} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
             <line x1={0} y1={-len} x2={0} y2={len} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
             {hov && (
               <foreignObject x={-(tw * s) / 2} y={-(th + 8) * s - r} width={tw * s} height={th * s} style={{ overflow: "visible", pointerEvents: "none" }}>
                 <div style={{ width: tw, height: th, transform: `scale(${s})`, transformOrigin: "top left" }}
                   className="rounded-lg bg-zinc-900/90 px-2 py-1.5 text-[11px] leading-snug text-white shadow-lg">
-                  This {geo} has no PadhaiPal user yet — click to add one.
+                  {pending
+                    ? <span>Invitation pending: <span className="font-semibold">{pending.name || "contact"}</span>{pending.phone ? " (" + pending.phone + ")" : ""}. Click to invite again.</span>
+                    : <span>This {geo} has no PadhaiPal user yet — click to add one.</span>}
                 </div>
               </foreignObject>
             )}
@@ -2356,28 +2358,33 @@
         );
       }
       // modal to invite the (missing) lead for an unregistered area via WhatsApp / shareable link
-      function InviteModal({ data, onClose }) {
-        const [phone, setPhone] = useState("");
+      function InviteModal({ data, initial, onClose, onSent }) {
+        const [name, setName] = useState(initial ? initial.name : "");
+        const [phone, setPhone] = useState(initial ? initial.phone : "");
         const [copied, setCopied] = useState(false);
         const digits = phone.replace(/[^\d]/g, "");
-        const msg = "Hi! You're invited to join the PadhaiPal network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
+        const who = name.trim() ? name.trim() + ", you're" : "Hi! You're";
+        const msg = who + " invited to join the PadhaiPal network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
         const waHref = "https://wa.me/" + digits + "?text=" + encodeURIComponent(msg);
         const copy = () => { try { navigator.clipboard.writeText(data.link); } catch (e) {} setCopied(true); };
+        const send = (e) => { if (!digits) { e.preventDefault(); return; } onSent({ name: name.trim(), phone: phone.trim() }); onClose(); };
         return (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
             <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-sm font-semibold text-zinc-900">Invite a {data.role}</div>
-                  <div className="text-xs text-zinc-500">{data.title} · no one registered yet</div>
+                  <div className="text-xs text-zinc-500">{data.title}{initial ? " · invitation pending" : " · no one allocated yet"}</div>
                 </div>
                 <button onClick={onClose} className="-mr-1 rounded-md px-2 py-0.5 text-lg leading-none text-zinc-400 hover:bg-zinc-100">×</button>
               </div>
-              <label className="mt-4 block text-[11px] font-semibold text-zinc-600">WhatsApp phone number</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel" autoFocus
+              <label className="mt-4 block text-[11px] font-semibold text-zinc-600">Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus
                 className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
-              <a href={digits ? waHref : undefined} target="_blank" rel="noreferrer"
-                onClick={(e) => { if (!digits) e.preventDefault(); }}
+              <label className="mt-3 block text-[11px] font-semibold text-zinc-600">WhatsApp phone number</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+              <a href={digits ? waHref : undefined} target="_blank" rel="noreferrer" onClick={send}
                 className={"mt-3 block w-full rounded-lg px-3 py-2 text-center text-sm font-semibold text-white " + (digits ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-blue-300")}>
                 Send WhatsApp invite message
               </a>
@@ -3321,6 +3328,8 @@
         // ===== invite modal (for unregistered / grey-tinted areas) =====
         const [invite, setInvite] = useState(null);   // { id, title, role, link }
         const openInvite = (a) => setInvite({ ...a, link: "https://pp.link/invite/" + encodeURIComponent(a.id) });
+        const [pendingInvites, setPendingInvites] = useState(() => new Map());   // nodeId -> { name, phone } (last invite sent)
+        const recordInvite = (id, person) => setPendingInvites((m) => { const n = new Map(m); n.set(id, person); return n; });
 
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
@@ -3518,13 +3527,13 @@
 
                     {/* invite "+" buttons — rendered last so they sit above every area fill */}
                     {level === "world" && worldPaths && worldPaths.map((p) => (p.covered && isDimmed(p.u.id, p.phon)
-                      ? <PlusButton key={"plus" + p.i} c={p.c} k={tf.k} geo="country" onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
+                      ? <PlusButton key={"plus" + p.i} c={p.c} k={tf.k} geo="country" pending={pendingInvites.get(p.u.id)} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
                     {level === "adm1" && adm1 && adm1.map((d0) => (isDimmed(d0.id, d0.demo.phon)
-                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
+                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
                     {level === "adm2" && adm2 && adm2.map((d0) => (isDimmed(d0.id, d0.demo.phon)
-                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
+                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
                     {level === "adm3" && blocks && blocks.map((b) => (isDimmed(b.id, b.demo.phon)
-                      ? <PlusButton key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
+                      ? <PlusButton key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" pending={pendingInvites.get(b.id)} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
 
                     {/* schools */}
                     {level === "schools" && blk && (
@@ -3592,6 +3601,22 @@
                       const geo = { "National Director": "country", DGSE: "region", BSA: "district", BEO: "block" }[role] || "area";
                       const invite = () => openInvite({ id: active.u.id, title: active.title, role, geo });
                       if (canInvite) {
+                        const pend = pendingInvites.get(active.u.id);
+                        if (pend) {
+                          return (
+                            <React.Fragment>
+                              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-zinc-200 text-base font-semibold text-zinc-400">
+                                {(pend.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                              </div>
+                              <div className="min-w-0 flex-1 opacity-70">
+                                <div className="truncate text-sm font-semibold text-zinc-500">{pend.name || "Invited contact"}</div>
+                                <div className="truncate text-xs text-zinc-400">{role} · {pend.phone || "—"}</div>
+                                <div className="text-[10px] font-semibold text-amber-600">Invitation pending</div>
+                              </div>
+                              <button onClick={invite} className="ml-auto flex-shrink-0 self-start rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Re-invite</button>
+                            </React.Fragment>
+                          );
+                        }
                         return (
                           <React.Fragment>
                             <button onClick={invite} title={"Invite a " + role}
@@ -3767,7 +3792,7 @@
                 <div className="absolute bottom-4 right-16 z-40 max-w-xs rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl">{toast}</div>
               )}
 
-              {invite && <InviteModal key={invite.id} data={invite} onClose={() => setInvite(null)} />}
+              {invite && <InviteModal key={invite.id} data={invite} initial={pendingInvites.get(invite.id) || null} onClose={() => setInvite(null)} onSent={(person) => recordInvite(invite.id, person)} />}
 
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                 recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
