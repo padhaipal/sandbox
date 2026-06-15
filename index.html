@@ -3582,17 +3582,34 @@
 
               {/* readout panel with demographics */}
               {active && (
-                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-14rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg"
+                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-12rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg"
                   onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-3">
                     {(() => {
                       const hasPerson = !active.greyed && registered(active.u.id);
+                      const canInvite = !active.greyed && !registered(active.u.id);
+                      const role = (active.sub || "").split(" · ")[0];
+                      const geo = { "National Director": "country", DGSE: "region", BSA: "district", BEO: "block" }[role] || "area";
+                      const invite = () => openInvite({ id: active.u.id, title: active.title, role, geo });
+                      if (canInvite) {
+                        return (
+                          <React.Fragment>
+                            <button onClick={invite} title={"Invite a " + role}
+                              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 border-dashed border-zinc-300 text-2xl leading-none text-zinc-400 hover:border-blue-400 hover:text-blue-500">+</button>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                              <div className="truncate text-xs text-zinc-500">{role} · <span className="text-zinc-400">no one allocated yet</span></div>
+                            </div>
+                            <button onClick={invite} className="ml-auto flex-shrink-0 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">Invite</button>
+                          </React.Fragment>
+                        );
+                      }
                       return (
                         <React.Fragment>
                           {hasPerson && <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />}
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
-                            <div className="truncate text-xs text-zinc-500">{hasPerson ? active.sub : (active.sub || "").split(" · ")[0]}</div>
+                            <div className="truncate text-xs text-zinc-500">{hasPerson ? active.sub : role}</div>
                             {hasPerson && <div className="text-[11px] text-zinc-400">{active.u.phone}</div>}
                           </div>
                           {hasPerson && <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>}
@@ -3713,8 +3730,8 @@
                 </div>
               )}
 
-              {/* bottom-right stack: zoom, then the legend in the corner */}
-              <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+              {/* bottom-right: zoom buttons immediately to the left of the legend */}
+              <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex items-end gap-2">
                 <div className="pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
                   <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
                   <div className="h-px bg-zinc-200" />
