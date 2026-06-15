@@ -4314,32 +4314,6 @@
                           ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} glow={composeGlow} />
                       ))}
 
-                      {section("legend", "Legend", null, (
-                        <div className="text-[11px] leading-tight text-zinc-700">
-                          <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                              <span>Speaks a language we teach today <span className="text-zinc-400">(colour = avg score)</span></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                              <span>Speaks a language on our roadmap</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
-                              <span>Speaks a language beyond our method (or no data)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
-                                <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
-                              </span>
-                              <span>Dimmed = node not registered in PadhaiPal</span>
-                            </div>
-                          </div>
-                          <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · today PadhaiPal teaches Hindi · demo data</div>
-                        </div>
-                      ))}
                     </React.Fragment>
                   );
                 })()}
@@ -4351,12 +4325,36 @@
                 </div>
               )}
 
-              {/* bottom-right: zoom buttons (legend now lives in the left accordion) */}
+              {/* bottom-right: zoom buttons immediately to the left of the legend */}
               <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex items-end gap-2">
                 <div className="pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
                   <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
                   <div className="h-px bg-zinc-200" />
                   <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
+                </div>
+                <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
+                  <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
+                      <span>Speaks a language we teach today <span className="text-zinc-400">(colour = avg score)</span></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
+                      <span>Speaks a language on our roadmap</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
+                      <span>Speaks a language beyond our method (or no data)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
+                        <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
+                      </span>
+                      <span>Dimmed = node not registered in PadhaiPal</span>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · today PadhaiPal teaches Hindi · demo data</div>
                 </div>
               </div>
 
