@@ -2679,9 +2679,10 @@
       };
       // top-3 languages per teachability group, dropping "Other"/"—":
       // now = taught today; soon = phonetic (buildable later); never = beyond the method.
-      function splitLangs(pairs) {
+      function splitLangs(pairs, built) {
+        const nowSet = built || TEACHABLE_NOW;
         const now = [], soon = [], never = [];
-        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (TEACHABLE_NOW.has(l) ? now : isPhonetic(l) ? soon : never).push([l, s]); });
+        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (nowSet.has(l) ? now : isPhonetic(l) ? soon : never).push([l, s]); });
         const top3 = (a) => a.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([l, s]) => l + " " + Math.round(s * 100) + "%");
         return { now: top3(now), soon: top3(soon), never: top3(never) };
       }
@@ -3402,7 +3403,7 @@
             const covered = !!(iso && coverage && coverage.has(iso));
             const u = iso ? node("r." + iso) : null;
             const lf = langFor(iso, f.properties.ADMIN);
-            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: lf.phon, teach: lf.teach, u };
+            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: lf.phon, teach: lf.teach, pairs: lf.pairs, u };
           }).filter(Boolean);
         }, [projd, isWorld, worldGeo, coverage]);
 
@@ -3412,6 +3413,8 @@
         const [builtLangs, setBuiltLangs] = useState(() => new Set(["Hindi"]));
         const [impactMetric, setImpactMetric] = useState("dalys");
         const roadmapOpen = openSecs.has("roadmap");
+        // share of an area's population speaking a language PadhaiPal has built (Roadmap checklist) -> the coloured pie segment
+        const teachBuilt = (pairs) => { let tot = 0, t = 0; for (const [l, s] of (pairs || [])) { tot += s; if (builtLangs.has(l)) t += s; } return tot > 0 ? t / tot : 0; };
 
         // ---- Roadmap flat-colour mode: per-country impact metric across unlocked countries ----
         const flatMetrics = useMemo(() => {
@@ -3904,17 +3907,17 @@
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       {(() => {
-                        const { now, soon, never } = splitLangs(active.demo.pairs);
+                        const { now, soon, never } = splitLangs(active.demo.pairs, builtLangs);
                         return (
                           <React.Fragment>
-                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-emerald-700">Teaching today</span><span className="min-w-0 break-words text-right font-semibold">{now.length ? now.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-emerald-700">Teaching / building</span><span className="min-w-0 break-words text-right font-semibold">{now.length ? now.join(", ") : "—"}</span></div>
                             <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">On the roadmap</span><span className="min-w-0 break-words text-right font-semibold">{soon.length ? soon.join(", ") : "—"}</span></div>
                             <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">Beyond our method</span><span className="min-w-0 break-words text-right font-semibold">{never.length ? never.join(", ") : "—"}</span></div>
                           </React.Fragment>
                         );
                       })()}
-                      {active.demo.teach != null && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(active.demo.teach * 100)}% taught today · {Math.round(active.demo.phon * 100)}% in time</span></div>
+                      {active.demo.phon != null && (
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(teachBuilt(active.demo.pairs) * 100)}% with built langs · {Math.round(active.demo.phon * 100)}% in time</span></div>
                       )}
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
@@ -4141,7 +4144,7 @@
                       }
                       return (
                         <g key={p.i}>
-                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, p.teach)}
+                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, teachBuilt(p.pairs))}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
@@ -4152,7 +4155,7 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4164,7 +4167,7 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4176,7 +4179,7 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, b.demo.teach)}
+                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, teachBuilt(b.demo.pairs))}
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4353,7 +4356,7 @@
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                      <span>Speaks a language we teach today <span className="text-zinc-400">(colour = avg score)</span></span>
+                      <span>Speaks a language we've built <span className="text-zinc-400">(colour = avg score)</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
@@ -4370,7 +4373,7 @@
                       <span>Dimmed = node not registered in PadhaiPal</span>
                     </div>
                   </div>
-                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · today PadhaiPal teaches Hindi · demo data</div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · tick languages in the Roadmap section to colour more countries · demo data</div>
                 </div>
               </div>
 
