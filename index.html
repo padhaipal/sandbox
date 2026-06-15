@@ -1818,6 +1818,8 @@
               links.push({ source: tid, target: sid });
             }
           }
+          const total = nodes.length;
+          [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
           const sim = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
             .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
@@ -2078,9 +2080,9 @@
                                 onMouseEnter={() => setActive({ u: n.u, title, sub: n.u.name })} onClick={(e) => e.stopPropagation()}>
                                 <img src={n.u.face} alt="" loading="lazy" className="rounded-full object-cover brightness-110"
                                   style={{ width: faceR * 2, height: faceR * 2, boxShadow: "0 0 0 " + ring + "px " + scoreColor(n.u.perf), outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
-                                <div className="mt-0.5 max-w-full rounded bg-white/85 px-1 text-center leading-tight shadow-sm" style={{ pointerEvents: "auto" }}>
-                                  <div className="truncate font-semibold text-zinc-900" style={{ fontSize: 10 }}>{nm}</div>
-                                  <div className="text-zinc-500" style={{ fontSize: 9 }}>{lbl} · {n.u.score}</div>
+                                <div className="mt-0.5 max-w-full rounded px-1.5 text-center leading-tight shadow-sm" style={{ background: scoreColor(n.u.perf), color: textOn(n.u.perf), pointerEvents: "auto" }}>
+                                  <div className="truncate font-semibold" style={{ fontSize: 10 }}>{nm}</div>
+                                  <div style={{ fontSize: 9, opacity: 0.9 }}>{lbl} · {n.u.score} · #{n.rank}/{n.total}</div>
                                 </div>
                               </div>
                             </foreignObject>
@@ -3624,6 +3626,8 @@
               links.push({ source: tid, target: sid });
             }
           }
+          const total = nodes.length;
+          [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
           const sim = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
             .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
@@ -4208,9 +4212,9 @@
                                 onMouseEnter={() => setActive({ u: n.u, title, sub: n.u.name })} onClick={(e) => e.stopPropagation()}>
                                 <img src={n.u.face} alt="" loading="lazy" className="rounded-full object-cover brightness-110"
                                   style={{ width: faceR * 2, height: faceR * 2, boxShadow: "0 0 0 " + ring + "px " + scoreColor(n.u.perf), outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
-                                <div className="mt-0.5 max-w-full rounded bg-white/85 px-1 text-center leading-tight shadow-sm" style={{ pointerEvents: "auto" }}>
-                                  <div className="truncate font-semibold text-zinc-900" style={{ fontSize: 10 }}>{nm}</div>
-                                  <div className="text-zinc-500" style={{ fontSize: 9 }}>{lbl} · {n.u.score}</div>
+                                <div className="mt-0.5 max-w-full rounded px-1.5 text-center leading-tight shadow-sm" style={{ background: scoreColor(n.u.perf), color: textOn(n.u.perf), pointerEvents: "auto" }}>
+                                  <div className="truncate font-semibold" style={{ fontSize: 10 }}>{nm}</div>
+                                  <div style={{ fontSize: 9, opacity: 0.9 }}>{lbl} · {n.u.score} · #{n.rank}/{n.total}</div>
                                 </div>
                               </div>
                             </foreignObject>
@@ -4379,32 +4383,13 @@
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      const TABS = ["force", "tree", "map", "world"];
-      const [view, setView] = useState(() => {
-        const h = (window.location.hash || "").replace("#", "");
-        return TABS.includes(h) ? h : "world";
-      });
-      useEffect(() => { window.location.hash = view; }, [view]);
-      const tab = (id, label) => (
-        <button key={id} onClick={() => setView(id)}
-          className={"rounded-md px-3 py-1 text-xs font-semibold transition " +
-            (view === id ? "bg-white text-zinc-900 shadow" : "text-zinc-300 hover:text-white")}>
-          {label}
-        </button>
-      );
       return (
         <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
             <span className="text-xs font-semibold text-white">PadhaiPal · Educator Network</span>
-            <div className="ml-auto flex rounded-lg bg-zinc-800 p-0.5">
-              {tab("force", "Force graph")}
-              {tab("tree", "Tree")}
-              {tab("map", "Map (India)")}
-              {tab("world", "World")}
-            </div>
           </div>
           <div className="relative min-h-0 flex-1">
-            {view === "force" ? <ForceGraphApp /> : view === "tree" ? <TreeFlowApp /> : view === "map" ? <MapApp /> : <WorldMapApp />}
+            <WorldMapApp />
           </div>
         </div>
       );
