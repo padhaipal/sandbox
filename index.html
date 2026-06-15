@@ -2434,6 +2434,9 @@
         return out;
       }
       const inAnyRing = (pt, rings) => { for (const r of rings) if (pointInPoly(pt, r)) return true; return false; };
+      // area-weighted centroid (robust nesting test; the vertex-average centroidOf mis-nests neighbours)
+      const polyCentroid = (ring) => { const c = d3.polygonCentroid(ring); return c && isFinite(c[0]) && isFinite(c[1]) ? c : centroidOf(ring); };
+      const bboxOverlap = (a, b) => !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
       // Render geoBoundaries polygons by tracing the PROJECTED exterior rings ourselves.
       // d3.geoPath does spherical antimeridian clipping that, with their clockwise
       // winding, traces a whole-sphere path (the screen goes solid). Planar tracing is safe.
@@ -2547,6 +2550,10 @@
         "Telangana": ["Telugu"], "West Bengal": ["Bengali"], "Maharashtra": ["Marathi"], "Gujarat": ["Gujarati"],
         "Punjab": ["Punjabi"], "Odisha": ["Odia"], "Assam": ["Assamese"], "Quebec": ["French"], "Catalonia": ["Catalan"],
       };
+      // regions with explicit language shares (sum ~1); districts inherit their state's mix
+      const REGION_LANGS = {
+        "Uttar Pradesh": [["Hindi", .80], ["Urdu", .14], ["English", .06]],
+      };
       // share of the population speaking a "phonetic" (score ≥ PHON_MIN) language
       const phonFrac = (pairs) => {
         let tot = 0, ph = 0;
@@ -2554,6 +2561,10 @@
         return tot > 0 ? ph / tot : 0;
       };
       const langFor = (iso, regionName) => {
+        if (regionName && REGION_LANGS[regionName]) {
+          const pairs = REGION_LANGS[regionName];
+          return { langs: pairs.map((p) => p[0]), pairs, real: true, phon: phonFrac(pairs) };
+        }
         if (regionName && REGION_LANG[regionName]) {
           const ls = REGION_LANG[regionName], pairs = ls.map((l) => [l, 1 / ls.length]);
           return { langs: ls, pairs, real: true, phon: phonFrac(pairs) };
@@ -2564,16 +2575,18 @@
       // top-3 languages per group (phonetic vs not), share >= 10%, dropping "Other"/"—"
       function splitLangs(pairs) {
         const ph = [], non = [];
-        (pairs || []).forEach(([l, s]) => { if (s < 0.10 || l === "Other" || l === "—") return; (isPhonetic(l) ? ph : non).push([l, s]); });
+        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (isPhonetic(l) ? ph : non).push([l, s]); });
         const top3 = (a) => a.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([l, s]) => l + " " + Math.round(s * 100) + "%");
         return { ph: top3(ph), non: top3(non) };
       }
-      function demoFor(feature, iso, regionName, isCountry) {
+      function demoFor(feature, iso, regionName, isCountry, inherit) {
         const areaKm2 = planarAreaKm2(feature);
         const dens = 12 + (hashStr("dens:" + (regionName || "") + iso) % 1100);
         // country level -> real national population; sub-levels -> area-disaggregated (peers split by area)
         const pop = isCountry && COUNTRY_POP[iso] ? COUNTRY_POP[iso] : Math.max(1, Math.round(areaKm2 * dens));
-        return { pop, areaKm2, ...langFor(iso, regionName) };
+        // sub-levels inherit the parent's language mix (proportions); only pop/area differ
+        const lang = inherit ? { langs: inherit.langs, pairs: inherit.pairs, real: inherit.real, phon: inherit.phon } : langFor(iso, regionName);
+        return { pop, areaKm2, ...lang };
       }
       const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
       const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
@@ -2920,6 +2933,12 @@
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
+        // world-level map projection ("orthographic" = 3D globe; only used at world level)
+        const [worldProj, setWorldProj] = useState("naturalEarth1");
+        const [globeRot, setGlobeRot] = useState([-10, -8]);
+        const PROJ_ORDER = ["naturalEarth1", "equalEarth", "mercator", "orthographic"];
+        const PROJ_LABEL = { naturalEarth1: "🗺 Natural Earth", equalEarth: "🗺 Equal Earth", mercator: "🗺 Mercator", orthographic: "🌐 Globe" };
+        const nextProj = () => setWorldProj((p) => PROJ_ORDER[(PROJ_ORDER.indexOf(p) + 1) % PROJ_ORDER.length]);
         const [osm, setOsm] = useState(null);        // { id, status:"loading"|"ok"|"error", schools:[{lat,lon,name,kind}] }
         const osmCache = useRef(new Map());          // block id -> array | "error"
 
@@ -2969,14 +2988,20 @@
           if (!d3 || !size) return null;
           if (isWorld) {
             if (!worldFit) return null;
-            const proj = d3.geoNaturalEarth1().fitExtent([[6, 6], [size.w - 6, size.h - 6]], worldFit); // Natural Earth data is well-wound
-            return { proj, path: d3.geoPath(proj) };
+            const ext = [[6, 6], [size.w - 6, size.h - 6]];                 // Natural Earth data is well-wound
+            if (worldProj === "orthographic") {
+              const proj = d3.geoOrthographic().rotate(globeRot).clipAngle(90).fitExtent(ext, { type: "Sphere" });
+              return { proj, path: d3.geoPath(proj), globe: true };
+            }
+            const make = worldProj === "mercator" ? d3.geoMercator : worldProj === "equalEarth" ? d3.geoEqualEarth : d3.geoNaturalEarth1;
+            const proj = make().fitExtent(ext, worldFit);
+            return { proj, path: d3.geoPath(proj), globe: false };
           }
           if (!adm1FC || adm1FC === "error" || !adm1FC.features) return null;
           const proj = fitMercator(adm1FC.features, size.w, size.h, 10); // planar fit — geoBoundaries winding breaks fitExtent
           if (!proj) return null;
           return { proj, path: d3.geoPath(proj) };
-        }, [isWorld, worldFit, adm1FC, size]);
+        }, [isWorld, worldFit, adm1FC, size, worldProj, globeRot]);
 
         // ---- WORLD level: every country, coloured by its national score (grey = no ADM2 data) ----
         const worldPaths = useMemo(() => {
@@ -3013,14 +3038,15 @@
           // Nest by planar centroid-in-parent test (projected ring). NOT d3.geoContains:
           // geoBoundaries clockwise winding makes spherical containment match ~everything.
           const pr = parent.rings && parent.rings.length ? parent.rings : [parent.ring];
+          const pbb = parent.bbox;
           const kids = adm2FC.features.map((f) => ({ f, ring: stripClose(largestRing(f, proj)) }))
-            .filter((o) => o.ring.length >= 3 && inAnyRing(centroidOf(o.ring), pr));
+            .filter((o) => o.ring.length >= 3 && bboxOverlap(bboxOf(o.ring), pbb) && inAnyRing(polyCentroid(o.ring), pr));
           return kids.map((o, j) => {
             const f = o.f, ring = o.ring, rings = exteriorRings(f, proj);
             const id = parent.id + "." + j;
             const nm = f.properties.shapeName || ("District " + (j + 1));
             return { j, id, feature: f, name: nm, d: ringsToPath(rings), c: centroidOf(ring), ring, rings, bbox: bboxOf(ring),
-              u: node(id), demo: demoFor(f, country.iso, nm) };
+              u: node(id), demo: demoFor(f, country.iso, nm, false, parent.demo) };
           });
         }, [adm1, a1Idx, adm2FC, projd, country]);
 
@@ -3033,8 +3059,9 @@
           let real = [];
           if (adm3FC && adm3FC !== "error" && adm3FC.features && dst.ring.length >= 3) {
             const dr = dst.rings && dst.rings.length ? dst.rings : [dst.ring];
+            const dbb = dst.bbox;
             real = adm3FC.features.map((f) => ({ f, ring: stripClose(largestRing(f, proj)) }))
-              .filter((o) => o.ring.length >= 3 && inAnyRing(centroidOf(o.ring), dr));
+              .filter((o) => o.ring.length >= 3 && bboxOverlap(bboxOf(o.ring), dbb) && inAnyRing(polyCentroid(o.ring), dr));
           }
           if (real.length) {
             return real.map((o, k) => {
@@ -3042,7 +3069,7 @@
               const id = dst.id + "." + k;
               const nm = f.properties.shapeName || ("Block " + (k + 1));
               return { k, id, u: node(id), name: nm, feature: f, ring, d: ringsToPath(rings), seed: centroidOf(ring), bbox: bboxOf(ring), synthetic: false,
-                demo: demoFor(f, country.iso, nm) };
+                demo: demoFor(f, country.iso, nm, false, dst.demo) };
             });
           }
           // fallback: subdivide the ADM2 polygon into a plausible number of blocks
@@ -3188,12 +3215,14 @@
           const px = e.clientX - rect.left, py = e.clientY - rect.top;
           setTf((t) => { const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX); const s = k / t.k; return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s }; });
         }, []);
-        const onPointerDown = useCallback((e) => { drag.current = { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; }, [tf]);
+        const globeMode = isWorld && worldProj === "orthographic";
+        const onPointerDown = useCallback((e) => { drag.current = globeMode ? { x: e.clientX, y: e.clientY, rot: globeRot, spin: true } : { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; }, [tf, globeMode, globeRot]);
         const onPointerMove = useCallback((e) => {
           if (!drag.current) return;
           const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
           if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
-          setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
+          if (drag.current.spin) { const [l0, p0] = drag.current.rot; setGlobeRot([l0 + dx * 0.4, clamp(p0 - dy * 0.4, -89, 89)]); }
+          else setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
         const onBgClick = useCallback(() => { if (!moved.current && level !== "world") popUp(); }, [popUp, level]);
@@ -3342,6 +3371,10 @@
                   onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onClick={onBgClick}
                   style={{ cursor: drag.current ? "grabbing" : "grab" }}>
                   <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={gStyle}>
+
+                    {/* globe: ocean sphere + graticule */}
+                    {projd && projd.globe && <path d={projd.path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1.2 / tf.k} />}
+                    {projd && projd.globe && <path d={projd.path(d3.geoGraticule10())} fill="none" stroke="#93c5fd" strokeWidth={0.5 / tf.k} opacity={0.6} pointerEvents="none" />}
 
                     {/* WORLD: every country */}
                     {level === "world" && worldPaths && worldPaths.map((p) => {
@@ -3558,6 +3591,14 @@
                 </div>
                 <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · phonetic = script ≥{PHON_MIN} transparency · coverage is demo/random</div>
               </div>
+
+              {/* projection toggle (world level only; cycles flat projections + 3D globe) */}
+              {isWorld && (
+                <button onClick={nextProj} title="Cycle map projection"
+                  className="absolute bottom-24 right-4 z-30 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-md hover:bg-zinc-50">
+                  {PROJ_LABEL[worldProj]}
+                </button>
+              )}
 
               {/* zoom controls */}
               <div className="absolute bottom-4 right-4 z-30 flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
