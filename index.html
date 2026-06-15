@@ -3415,6 +3415,32 @@
                 </div>
               )}
 
+              {/* legend */}
+              <div className="pointer-events-none absolute bottom-4 left-[412px] z-20 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
+                <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
+                    <span>Speaks a phonetic script <span className="text-zinc-400">(colour = avg score 0–100)</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
+                    <span>Phonetic, but outside PadhaiPal coverage</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
+                    <span>Non-phonetic script (or no district data)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
+                      <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
+                    </span>
+                    <span>Dimmed = node not registered in PadhaiPal</span>
+                  </div>
+                </div>
+                <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · phonetic = script ≥{PHON_MIN} transparency · coverage is demo/random</div>
+              </div>
+
               {/* zoom controls */}
               <div className="absolute bottom-4 right-4 z-30 flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
                 <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
