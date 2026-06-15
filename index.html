@@ -2316,6 +2316,18 @@
           </React.Fragment>
         );
       }
+      // pie for an area; if the node is NOT in the PadhaiPal network, lay a translucent
+      // grey filter over it so the underlying pie still shows through.
+      function areaPie(clipKey, nodeId, d, c, R, frac, perf) {
+        const pie = pieEls(clipKey, d, c, R, frac, perf, coverShare(nodeId));
+        if (registered(nodeId)) return pie;
+        return (
+          <React.Fragment>
+            {pie}
+            <path d={d} fill={UNCOVERED} fillOpacity={0.62} pointerEvents="none" />
+          </React.Fragment>
+        );
+      }
       function pointInPoly(p, ring) {
         let inside = false;
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -3261,9 +3273,7 @@
                       }
                       return (
                         <g key={p.i}>
-                          {registered(p.u.id)
-                            ? pieEls(p.iso || p.i, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, coverShare(p.u.id))
-                            : <path d={p.d} fill={UNCOVERED} pointerEvents="none" />}
+                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf)}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
@@ -3274,9 +3284,7 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {registered(d0.id)
-                          ? pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, coverShare(d0.id))
-                          : <path d={d0.d} fill={UNCOVERED} pointerEvents="none" />}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3288,9 +3296,7 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {registered(d0.id)
-                          ? pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, coverShare(d0.id))
-                          : <path d={d0.d} fill={UNCOVERED} pointerEvents="none" />}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3302,9 +3308,7 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {registered(b.id)
-                          ? pieEls(b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, coverShare(b.id))
-                          : <path d={b.d} fill={UNCOVERED} pointerEvents="none" />}
+                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf)}
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3388,7 +3392,7 @@
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie colored share)</span></span></div>
                       )}
                       {!active.greyed && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop (grey = gap)" : <span className="text-zinc-500">Not registered (area greyed)</span>}</span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop (grey = gap)" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
                       <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script.</div>
                     </div>
