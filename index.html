@@ -2621,29 +2621,30 @@
         PAK: "ASER", BGD: "NSA", NPL: "NASA", LKA: "NEREC", MEX: "PLANEA", COL: "Saber", PER: "ECE",
       };
       // illustrative learning stats (deterministic per node; scales with population & score)
-      function learnStats(u, demo, iso) {
+      function learnStats(u, demo, iso, live) {
         const h = hashStr("learn:" + u.id);
         const students = Math.max(50, Math.round(demo.pop * 0.12));     // school-age, rough
         const active = students * (0.35 + u.perf * 0.5);
         const perDay = 2 + (h % 5) + u.perf * 3;                        // letters / active student / day
-        const yest = Math.round(active * perDay);
-        const week = Math.round(yest * (5 + (h % 3) * 0.3));
-        const month = Math.round(week * 4.3);
-        const year = Math.round(month * (10 + (h % 3)));
-        const band = (salt) => Math.max(0, Math.min(100, Math.round(32 + u.perf * 58 + ((hashStr(salt + u.id)) % 13) - 6)));
+        const yest = live ? Math.round(active * perDay) : 0;
+        const week = live ? Math.round(yest * (5 + (h % 3) * 0.3)) : 0;
+        const month = live ? Math.round(week * 4.3) : 0;
+        const year = live ? Math.round(month * (10 + (h % 3))) : 0;
+        const band = (salt) => live ? Math.max(0, Math.min(100, Math.round(32 + u.perf * 58 + ((hashStr(salt + u.id)) % 13) - 6))) : 0;
         const natName = NAT_TEST[iso] || null;
         return { yest, week, month, year, acer: band("acer:"), nat: natName ? { name: natName, score: band("nat:") } : null };
       }
 
       // illustrative time-series + cost-effectiveness for a jurisdiction (deterministic per node).
       // months since PadhaiPal reached a parent on x; outcomes/outputs cumulative.
-      function jurisStats(u, demo, iso) {
+      function jurisStats(u, demo, iso, live) {
+        // live=false -> PadhaiPal has no data here (no person/program); show the same metrics, zeroed.
         const h = hashStr("juris:" + u.id);
         const T = 12, months = Array.from({ length: T + 1 }, (_, i) => i);
         const cov = coverShare(u.id);
-        const students0 = Math.max(40, Math.round(demo.pop * 0.12 * (0.3 + cov * 0.7)));   // children in program
-        // learning curves: rise with diminishing returns toward a score ceiling
-        const curve = (salt, lo, hi) => { const b = lo + u.perf * 18, c = hi + u.perf * 30, tau = 4 + (hashStr(salt + u.id) % 4); return months.map((t) => Math.round(b + (c - b) * (1 - Math.exp(-t / tau)))); };
+        const students0 = live ? Math.max(40, Math.round(demo.pop * 0.12 * (0.3 + cov * 0.7))) : 0;   // children in program
+        // learning curves: rise with diminishing returns toward a score ceiling (zero when no data)
+        const curve = (salt, lo, hi) => { if (!live) return months.map(() => 0); const b = lo + u.perf * 18, c = hi + u.perf * 30, tau = 4 + (hashStr(salt + u.id) % 4); return months.map((t) => Math.round(b + (c - b) * (1 - Math.exp(-t / tau)))); };
         const acer = curve("ac:", 28, 56);
         const natName = NAT_TEST[iso] || null;
         const nip = natName ? curve("nt:", 26, 54) : null;
@@ -2659,7 +2660,7 @@
         const SD = 15, total = spend[T];
         const costSD = (arr) => { const g = (arr[T] - arr[0]) / SD; return g > 0 ? Math.round(total / (students[T] * g)) : null; };
         const spendNow = Math.round((spend[T] - spend[T - 1]) * 12);    // annualised run-rate
-        const fundEnd = MON[(h >>> 5) % 12] + " " + (2027 + (h % 3));
+        const fundEnd = live ? MON[(h >>> 5) % 12] + " " + (2027 + (h % 3)) : "—";
         // counterfactual 2031–2050 impact, scaled from the WWHGE paper's global ratios
         // (per child reaching foundational literacy; base = 368M children → headline totals).
         const PER = { gdp: 196e12 / 368e6, tax: 21e12 / 368e6, lives: 12e6 / 368e6, marriages: 16e6 / 368e6, secondary: 423e6 / 368e6, employed: 49e6 / 368e6 };
@@ -2673,7 +2674,7 @@
         const paused = Math.round(students[T] * (0.05 + (h % 21) / 100));
         const pausedImpact = { gdp: Math.round(paused * PER.gdp), tax: Math.round(paused * PER.tax), lives: Math.round(paused * PER.lives), marriages: Math.round(paused * PER.marriages), secondary: Math.round(paused * PER.secondary), employed: Math.round(paused * PER.employed) };
         // citizens petitioning the government to fund it (cumulative sign-ups over the year)
-        const petitionCount = Math.round(paused * (0.3 + (h % 40) / 100)) + 20;
+        const petitionCount = live ? Math.round(paused * (0.3 + (h % 40) / 100)) + 20 : 0;
         const petitionSignups = months.map((t) => Math.round(petitionCount * (1 - Math.exp(-t / 4))));
         return { months, acer, nip, natName, letters,
           outputs: { spend, students, hours, acerTests, nipTests, letters, ...impact },
@@ -2721,11 +2722,13 @@
         );
       }
       function MiniPie({ parts, r }) {
-        const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+        const sum = parts.reduce((s, p) => s + p.value, 0);
         let a = -Math.PI / 2;
         return (
           <svg width={r * 2} height={r * 2} className="block flex-shrink-0">
-            {parts.filter((p) => p.value > 0).map((p, i) => { const a1 = a + 2 * Math.PI * (p.value / total); const d = (p.value / total) >= 0.9995 ? null : wedgePath(r, r, r, a, a1); a = a1; return d ? <path key={i} d={d} fill={p.color} /> : <circle key={i} cx={r} cy={r} r={r} fill={p.color} />; })}
+            {sum <= 0
+              ? <circle cx={r} cy={r} r={r} fill="#e4e4e7" />
+              : parts.filter((p) => p.value > 0).map((p, i) => { const a1 = a + 2 * Math.PI * (p.value / sum); const d = (p.value / sum) >= 0.9995 ? null : wedgePath(r, r, r, a, a1); a = a1; return d ? <path key={i} d={d} fill={p.color} /> : <circle key={i} cx={r} cy={r} r={r} fill={p.color} />; })}
           </svg>
         );
       }
@@ -2752,6 +2755,7 @@
             transcript: PETITION_LINES[(h >>> 5) % PETITION_LINES.length].replace("{child}", child),
             daysAgo: h % 175, secs: 6 + (h % 48) });
         }
+        out.sort((a, b) => a.daysAgo - b.daysAgo);   // most recent first
         return out;
       }
       function PetitionPage({ title, count, signups, onClose }) {
@@ -3794,6 +3798,7 @@
                       const canInvite = !active.greyed && !registered(active.u.id);
                       const role = (active.sub || "").split(" · ")[0];
                       const geo = { "National Director": "country", DGSE: "region", BSA: "district", BEO: "block" }[role] || "area";
+                      const testName = NAT_TEST[active.iso] || "ACER";   // local test, default ACER (India = NIPUN)
                       const invite = () => openInvite({ id: active.u.id, title: active.title, role, geo });
                       if (canInvite) {
                         const pend = pendingInvites.get(active.u.id);
@@ -3841,7 +3846,10 @@
                               <div className="truncate text-[11px] text-zinc-400 group-hover:hidden">{active.u.phone}</div>
                               <div className="hidden truncate text-[11px] font-semibold text-blue-600 group-hover:block">✉ Click to add this user to a message</div>
                             </div>
-                            <span className="ml-auto flex-shrink-0 self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>
+                            <span className="ml-auto flex-shrink-0 self-start rounded-md px-2 py-1 text-center leading-tight" title={testName + " pass rate"} style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>
+                              <span className="block text-[8px] font-semibold opacity-80">{testName}</span>
+                              <span className="block text-xs font-bold">{active.u.score}%</span>
+                            </span>
                           </button>
                         );
                       }
@@ -3871,8 +3879,9 @@
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
-                      {!active.greyed && registered(active.u.id) && (() => {
-                        const js = jurisStats(active.u, active.demo, active.iso);
+                      {!active.greyed && (() => {
+                        const live = registered(active.u.id);
+                        const js = jurisStats(active.u, active.demo, active.iso, live);
                         const parts = [
                           { label: "Government", value: js.budget.gov, color: "#2563eb" },
                           { label: "Philanthropy", value: js.budget.phil, color: "#8b5cf6" },
@@ -3881,6 +3890,7 @@
                         const pi = js.pausedImpact;
                         return (
                           <div className="rounded bg-zinc-50 px-2 py-1.5">
+                            {!live && <div className="mb-1 rounded bg-zinc-100 px-2 py-1 text-[9px] font-medium text-zinc-500">No PadhaiPal data collected at this level yet — metrics shown zeroed.</div>}
                             <div className="mb-1 text-[10px] font-semibold text-zinc-500">Budget <span className="font-normal text-zinc-400">· committed &amp; allocated to this location</span></div>
                             <div className="flex items-center gap-3">
                               <MiniPie parts={parts} r={26} />
@@ -3914,7 +3924,7 @@
                         );
                       })()}
                       {(() => {
-                        const ls = learnStats(active.u, active.demo, active.iso);
+                        const ls = learnStats(active.u, active.demo, active.iso, !active.greyed && registered(active.u.id));
                         return (
                           <React.Fragment>
                             <div className="rounded bg-zinc-50 px-2 py-1.5">
@@ -3930,8 +3940,8 @@
                           </React.Fragment>
                         );
                       })()}
-                      {!active.greyed && registered(active.u.id) && (() => {
-                        const js = jurisStats(active.u, active.demo, active.iso);
+                      {!active.greyed && (() => {
+                        const js = jurisStats(active.u, active.demo, active.iso, registered(active.u.id));
                         const yKey = (chartY === "nat" && js.nip) ? "nat" : chartY === "letters" ? "letters" : "acer";
                         const curve = yKey === "letters" ? js.letters : yKey === "nat" ? js.nip : js.acer;
                         const color = yKey === "letters" ? "#06b6d4" : yKey === "nat" ? "#8b5cf6" : "#2563eb";
@@ -3996,7 +4006,7 @@
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Students</span><span className="font-semibold">{Math.round(40 + active.u.perf * 160)}</span></div>
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Active 7d</span><span className="font-semibold">{Math.round(active.u.perf * 100)}%</span></div>
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Lessons</span><span className="font-semibold">{Math.round(200 + active.u.perf * 1400)}</span></div>
-                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Avg score</span><span className="font-semibold">{active.u.score}</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{NAT_TEST[active.iso] || "ACER"} pass</span><span className="font-semibold">{active.u.score}%</span></div>
                     </div>
                   )}
                 </div>
