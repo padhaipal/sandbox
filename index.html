@@ -2415,6 +2415,38 @@
       const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
       // =====================================================================
+      //  Real schools (live, lazy): OpenStreetMap via Overpass per block bbox.
+      //  Real lat/lon + name + public/private from OSM tags. Mirror fallback.
+      // =====================================================================
+      const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+      function osmKind(t) {
+        const ot = (t["operator:type"] || "").toLowerCase();
+        if (/public|government|state|municipal/.test(ot)) return "public";
+        if (/private|religious|community|ngo|charit|faith/.test(ot)) return "private";
+        if (t.fee === "yes") return "private";
+        if (t.fee === "no") return "public";
+        return "unknown";
+      }
+      async function fetchOSMSchools(s, w, n, e) {
+        const q = `[out:json][timeout:25];(node["amenity"="school"](${s},${w},${n},${e});way["amenity"="school"](${s},${w},${n},${e}););out center 1200 tags;`;
+        for (const ep of OVERPASS) {
+          try {
+            const res = await fetch(ep, { method: "POST", body: q });
+            if (!res.ok) continue;
+            const j = await res.json();
+            return (j.elements || []).map((el) => {
+              const t = el.tags || {};
+              const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
+              const lon = el.lon != null ? el.lon : (el.center && el.center.lon);
+              if (lat == null || lon == null) return null;
+              return { lat, lon, name: t.name || t["name:en"] || "School", kind: osmKind(t) };
+            }).filter(Boolean);
+          } catch (err) { /* try next mirror */ }
+        }
+        return "error";
+      }
+
+      // =====================================================================
       //  Messaging templates + token replacement
       // =====================================================================
       const TEMPLATES = [
@@ -2692,6 +2724,8 @@
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
+        const [osm, setOsm] = useState(null);        // { id, status:"loading"|"ok"|"error", schools:[{lat,lon,name,kind}] }
+        const osmCache = useRef(new Map());          // block id -> array | "error"
 
         // --- one-time loads: world countries + ADM2 coverage list ---
         useEffect(() => {
@@ -2831,15 +2865,49 @@
         }, [adm2, a2Idx, adm3FC, projd, country]);
 
         // ---- schools (Head Teacher): illustrative points inside the focused block ----
+        // lazily fetch real OSM schools for the focused block (bbox via projection invert)
+        useEffect(() => {
+          if (level !== "schools" || a3Idx == null || !blocks || !blocks[a3Idx] || !projd || !projd.proj.invert) return;
+          const b = blocks[a3Idx], id = b.id;
+          if (osmCache.current.has(id)) { const c = osmCache.current.get(id); setOsm({ id, status: c === "error" ? "error" : "ok", schools: c === "error" ? [] : c }); return; }
+          const inv = projd.proj.invert;
+          const [minx, miny, maxx, maxy] = b.bbox;
+          const cs = [inv([minx, miny]), inv([maxx, miny]), inv([minx, maxy]), inv([maxx, maxy])].filter((p) => p && !isNaN(p[0]));
+          if (cs.length < 2) return;
+          let w = Infinity, e = -Infinity, s = Infinity, n = -Infinity;
+          for (const c of cs) { if (c[0] < w) w = c[0]; if (c[0] > e) e = c[0]; if (c[1] < s) s = c[1]; if (c[1] > n) n = c[1]; }
+          let cancelled = false;
+          setOsm({ id, status: "loading", schools: [] });
+          fetchOSMSchools(s, w, n, e).then((r) => {
+            if (cancelled) return;
+            if (r === "error") { osmCache.current.set(id, "error"); setOsm({ id, status: "error", schools: [] }); }
+            else { osmCache.current.set(id, r); setOsm({ id, status: "ok", schools: r }); }
+          });
+          return () => { cancelled = true; };
+        }, [level, a3Idx, blocks, projd]);
+
         const schools = useMemo(() => {
-          if (!blocks || a3Idx == null || !blocks[a3Idx]) return null;
+          if (!blocks || a3Idx == null || !blocks[a3Idx] || !projd) return null;
           const blk = blocks[a3Idx];
+          const { proj } = projd;
+          // real OSM schools: project lon/lat, keep those inside this block (point-in-polygon)
+          if (osm && osm.id === blk.id && osm.status === "ok" && osm.schools.length) {
+            const real = [];
+            for (const sc of osm.schools) {
+              const p = proj([sc.lon, sc.lat]);
+              if (!p || isNaN(p[0]) || !pointInPoly(p, blk.ring)) continue;
+              const id = blk.id + ".s" + real.length;
+              real.push({ k: real.length, id, u: node(blk.id + "." + (real.length % 7)), p, name: sc.name, kind: sc.kind, real: true });
+            }
+            if (real.length) return real;
+          }
+          // illustrative fallback — no OSM data, still loading, or none fell inside the block
           const m = 80 + (hashStr("sch:" + blk.id) % 70);
           return sampleInside(blk.ring, m, hashStr("schpts:" + blk.id)).map((p, k) => {
             const id = blk.id + ".s" + k;
-            return { k, id, u: node(blk.id + "." + (k % 7)), p, name: "School " + (k + 1) };
+            return { k, id, u: node(blk.id + "." + (k % 7)), p, name: "School " + (k + 1), kind: "unknown", real: false };
           });
-        }, [blocks, a3Idx]);
+        }, [blocks, a3Idx, projd, osm]);
 
         // ---- one school (force graph) ----
         const school = useMemo(() => {
@@ -2960,7 +3028,7 @@
           else if (level === "adm1" && adm1) arr = adm1.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "DGSE · " + d.u.name, location: country ? country.name : "", level: "DGSE", anchor: d.c, pathD: d.d, demo: d.demo }));
           else if (level === "adm2" && adm2) arr = adm2.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "BSA · " + d.u.name, location: a1f ? a1f.name : "", level: "BSA", anchor: d.c, pathD: d.d, demo: d.demo }));
           else if (level === "adm3" && blocks) arr = blocks.map((b) => ({ id: b.id, u: b.u, name: b.name, sub: "BEO · " + b.u.name, location: a2f ? a2f.name : "", level: "BEO", anchor: b.seed, pathD: b.d, demo: b.demo }));
-          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", anchor: s.p, dot: true }));
+          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: (s.kind && s.kind !== "unknown" ? s.kind[0].toUpperCase() + s.kind.slice(1) + " · " : "") + "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", kind: s.kind, anchor: s.p, dot: true }));
           else if (level === "school" && school) arr = school.nodes.map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: [n.x, n.y], dot: true }));
           arr = arr.map((e) => ({ ...e, score: e.u.score }));
           const order = [...arr].sort((a, b) => b.score - a.score);
@@ -3019,7 +3087,14 @@
           if (level === "adm1") return `${country ? country.name : ""} · ${adm1 ? adm1.length : 0} ADM1 regions (DGSEs) · click a region · click empty space to go up`;
           if (level === "adm2") return `${a1f ? a1f.name : ""} · ${adm2 ? adm2.length : 0} districts (BSAs) · click a district · click empty space to go up`;
           if (level === "adm3") return `${adm2 && a2Idx != null && adm2[a2Idx] ? adm2[a2Idx].name : ""} · ${blocks ? blocks.length : 0} blocks (BEOs) · ${synthBlocks ? "synthesised — no ADM3 layer for this country (ADM3 fallback)" : "real ADM3 boundaries (block proxy)"} · click a block`;
-          if (level === "schools") return `≈${schools ? schools.length : 0} schools · illustrative (Giga-style points) — positions not real · click a school`;
+          if (level === "schools") {
+            if (osm && blk && osm.id === blk.id && osm.status === "loading") return "Loading real schools from OpenStreetMap…";
+            if (schools && schools[0] && schools[0].real) {
+              const pub = schools.filter((s) => s.kind === "public").length, pri = schools.filter((s) => s.kind === "private").length;
+              return `${schools.length} schools · real locations (OpenStreetMap) · ${pub} public · ${pri} private · ${schools.length - pub - pri} unspecified · click a school`;
+            }
+            return `≈${schools ? schools.length : 0} schools · illustrative — no OpenStreetMap school data for this block · click a school`;
+          }
           if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`;
           return "";
         })();
@@ -3116,7 +3191,7 @@
                     {level === "schools" && schools && schools.map((sc) => (
                       <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 9 : 6) / tf.k}
                         fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={1.2 / tf.k} style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: sc.u, title: sc.name, sub: "Head Teacher · " + sc.u.name })}
+                        onMouseEnter={() => setActive({ u: sc.u, title: sc.name, sub: (sc.kind && sc.kind !== "unknown" ? sc.kind[0].toUpperCase() + sc.kind.slice(1) + " school · " : "") + "Head Teacher · " + sc.u.name })}
                         onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
                     ))}
 
