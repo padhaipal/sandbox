@@ -2586,10 +2586,15 @@
         Croatian:96, Serbian:96, Georgian:96, Greek:84, Catalan:90, Galician:90, Romanian:85,
         Quechua:92, Zulu:88, Xhosa:88, Afrikaans:85, Amharic:85, Oromo:85, Filipino:90, Tagalog:90,
         Lingala:88, Hausa:82, Yoruba:80, Igbo:80, Berber:85, Esperanto:100, Akan:82, Romansh:88,
-        Hindi:88, Bhojpuri:88, Awadhi:88, Bengali:86, Tamil:85, Telugu:88, Kannada:88, Malayalam:88, Marathi:88,
+        Hindi:88, Bhojpuri:88, Awadhi:88, Maithili:88, Bengali:86, Tamil:85, Telugu:88, Kannada:88, Malayalam:88, Marathi:88,
         Gujarati:88, Punjabi:86, Odia:86, Assamese:85, Nepali:88, Sinhala:85, Urdu:45,
         English:30, French:35, Portuguese:72, Russian:72, Ukrainian:78, Dutch:75, Danish:35,
         Arabic:60, Persian:45, Dari:45, Pashto:50, Kurdish:70, Hebrew:40,
+        // additional languages with transparent (Latin / abugida) scripts
+        Fulfulde:85, Sundanese:88, Madurese:85, Nahuatl:88, Somali:85, Tigrinya:85, Sidama:85,
+        Cebuano:90, Ilocano:90, Hiligaynon:90, Azerbaijani:90, Uzbek:90, Basque:90, Aymara:90, Fijian:88,
+        Kikongo:85, Tshiluba:85, "Northern Sotho":88, Tswana:88, Sotho:88, Tsonga:88, Makhuwa:85, Sena:85, Lomwe:85,
+        Kikuyu:88, Luhya:88, Luo:88, Kalenjin:88, Luganda:88, Runyankole:88, Soga:88, Acholi:88, Ewe:88, Ga:88, Dagbani:85,
         Mandarin:5, Japanese:35, Thai:70, Burmese:60, "—":0,
       };
       const PHON_MIN = 70;                                   // "phonetic" if an EVERYDAY script is at/above this
@@ -2608,23 +2613,33 @@
       // Per-country language mix as population shares (0–1). Demo estimates.
       const COUNTRY_LANGS = {
         USA:[["English",.78],["Spanish",.13],["Other",.09]],
-        IND:[["Hindi",.44],["Bengali",.08],["Marathi",.07],["Telugu",.07],["Tamil",.06],["Gujarati",.05],["Urdu",.04],["Kannada",.04],["Odia",.03],["English",.12]],
+        IND:[["Hindi",.44],["Bengali",.08],["Marathi",.07],["Telugu",.07],["Tamil",.06],["Gujarati",.045],["Urdu",.04],["Kannada",.035],["Odia",.03],["Malayalam",.03],["Punjabi",.03],["Other",.07]],
         CHN:[["Mandarin",1]], BRA:[["Portuguese",1]], FRA:[["French",1]], DEU:[["German",1]], GBR:[["English",1]],
-        NGA:[["Hausa",.3],["Yoruba",.2],["Igbo",.18],["English",.32]], PAK:[["Urdu",.5],["Punjabi",.38],["English",.12]],
-        IDN:[["Indonesian",.7],["Javanese",.3]], MEX:[["Spanish",1]], JPN:[["Japanese",1]], RUS:[["Russian",1]],
-        BGD:[["Bengali",1]], ETH:[["Amharic",.5],["Oromo",.5]], PHL:[["Filipino",.7],["English",.3]], EGY:[["Arabic",1]],
-        VNM:[["Vietnamese",1]], COD:[["French",.3],["Lingala",.4],["Swahili",.3]], TUR:[["Turkish",1]], IRN:[["Persian",1]],
-        THA:[["Thai",1]], ZAF:[["Zulu",.25],["Xhosa",.18],["Afrikaans",.13],["English",.1],["Other",.34]],
-        TZA:[["Swahili",.9],["English",.1]], KEN:[["Swahili",.7],["English",.3]],
-        ESP:[["Spanish",.74],["Catalan",.17],["Galician",.09]], COL:[["Spanish",1]], ARG:[["Spanish",1]],
-        DZA:[["Arabic",.72],["Berber",.28]], CAN:[["English",.78],["French",.22]], UGA:[["English",.7],["Swahili",.3]],
-        IRQ:[["Arabic",.78],["Kurdish",.22]], MAR:[["Arabic",.66],["Berber",.34]], AFG:[["Pashto",.5],["Dari",.5]],
-        SAU:[["Arabic",1]], UKR:[["Ukrainian",1]], AUS:[["English",1]], NPL:[["Nepali",1]],
-        GHA:[["English",.5],["Akan",.5]], LKA:[["Sinhala",.75],["Tamil",.25]], MMR:[["Burmese",1]], MOZ:[["Portuguese",1]],
+        NGA:[["Hausa",.29],["Yoruba",.20],["Igbo",.15],["English",.12],["Fulfulde",.04],["Other",.20]],
+        PAK:[["Punjabi",.39],["Pashto",.15],["Sindhi",.14],["Saraiki",.11],["Urdu",.08],["Balochi",.04],["Other",.09]],
+        IDN:[["Javanese",.40],["Indonesian",.22],["Sundanese",.15],["Madurese",.05],["Other",.18]],
+        MEX:[["Spanish",.94],["Nahuatl",.02],["Other",.04]], JPN:[["Japanese",1]], RUS:[["Russian",1]],
+        BGD:[["Bengali",1]], ETH:[["Oromo",.34],["Amharic",.29],["Somali",.06],["Tigrinya",.06],["Sidama",.04],["Other",.21]],
+        PHL:[["Filipino",.30],["Cebuano",.23],["Ilocano",.09],["Hiligaynon",.08],["English",.05],["Other",.25]], EGY:[["Arabic",1]],
+        VNM:[["Vietnamese",1]], COD:[["Lingala",.30],["Swahili",.22],["Kikongo",.15],["Tshiluba",.15],["French",.08],["Other",.10]],
+        TUR:[["Turkish",.85],["Kurdish",.15]], IRN:[["Persian",.54],["Azerbaijani",.16],["Kurdish",.10],["Other",.20]],
+        THA:[["Thai",1]], ZAF:[["Zulu",.23],["Xhosa",.16],["Afrikaans",.135],["Northern Sotho",.09],["Tswana",.08],["Sotho",.08],["English",.085],["Tsonga",.045],["Other",.095]],
+        TZA:[["Swahili",.9],["English",.1]], KEN:[["Swahili",.55],["Kikuyu",.12],["Luhya",.08],["Luo",.08],["Kalenjin",.07],["English",.10]],
+        ESP:[["Spanish",.74],["Catalan",.15],["Galician",.08],["Basque",.03]], COL:[["Spanish",1]], ARG:[["Spanish",1]],
+        DZA:[["Arabic",.72],["Berber",.28]], CAN:[["English",.57],["French",.21],["Other",.22]],
+        UGA:[["Luganda",.18],["Swahili",.12],["English",.10],["Runyankole",.10],["Soga",.08],["Acholi",.05],["Other",.37]],
+        IRQ:[["Arabic",.78],["Kurdish",.22]], MAR:[["Arabic",.66],["Berber",.34]], AFG:[["Dari",.48],["Pashto",.42],["Uzbek",.07],["Other",.03]],
+        SAU:[["Arabic",1]], UKR:[["Ukrainian",.68],["Russian",.30],["Other",.02]], AUS:[["English",1]],
+        NPL:[["Nepali",.48],["Maithili",.12],["Bhojpuri",.07],["Hindi",.10],["Other",.23]],
+        FJI:[["Fijian",.54],["Hindi",.37],["English",.09]],
+        MUS:[["Creole",.80],["Bhojpuri",.10],["Hindi",.05],["French",.05]],
+        ARE:[["Arabic",.40],["Hindi",.25],["English",.17],["Urdu",.10],["Malayalam",.08]],
+        GHA:[["Akan",.45],["Ewe",.13],["Ga",.08],["Dagbani",.05],["English",.10],["Other",.19]], LKA:[["Sinhala",.75],["Tamil",.25]],
+        MMR:[["Burmese",.68],["Shan",.09],["Karen",.07],["Other",.16]], MOZ:[["Makhuwa",.26],["Portuguese",.16],["Tsonga",.11],["Sena",.10],["Lomwe",.07],["Other",.30]],
         ITA:[["Italian",1]], POL:[["Polish",1]], KOR:[["Korean",1]],
-        CHE:[["German",.63],["French",.23],["Italian",.08],["Romansh",.06]],
-        BEL:[["Dutch",.59],["French",.4],["German",.01]], MYS:[["Malay",.7],["English",.3]],
-        PER:[["Spanish",.83],["Quechua",.17]],
+        CHE:[["German",.62],["French",.23],["Italian",.08],["Romansh",.01],["English",.06]],
+        BEL:[["Dutch",.59],["French",.4],["German",.01]], MYS:[["Malay",.60],["Mandarin",.20],["Tamil",.07],["English",.08],["Other",.05]],
+        PER:[["Spanish",.83],["Quechua",.13],["Aymara",.02],["Other",.02]],
       };
       // Real-ish national populations (demo; round UN-era figures).
       const COUNTRY_POP = {
@@ -2633,6 +2648,7 @@
         COD:99e6, TUR:85e6, IRN:88e6, THA:72e6, ZAF:60e6, TZA:65e6, KEN:54e6, ESP:48e6, COL:51e6, ARG:46e6,
         DZA:45e6, CAN:39e6, UGA:47e6, IRQ:43e6, MAR:37e6, AFG:41e6, SAU:36e6, UKR:38e6, AUS:26e6, NPL:30e6,
         GHA:33e6, LKA:22e6, MMR:54e6, MOZ:33e6, ITA:59e6, POL:38e6, KOR:52e6, CHE:9e6, BEL:12e6, MYS:33e6, PER:34e6,
+        FJI:0.9e6, MUS:1.3e6, ARE:9.4e6,
       };
       // a few India ADM1 overrides to demonstrate per-region language variation
       const REGION_LANG = {
@@ -2663,9 +2679,10 @@
       };
       // top-3 languages per teachability group, dropping "Other"/"—":
       // now = taught today; soon = phonetic (buildable later); never = beyond the method.
-      function splitLangs(pairs) {
+      function splitLangs(pairs, built) {
+        const nowSet = built || TEACHABLE_NOW;
         const now = [], soon = [], never = [];
-        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (TEACHABLE_NOW.has(l) ? now : isPhonetic(l) ? soon : never).push([l, s]); });
+        (pairs || []).forEach(([l, s]) => { if (l === "Other" || l === "—") return; (nowSet.has(l) ? now : isPhonetic(l) ? soon : never).push([l, s]); });
         const top3 = (a) => a.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([l, s]) => l + " " + Math.round(s * 100) + "%");
         return { now: top3(now), soon: top3(soon), never: top3(never) };
       }
@@ -3386,7 +3403,7 @@
             const covered = !!(iso && coverage && coverage.has(iso));
             const u = iso ? node("r." + iso) : null;
             const lf = langFor(iso, f.properties.ADMIN);
-            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: lf.phon, teach: lf.teach, u };
+            return { i, iso, covered, name: f.properties.ADMIN, feature: f, d: path(f), c: path.centroid(f), bbox: path.bounds(f), phon: lf.phon, teach: lf.teach, pairs: lf.pairs, u };
           }).filter(Boolean);
         }, [projd, isWorld, worldGeo, coverage]);
 
@@ -3396,6 +3413,8 @@
         const [builtLangs, setBuiltLangs] = useState(() => new Set(["Hindi"]));
         const [impactMetric, setImpactMetric] = useState("dalys");
         const roadmapOpen = openSecs.has("roadmap");
+        // share of an area's population speaking a language PadhaiPal has built (Roadmap checklist) -> the coloured pie segment
+        const teachBuilt = (pairs) => { let tot = 0, t = 0; for (const [l, s] of (pairs || [])) { tot += s; if (builtLangs.has(l)) t += s; } return tot > 0 ? t / tot : 0; };
 
         // ---- Roadmap flat-colour mode: per-country impact metric across unlocked countries ----
         const flatMetrics = useMemo(() => {
@@ -3888,17 +3907,17 @@
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       {(() => {
-                        const { now, soon, never } = splitLangs(active.demo.pairs);
+                        const { now, soon, never } = splitLangs(active.demo.pairs, builtLangs);
                         return (
                           <React.Fragment>
-                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-emerald-700">Teaching today</span><span className="min-w-0 break-words text-right font-semibold">{now.length ? now.join(", ") : "—"}</span></div>
+                            <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-emerald-700">Teaching / building</span><span className="min-w-0 break-words text-right font-semibold">{now.length ? now.join(", ") : "—"}</span></div>
                             <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">On the roadmap</span><span className="min-w-0 break-words text-right font-semibold">{soon.length ? soon.join(", ") : "—"}</span></div>
                             <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0 text-zinc-500">Beyond our method</span><span className="min-w-0 break-words text-right font-semibold">{never.length ? never.join(", ") : "—"}</span></div>
                           </React.Fragment>
                         );
                       })()}
-                      {active.demo.teach != null && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(active.demo.teach * 100)}% taught today · {Math.round(active.demo.phon * 100)}% in time</span></div>
+                      {active.demo.phon != null && (
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(teachBuilt(active.demo.pairs) * 100)}% with built langs · {Math.round(active.demo.phon * 100)}% in time</span></div>
                       )}
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
@@ -4125,7 +4144,7 @@
                       }
                       return (
                         <g key={p.i}>
-                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, p.teach)}
+                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, teachBuilt(p.pairs))}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
@@ -4136,7 +4155,7 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4148,7 +4167,7 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, d0.demo.teach)}
+                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4160,7 +4179,7 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, b.demo.teach)}
+                        {areaPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, teachBuilt(b.demo.pairs))}
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -4337,7 +4356,7 @@
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                      <span>Speaks a language we teach today <span className="text-zinc-400">(colour = avg score)</span></span>
+                      <span>Speaks a language we've built <span className="text-zinc-400">(colour = avg score)</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
@@ -4354,7 +4373,7 @@
                       <span>Dimmed = node not registered in PadhaiPal</span>
                     </div>
                   </div>
-                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · today PadhaiPal teaches Hindi · demo data</div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · tick languages in the Roadmap section to colour more countries · demo data</div>
                 </div>
               </div>
 
