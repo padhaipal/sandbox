@@ -2664,7 +2664,7 @@
         // country level -> real national population; sub-levels -> area-disaggregated (peers split by area)
         const pop = isCountry && COUNTRY_POP[iso] ? COUNTRY_POP[iso] : Math.max(1, Math.round(areaKm2 * dens));
         // sub-levels inherit the parent's language mix (proportions); only pop/area differ
-        const lang = inherit ? { langs: inherit.langs, pairs: inherit.pairs, real: inherit.real, phon: inherit.phon } : langFor(iso, regionName);
+        const lang = inherit ? { langs: inherit.langs, pairs: inherit.pairs, real: inherit.real, phon: inherit.phon, teach: inherit.teach } : langFor(iso, regionName);
         return { pop, areaKm2, ...lang };
       }
       const fmtPop = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n));
@@ -2725,12 +2725,16 @@
         const PER = { gdp: 196e12 / 368e6, tax: 21e12 / 368e6, lives: 12e6 / 368e6, marriages: 16e6 / 368e6, secondary: 423e6 / 368e6, employed: 49e6 / 368e6 };
         const proj = (k) => months.map((t) => Math.round(students[t] * PER[k]));
         const impact = { gdp: proj("gdp"), tax: proj("tax"), lives: proj("lives"), marriages: proj("marriages"), secondary: proj("secondary"), employed: proj("employed") };
-        // budget fully committed & allocated to this location bucket (in the bank, not pledged)
-        const bTot = Math.round(spend[T] * (1.1 + (h % 60) / 100));
+        // budget fully committed & allocated to this location bucket (in the bank, not pledged).
+        // 0.2–1.6 years of runway at the current burn -> a real spread of funded vs short.
+        const bTot = Math.round(spendNow * (0.2 + (h % 140) / 100));
         const gov = 0.35 + ((h >>> 3) % 30) / 100, fam = 0.05 + ((h >>> 7) % 16) / 100, phil = Math.max(0.05, 1 - gov - fam);
         const budget = { total: bTot, gov: Math.round(bTot * gov), phil: Math.round(bTot * phil), fam: Math.round(bTot * fam) };
-        // learners paused for lack of funds, and the WWHGE 2050 impact forgone for them
-        const paused = Math.round(students[T] * (0.05 + (h % 21) / 100));
+        // funding runway at linear usage; learners are only paused when funds fall short (none if 365+ days).
+        const dailyBurn = spendNow / 365;
+        const daysLeft = live && dailyBurn > 0 ? Math.round(bTot / dailyBurn) : 0;
+        const shortfall = live ? Math.max(0, Math.min(1, 1 - daysLeft / 365)) : 0;
+        const paused = Math.round(students[T] * (0.05 + (h % 21) / 100) * shortfall);
         const pausedImpact = { gdp: Math.round(paused * PER.gdp), tax: Math.round(paused * PER.tax), lives: Math.round(paused * PER.lives), marriages: Math.round(paused * PER.marriages), secondary: Math.round(paused * PER.secondary), employed: Math.round(paused * PER.employed) };
         // citizens petitioning the government to fund it (cumulative sign-ups over the year)
         const petitionCount = live ? Math.round(paused * (0.3 + (h % 40) / 100)) + 20 : 0;
@@ -2738,7 +2742,7 @@
         return { months, acer, nip, natName, letters,
           outputs: { spend, students, hours, acerTests, nipTests, letters, ...impact },
           costAcerSD: costSD(acer), costNatSD: nip ? costSD(nip) : null, spendNow, total, fundEnd,
-          budget, paused, pausedImpact, petitionCount, petitionSignups };
+          budget, daysLeft, paused, pausedImpact, petitionCount, petitionSignups };
       }
 
       // tiny SVG charts (no deps). LineChart = one real-valued series; MultiChart = many, each self-normalised.
@@ -4025,8 +4029,7 @@
                         if (level !== "world" && country) locChain.push(country.name);
                         const locTitle = locChain.join(" · ");
                         // funding runway at linear projected usage: green = 365+ days, red = run out
-                        const dailyBurn = js.spendNow / 365;
-                        const daysLeft = live && dailyBurn > 0 ? Math.round(js.budget.total / dailyBurn) : 0;
+                        const daysLeft = js.daysLeft;
                         const fp = clamp(daysLeft / 365, 0, 1);
                         const bg = live ? "rgba(" + scoreRGB(fp).join(",") + ",0.22)" : "rgba(228,228,231,0.5)";
                         const fundClass = daysLeft <= 0 ? "text-red-700" : daysLeft < 120 ? "text-amber-700" : "text-emerald-700";
@@ -4053,10 +4056,12 @@
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-1.5 rounded bg-amber-50 px-2 py-1">
-                              <div className="text-[10px] font-semibold text-amber-700">{fmtPop(js.paused)} learners paused for lack of funds</div>
-                              <div className="mt-0.5 text-[9px] leading-snug text-amber-700/90">Forgone by 2050 (WWHGE): {fmtMoney(pi.gdp)} GDP · {fmtMoney(pi.tax)} tax · {fmtPop(pi.lives)} lives saved · {fmtPop(pi.marriages)} child marriages averted · {fmtPop(pi.secondary)} reaching secondary · {fmtPop(pi.employed)} youth employed</div>
-                            </div>
+                            {js.paused > 0 && (
+                              <div className="mt-1.5 rounded bg-amber-50 px-2 py-1">
+                                <div className="text-[10px] font-semibold text-amber-700">{fmtPop(js.paused)} learners paused for lack of funds</div>
+                                <div className="mt-0.5 text-[9px] leading-snug text-amber-700/90">Forgone by 2050 (WWHGE): {fmtMoney(pi.gdp)} GDP · {fmtMoney(pi.tax)} tax · {fmtPop(pi.lives)} lives saved · {fmtPop(pi.marriages)} child marriages averted · {fmtPop(pi.secondary)} reaching secondary · {fmtPop(pi.employed)} youth employed</div>
+                              </div>
+                            )}
                             <button onClick={() => setFund({ title: locTitle, id: active.u.id })}
                               className="mt-1.5 w-full rounded-md bg-emerald-600 px-2 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">💚 Fund this location</button>
                             <div className="mt-0.5 text-center text-[9px] text-zinc-400">Open to residents, peers, donors &amp; officials</div>
