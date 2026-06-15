@@ -1496,7 +1496,8 @@
       //  Compose drawer — templates, editable message, recipient search with
       //  filters, recipient list, AI follow-up, send, generate report.
       // =====================================================================
-      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport }) {
+      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport, glow }) {
+        const glowCls = "transition-shadow duration-700 " + (glow ? "shadow-[0_0_30px_8px_rgba(37,99,235,0.65)]" : "");
         const [tplId, setTplId] = useState(null);
         const [text, setText] = useState("");
         const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "" });
@@ -1524,14 +1525,14 @@
         // minimized — an accordion-like bar pinned to the left edge
         if (!open) return (
           <button onClick={onToggle} title="Open compose"
-            className="absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50">
+            className={"absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50 " + glowCls}>
             <span className="text-blue-600">»</span>
             <span className="text-[11px] font-semibold tracking-wide text-zinc-700" style={{ writingMode: "vertical-rl" }}>✉ Compose{recipients.length ? " · " + recipients.length : ""}</span>
           </button>
         );
 
         return (
-          <aside className="absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
+          <aside className={"absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl " + glowCls}>
             <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2">
               <span className="text-sm font-semibold text-zinc-900">Compose message</span>
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{recipients.length} recipient{recipients.length === 1 ? "" : "s"}</span>
@@ -2842,7 +2843,8 @@
       // =====================================================================
       //  Compose drawer
       // =====================================================================
-      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport }) {
+      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport, glow }) {
+        const glowCls = "transition-shadow duration-700 " + (glow ? "shadow-[0_0_30px_8px_rgba(37,99,235,0.65)]" : "");
         const [tplId, setTplId] = useState(null);
         const [text, setText] = useState("");
         const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "" });
@@ -2869,14 +2871,14 @@
 
         if (!open) return (
           <button onClick={onToggle} title="Open compose"
-            className="absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50">
+            className={"absolute left-0 top-0 z-30 flex h-full w-10 flex-col items-center gap-3 border-r border-zinc-200 bg-white py-3 shadow-md hover:bg-zinc-50 " + glowCls}>
             <span className="text-blue-600">»</span>
             <span className="text-[11px] font-semibold tracking-wide text-zinc-700" style={{ writingMode: "vertical-rl" }}>✉ Compose{recipients.length ? " · " + recipients.length : ""}</span>
           </button>
         );
 
         return (
-          <aside className="absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
+          <aside className={"absolute left-0 top-0 z-30 flex h-full w-[400px] flex-col border-r border-zinc-200 bg-white shadow-2xl " + glowCls}>
             <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2">
               <span className="text-sm font-semibold text-zinc-900">Compose message</span>
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{recipients.length} recipient{recipients.length === 1 ? "" : "s"}</span>
@@ -3333,6 +3335,9 @@
 
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
+        const [composeGlow, setComposeGlow] = useState(false);
+        const glowTimer = useRef(null);
+        const flashCompose = useCallback(() => { setComposeGlow(true); if (glowTimer.current) clearTimeout(glowTimer.current); glowTimer.current = setTimeout(() => setComposeGlow(false), 2000); }, []);
         const [sendList, setSendList] = useState(() => new Map());
         const [hoverId, setHoverId] = useState(null);
         const [savedTemplates, setSavedTemplates] = useState([]);
@@ -3629,16 +3634,32 @@
                           </React.Fragment>
                         );
                       }
+                      if (hasPerson) {
+                        const messageUser = () => {
+                          const ent = entities.find((e) => e.id === active.u.id) || { id: active.u.id, u: active.u, name: active.title, location: "", level: role, score: active.u.score, rank: 0 };
+                          addEntities([ent]);
+                          setComposeOpen(true);
+                          flashCompose();
+                        };
+                        return (
+                          <button onClick={messageUser} title={"Click to message " + active.u.name}
+                            className="group -m-1 flex w-full items-center gap-3 rounded-lg p-1 text-left transition hover:bg-blue-50">
+                            <img src={active.u.face} alt="" className="h-12 w-12 flex-shrink-0 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                              <div className="truncate text-xs text-zinc-500">{active.sub}</div>
+                              <div className="truncate text-[11px] text-zinc-400 group-hover:hidden">{active.u.phone}</div>
+                              <div className="hidden truncate text-[11px] font-semibold text-blue-600 group-hover:block">✉ Click to add this user to a message</div>
+                            </div>
+                            <span className="ml-auto flex-shrink-0 self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>
+                          </button>
+                        );
+                      }
                       return (
-                        <React.Fragment>
-                          {hasPerson && <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />}
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
-                            <div className="truncate text-xs text-zinc-500">{hasPerson ? active.sub : role}</div>
-                            {hasPerson && <div className="text-[11px] text-zinc-400">{active.u.phone}</div>}
-                          </div>
-                          {hasPerson && <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>}
-                        </React.Fragment>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                          <div className="truncate text-xs text-zinc-500">{role}</div>
+                        </div>
                       );
                     })()}
                   </div>
@@ -3797,7 +3818,7 @@
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                 recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
                 savedTemplates={savedTemplates} setSavedTemplates={setSavedTemplates} savedFilters={savedFilters} setSavedFilters={setSavedFilters}
-                ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} />
+                ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} glow={composeGlow} />
             </div>
 
             <BarGraph entities={entities} selectedIds={selectedIds} hoverId={hoverId}
