@@ -2665,9 +2665,20 @@
         const PER = { gdp: 196e12 / 368e6, tax: 21e12 / 368e6, lives: 12e6 / 368e6, marriages: 16e6 / 368e6, secondary: 423e6 / 368e6, employed: 49e6 / 368e6 };
         const proj = (k) => months.map((t) => Math.round(students[t] * PER[k]));
         const impact = { gdp: proj("gdp"), tax: proj("tax"), lives: proj("lives"), marriages: proj("marriages"), secondary: proj("secondary"), employed: proj("employed") };
+        // budget fully committed & allocated to this location bucket (in the bank, not pledged)
+        const bTot = Math.round(spend[T] * (1.1 + (h % 60) / 100));
+        const gov = 0.35 + ((h >>> 3) % 30) / 100, fam = 0.05 + ((h >>> 7) % 16) / 100, phil = Math.max(0.05, 1 - gov - fam);
+        const budget = { total: bTot, gov: Math.round(bTot * gov), phil: Math.round(bTot * phil), fam: Math.round(bTot * fam) };
+        // learners paused for lack of funds, and the WWHGE 2050 impact forgone for them
+        const paused = Math.round(students[T] * (0.05 + (h % 21) / 100));
+        const pausedImpact = { gdp: Math.round(paused * PER.gdp), tax: Math.round(paused * PER.tax), lives: Math.round(paused * PER.lives), marriages: Math.round(paused * PER.marriages), secondary: Math.round(paused * PER.secondary), employed: Math.round(paused * PER.employed) };
+        // citizens petitioning the government to fund it (cumulative sign-ups over the year)
+        const petitionCount = Math.round(paused * (0.3 + (h % 40) / 100)) + 20;
+        const petitionSignups = months.map((t) => Math.round(petitionCount * (1 - Math.exp(-t / 4))));
         return { months, acer, nip, natName, letters,
           outputs: { spend, students, hours, acerTests, nipTests, letters, ...impact },
-          costAcerSD: costSD(acer), costNatSD: nip ? costSD(nip) : null, spendNow, total, fundEnd };
+          costAcerSD: costSD(acer), costNatSD: nip ? costSD(nip) : null, spendNow, total, fundEnd,
+          budget, paused, pausedImpact, petitionCount, petitionSignups };
       }
 
       // tiny SVG charts (no deps). LineChart = one real-valued series; MultiChart = many, each self-normalised.
@@ -2707,6 +2718,99 @@
               return <polyline key={s.name} points={pts} fill="none" stroke={s.color} strokeWidth={on ? 3 : 1.6} strokeLinejoin="round" opacity={dim ? 0.15 : 0.9} />;
             })}
           </svg>
+        );
+      }
+      function MiniPie({ parts, r }) {
+        const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+        let a = -Math.PI / 2;
+        return (
+          <svg width={r * 2} height={r * 2} className="block flex-shrink-0">
+            {parts.filter((p) => p.value > 0).map((p, i) => { const a1 = a + 2 * Math.PI * (p.value / total); const d = (p.value / total) >= 0.9995 ? null : wedgePath(r, r, r, a, a1); a = a1; return d ? <path key={i} d={d} fill={p.color} /> : <circle key={i} cx={r} cy={r} r={r} fill={p.color} />; })}
+          </svg>
+        );
+      }
+
+      // citizen-petition page (voice + transcript per signer; deterministic demo)
+      const PETITION_LINES = [
+        "Please fund PadhaiPal so {child} can keep learning to read.",
+        "My {child} was improving every week — please don't let it stop.",
+        "We cannot afford private tuition. PadhaiPal is our only hope for {child}.",
+        "The government must pay for this. {child} deserves to finish school.",
+        "{child} learned more in a month than in a year — please continue it.",
+        "I am a daily-wage worker. Please keep teaching my daughter {child}.",
+        "Our whole village wants PadhaiPal back for children like {child}.",
+        "{child} cried when the lessons stopped. Please bring them back.",
+      ];
+      const obscurePhone = (p) => p.length > 7 ? p.slice(0, 5) + " ••• " + p.slice(-3) : p;
+      function petitionSigners(seed, n) {
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          const h = hashStr("pet:" + seed + ":" + i);
+          const child = FIRST[(h >>> 13) % FIRST.length];
+          out.push({ id: i, name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 9) % LAST.length],
+            phone: "+9198" + String(1000000 + (h % 9000000)),
+            transcript: PETITION_LINES[(h >>> 5) % PETITION_LINES.length].replace("{child}", child),
+            daysAgo: h % 175, secs: 6 + (h % 48) });
+        }
+        return out;
+      }
+      function PetitionPage({ title, count, signups, onClose }) {
+        const SAMPLE = Math.min(count, 40);
+        const signers = petitionSigners(title, SAMPLE);
+        const play = (t) => { try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.rate = 0.95; window.speechSynthesis.speak(u); } catch (e) {} };
+        const recent = signups[signups.length - 1] - signups[signups.length - 2];
+        return (
+          <div className="fixed inset-0 z-[70] flex flex-col bg-zinc-50" onClick={(e) => e.stopPropagation()}>
+            <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3 shadow-sm">
+              <button onClick={onClose} className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">← Back to map</button>
+              <div className="min-w-0">
+                <div className="truncate text-base font-semibold text-zinc-900">Citizen petitions · {title}</div>
+                <div className="truncate text-xs text-zinc-500">Residents asking the government to fund PadhaiPal here</div>
+              </div>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="text-[11px] text-zinc-500">Total signatures</div>
+                  <div className="text-2xl font-bold text-zinc-900">{count.toLocaleString()}</div>
+                </div>
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="text-[11px] text-zinc-500">Signed in the last month</div>
+                  <div className="text-2xl font-bold text-emerald-600">+{recent.toLocaleString()}</div>
+                </div>
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="mb-1 text-[11px] text-zinc-500">Sign-ups over time (cumulative)</div>
+                  <LineChart values={signups} w={260} h={56} color="#2563eb" fmtY={fmtPop} />
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                <div className="flex items-center gap-4 border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                  <div className="w-40 flex-shrink-0">Signer</div>
+                  <div className="w-48 flex-shrink-0">Voice message</div>
+                  <div className="min-w-0 flex-1">Transcription</div>
+                  <div className="w-16 flex-shrink-0 text-right">Signed</div>
+                </div>
+                {signers.map((s) => (
+                  <div key={s.id} className="flex items-center gap-4 border-t border-zinc-100 px-3 py-2 text-sm">
+                    <div className="w-40 flex-shrink-0">
+                      <div className="truncate font-medium text-zinc-800">{s.name}</div>
+                      <div className="font-mono text-[11px] text-zinc-400">{obscurePhone(s.phone)}</div>
+                    </div>
+                    <div className="flex w-48 flex-shrink-0 items-center gap-2">
+                      <button onClick={() => play(s.transcript)} title="Play voice message" className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs text-white hover:bg-blue-700">▶</button>
+                      <div className="flex h-6 items-end gap-0.5">
+                        {Array.from({ length: 20 }).map((_, k) => <span key={k} className="w-0.5 rounded-sm bg-blue-300" style={{ height: 3 + (hashStr("wf:" + s.id + ":" + k) % 18) }} />)}
+                      </div>
+                      <span className="text-[10px] text-zinc-400">0:{String(s.secs).padStart(2, "0")}</span>
+                    </div>
+                    <div className="min-w-0 flex-1 text-zinc-600">“{s.transcript}”</div>
+                    <div className="w-16 flex-shrink-0 text-right text-[11px] text-zinc-400">{s.daysAgo}d ago</div>
+                  </div>
+                ))}
+              </div>
+              {count > SAMPLE && <div className="mt-2 text-[11px] text-zinc-400">Showing {SAMPLE} of {count.toLocaleString()} signers (demo sample). Voice = browser text-to-speech of the transcript.</div>}
+            </div>
+          </div>
         );
       }
 
@@ -3332,6 +3436,7 @@
         const openInvite = (a) => setInvite({ ...a, link: "https://pp.link/invite/" + encodeURIComponent(a.id) });
         const [pendingInvites, setPendingInvites] = useState(() => new Map());   // nodeId -> { name, phone } (last invite sent)
         const recordInvite = (id, person) => setPendingInvites((m) => { const n = new Map(m); n.set(id, person); return n; });
+        const [petition, setPetition] = useState(null);   // { title, count, signups } -> full-screen petition page
 
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
@@ -3681,6 +3786,45 @@
                       {!active.greyed && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
+                      {!active.greyed && registered(active.u.id) && (() => {
+                        const js = jurisStats(active.u, active.demo, active.iso);
+                        const parts = [
+                          { label: "Government", value: js.budget.gov, color: "#2563eb" },
+                          { label: "Philanthropy", value: js.budget.phil, color: "#8b5cf6" },
+                          { label: "Family contributions", value: js.budget.fam, color: "#10b981" },
+                        ];
+                        const pi = js.pausedImpact;
+                        return (
+                          <div className="rounded bg-zinc-50 px-2 py-1.5">
+                            <div className="mb-1 text-[10px] font-semibold text-zinc-500">Budget <span className="font-normal text-zinc-400">· committed &amp; allocated to this location</span></div>
+                            <div className="flex items-center gap-3">
+                              <MiniPie parts={parts} r={26} />
+                              <div className="min-w-0 flex-1 space-y-0.5">
+                                {parts.map((p) => (
+                                  <div key={p.label} className="flex items-center gap-1 text-[10px]">
+                                    <span className="h-2 w-2 flex-shrink-0 rounded-sm" style={{ background: p.color }} />
+                                    <span className="truncate text-zinc-500">{p.label}</span>
+                                    <span className="ml-auto font-semibold text-zinc-700">{fmtMoney(p.value)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex items-center gap-1 border-t border-zinc-200 pt-0.5 text-[10px]">
+                                  <span className="text-zinc-500">Total committed</span>
+                                  <span className="ml-auto font-semibold text-zinc-900">{fmtMoney(js.budget.total)}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-1.5 rounded bg-amber-50 px-2 py-1">
+                              <div className="text-[10px] font-semibold text-amber-700">{fmtPop(js.paused)} learners paused for lack of funds</div>
+                              <div className="mt-0.5 text-[9px] leading-snug text-amber-700/90">Forgone by 2050 (WWHGE): {fmtMoney(pi.gdp)} GDP · {fmtMoney(pi.tax)} tax · {fmtPop(pi.lives)} lives saved · {fmtPop(pi.marriages)} child marriages averted · {fmtPop(pi.secondary)} reaching secondary · {fmtPop(pi.employed)} youth employed</div>
+                            </div>
+                            <button onClick={() => setPetition({ title: active.title, count: js.petitionCount, signups: js.petitionSignups })}
+                              className="mt-1.5 flex w-full items-center justify-between gap-2 rounded bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100">
+                              <span className="truncate">{js.petitionCount.toLocaleString()} citizens petitioned the government to fund this</span>
+                              <span className="flex-shrink-0">View →</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
                       {(() => {
                         const ls = learnStats(active.u, active.demo, active.iso);
                         return (
@@ -3814,6 +3958,7 @@
               )}
 
               {invite && <InviteModal key={invite.id} data={invite} initial={pendingInvites.get(invite.id) || null} onClose={() => setInvite(null)} onSent={(person) => recordInvite(invite.id, person)} />}
+              {petition && <PetitionPage title={petition.title} count={petition.count} signups={petition.signups} onClose={() => setPetition(null)} />}
 
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                 recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
