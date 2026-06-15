@@ -2600,9 +2600,9 @@
         const lang = inherit ? { langs: inherit.langs, pairs: inherit.pairs, real: inherit.real, phon: inherit.phon } : langFor(iso, regionName);
         return { pop, areaKm2, ...lang };
       }
-      const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
+      const fmtPop = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n));
       const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
-      const fmtMoney = (n) => "$" + (n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n)));
+      const fmtMoney = (n) => "$" + (n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n)));
       const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
       // National foundational-literacy assessment each government prefers (ACER is shown everywhere).
@@ -2652,8 +2652,13 @@
         const costSD = (arr) => { const g = (arr[T] - arr[0]) / SD; return g > 0 ? Math.round(total / (students[T] * g)) : null; };
         const spendNow = Math.round((spend[T] - spend[T - 1]) * 12);    // annualised run-rate
         const fundEnd = MON[(h >>> 5) % 12] + " " + (2027 + (h % 3));
+        // counterfactual 2031–2050 impact, scaled from the WWHGE paper's global ratios
+        // (per child reaching foundational literacy; base = 368M children → headline totals).
+        const PER = { gdp: 196e12 / 368e6, tax: 21e12 / 368e6, lives: 12e6 / 368e6, marriages: 16e6 / 368e6, secondary: 423e6 / 368e6, employed: 49e6 / 368e6 };
+        const proj = (k) => months.map((t) => Math.round(students[t] * PER[k]));
+        const impact = { gdp: proj("gdp"), tax: proj("tax"), lives: proj("lives"), marriages: proj("marriages"), secondary: proj("secondary"), employed: proj("employed") };
         return { months, acer, nip, natName, letters,
-          outputs: { spend, students, hours, acerTests, nipTests, letters },
+          outputs: { spend, students, hours, acerTests, nipTests, letters, ...impact },
           costAcerSD: costSD(acer), costNatSD: nip ? costSD(nip) : null, spendNow, total, fundEnd };
       }
 
@@ -2680,13 +2685,19 @@
           </svg>
         );
       }
-      function MultiChart({ series, w, h }) {
+      function MultiChart({ series, w, h, highlight }) {
         const pl = 4, pr = 4, pt = 5, pb = 5, n = (series[0] && series[0].values.length) || 1;
         const iw = w - pl - pr, ih = h - pt - pb;
         const xOf = (i) => pl + (n <= 1 ? 0 : (i / (n - 1)) * iw);
+        const ordered = highlight ? [...series.filter((s) => s.name !== highlight), ...series.filter((s) => s.name === highlight)] : series; // draw highlighted last (on top)
         return (
           <svg width={w} height={h} className="block">
-            {series.map((s) => { const mx = Math.max(...s.values, 1); const pts = s.values.map((v, i) => xOf(i).toFixed(1) + "," + (pt + ih - (v / mx) * ih).toFixed(1)).join(" "); return <polyline key={s.name} points={pts} fill="none" stroke={s.color} strokeWidth="1.6" strokeLinejoin="round" opacity="0.9" />; })}
+            {ordered.map((s) => {
+              const on = highlight === s.name, dim = highlight && !on;
+              const mx = Math.max(...s.values, 1);
+              const pts = s.values.map((v, i) => xOf(i).toFixed(1) + "," + (pt + ih - (v / mx) * ih).toFixed(1)).join(" ");
+              return <polyline key={s.name} points={pts} fill="none" stroke={s.color} strokeWidth={on ? 3 : 1.6} strokeLinejoin="round" opacity={dim ? 0.15 : 0.9} />;
+            })}
           </svg>
         );
       }
@@ -3011,13 +3022,10 @@
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
-        // world-level map projection ("orthographic" = 3D globe; only used at world level)
-        const [worldProj, setWorldProj] = useState("naturalEarth1");
+        // the world level always renders as a 3D globe (orthographic); deeper levels are flat
         const [globeRot, setGlobeRot] = useState([-10, -8]);
-        const [chartY, setChartY] = useState("acer");   // y-axis metric for the learning-curve chart
-        const PROJ_ORDER = ["naturalEarth1", "equalEarth", "mercator", "orthographic"];
-        const PROJ_LABEL = { naturalEarth1: "🗺 Natural Earth", equalEarth: "🗺 Equal Earth", mercator: "🗺 Mercator", orthographic: "🌐 Globe" };
-        const nextProj = () => setWorldProj((p) => PROJ_ORDER[(PROJ_ORDER.indexOf(p) + 1) % PROJ_ORDER.length]);
+        const [chartY, setChartY] = useState("acer");          // y-axis metric for the learning-curve chart
+        const [legendHover, setLegendHover] = useState(null);  // outputs-chart legend hover -> highlight line
         const [osm, setOsm] = useState(null);        // { id, status:"loading"|"ok"|"error", schools:[{lat,lon,name,kind}] }
         const osmCache = useRef(new Map());          // block id -> array | "error"
 
@@ -3067,20 +3075,15 @@
           if (!d3 || !size) return null;
           if (isWorld) {
             if (!worldFit) return null;
-            const ext = [[6, 6], [size.w - 6, size.h - 6]];                 // Natural Earth data is well-wound
-            if (worldProj === "orthographic") {
-              const proj = d3.geoOrthographic().rotate(globeRot).clipAngle(90).fitExtent(ext, { type: "Sphere" });
-              return { proj, path: d3.geoPath(proj), globe: true };
-            }
-            const make = worldProj === "mercator" ? d3.geoMercator : worldProj === "equalEarth" ? d3.geoEqualEarth : d3.geoNaturalEarth1;
-            const proj = make().fitExtent(ext, worldFit);
-            return { proj, path: d3.geoPath(proj), globe: false };
+            const ext = [[6, 6], [size.w - 6, size.h - 6]];
+            const proj = d3.geoOrthographic().rotate(globeRot).clipAngle(90).fitExtent(ext, { type: "Sphere" });
+            return { proj, path: d3.geoPath(proj), globe: true };
           }
           if (!adm1FC || adm1FC === "error" || !adm1FC.features) return null;
           const proj = fitMercator(adm1FC.features, size.w, size.h, 10); // planar fit — geoBoundaries winding breaks fitExtent
           if (!proj) return null;
           return { proj, path: d3.geoPath(proj) };
-        }, [isWorld, worldFit, adm1FC, size, worldProj, globeRot]);
+        }, [isWorld, worldFit, adm1FC, size, globeRot]);
 
         // ---- WORLD level: every country, coloured by its national score (grey = no ADM2 data) ----
         const worldPaths = useMemo(() => {
@@ -3294,7 +3297,7 @@
           const px = e.clientX - rect.left, py = e.clientY - rect.top;
           setTf((t) => { const k = clamp(t.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), ZMIN, ZMAX); const s = k / t.k; return { k, x: px - (px - t.x) * s, y: py - (py - t.y) * s }; });
         }, []);
-        const globeMode = isWorld && worldProj === "orthographic";
+        const globeMode = isWorld;
         const onPointerDown = useCallback((e) => { drag.current = globeMode ? { x: e.clientX, y: e.clientY, rot: globeRot, spin: true } : { x: e.clientX, y: e.clientY, tx: tf.x, ty: tf.y }; moved.current = false; }, [tf, globeMode, globeRot]);
         const onPointerMove = useCallback((e) => {
           if (!drag.current) return;
@@ -3579,7 +3582,7 @@
 
               {/* readout panel with demographics */}
               {active && (
-                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg"
+                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-14rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg"
                   onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-3">
                     {(() => {
@@ -3642,11 +3645,18 @@
                         const W = 320;
                         const outSeries = [
                           { name: "Spend", color: "#10b981", values: js.outputs.spend, fmt: fmtMoney },
-                          js.outputs.nipTests && { name: js.natName + " tests", color: "#8b5cf6", values: js.outputs.nipTests, fmt: fmtPop },
                           { name: "ACER tests", color: "#2563eb", values: js.outputs.acerTests, fmt: fmtPop },
+                          js.outputs.nipTests && { name: js.natName + " tests", color: "#8b5cf6", values: js.outputs.nipTests, fmt: fmtPop },
                           { name: "Students", color: "#f59e0b", values: js.outputs.students, fmt: fmtPop },
                           { name: "Lesson hrs", color: "#f43f5e", values: js.outputs.hours, fmt: fmtPop },
                           { name: "Letters", color: "#06b6d4", values: js.outputs.letters, fmt: fmtPop },
+                          // counterfactual 2031–2050 impact (WWHGE paper, scaled to children reached)
+                          { name: "GDP ↑ '50", color: "#65a30d", values: js.outputs.gdp, fmt: fmtMoney },
+                          { name: "Tax rev ↑ '50", color: "#0d9488", values: js.outputs.tax, fmt: fmtMoney },
+                          { name: "Lives saved", color: "#dc2626", values: js.outputs.lives, fmt: fmtPop },
+                          { name: "Marriages averted", color: "#db2777", values: js.outputs.marriages, fmt: fmtPop },
+                          { name: "→ secondary", color: "#4f46e5", values: js.outputs.secondary, fmt: fmtPop },
+                          { name: "Youth employed", color: "#92400e", values: js.outputs.employed, fmt: fmtPop },
                         ].filter(Boolean);
                         return (
                           <React.Fragment>
@@ -3662,17 +3672,19 @@
                               <LineChart values={curve} w={W} h={86} color={color} fmtY={fmtY} />
                             </div>
                             <div className="rounded bg-zinc-50 px-2 py-1.5">
-                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">Spend & outputs over time <span className="font-normal text-zinc-400">(each scaled to its own max)</span></div>
-                              <MultiChart series={outSeries} w={W} h={68} />
+                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">Spend, outputs & 2050 impact <span className="font-normal text-zinc-400">(each scaled to its own max · hover a row)</span></div>
+                              <MultiChart series={outSeries} w={W} h={74} highlight={legendHover} />
                               <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
                                 {outSeries.map((s) => (
-                                  <div key={s.name} className="flex items-center gap-1 text-[9px]">
+                                  <div key={s.name} onMouseEnter={() => setLegendHover(s.name)} onMouseLeave={() => setLegendHover(null)}
+                                    className={"flex cursor-default items-center gap-1 rounded text-[9px] " + (legendHover === s.name ? "bg-zinc-200" : legendHover ? "opacity-40" : "")}>
                                     <span className="inline-block h-2 w-2 flex-shrink-0 rounded-sm" style={{ background: s.color }} />
                                     <span className="truncate text-zinc-500">{s.name}</span>
                                     <span className="ml-auto font-semibold text-zinc-700">{s.fmt(s.values[s.values.length - 1])}</span>
                                   </div>
                                 ))}
                               </div>
+                              <div className="mt-1 text-[8px] text-zinc-400">2050 impact: counterfactual 2031–2050, scaled from WWHGE ($196T GDP / 368M children).</div>
                             </div>
                             <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on ACER</span><span className="font-semibold">{js.costAcerSD != null ? fmtMoney(js.costAcerSD) + " / child" : "—"}</span></div>
                             {js.costNatSD != null && <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on {js.natName}</span><span className="font-semibold">{fmtMoney(js.costNatSD)} / child</span></div>}
@@ -3701,14 +3713,8 @@
                 </div>
               )}
 
-              {/* bottom-right stack: projection toggle, zoom, then the legend in the corner */}
+              {/* bottom-right stack: zoom, then the legend in the corner */}
               <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
-                {isWorld && (
-                  <button onClick={nextProj} title="Cycle map projection"
-                    className="pointer-events-auto rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-md hover:bg-zinc-50">
-                    {PROJ_LABEL[worldProj]}
-                  </button>
-                )}
                 <div className="pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
                   <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
                   <div className="h-px bg-zinc-200" />
