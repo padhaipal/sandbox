@@ -2411,7 +2411,7 @@
       // =====================================================================
       // Phonetic-orthography score per language (0–100): how predictably the
       // WRITTEN script maps to pronunciation (shallow/transparent = high).
-      // Curated from orthographic-depth literature; demo estimates. ≥80 = "phonetic".
+      // Curated from orthographic-depth literature; demo estimates. ≥70 = "phonetic".
       const LANG_PHON = {
         Spanish:95, Italian:95, Finnish:98, Turkish:95, Indonesian:92, Javanese:88, Malay:92,
         Swahili:90, Vietnamese:90, Korean:90, German:82, Hungarian:90, Czech:90, Polish:85,
@@ -2424,8 +2424,19 @@
         Arabic:60, Persian:45, Dari:45, Pashto:50, Kurdish:70, Hebrew:40,
         Mandarin:5, Japanese:35, Thai:70, Burmese:60, "—":0,
       };
-      const PHON_MIN = 80;                                   // a language is "phonetic" at/above this
+      const PHON_MIN = 70;                                   // "phonetic" if an EVERYDAY script is at/above this
       const phonScore = (l) => LANG_PHON[l] ?? 50;
+      // Languages written in >1 everyday script: gate on the MOST phonetic of them.
+      // Japanese kanji is opaque (35) but hiragana/katakana — used in normal running
+      // text alongside kanji — are near-perfect (~98), so Japanese counts as phonetic.
+      // (Excludes Chinese: pinyin/zhuyin are input/teaching aids, not everyday prose.)
+      const LANG_SCRIPT_MAX = {
+        Japanese: 98,   // + hiragana / katakana (kana)
+        Punjabi: 86,    // Gurmukhi (IN) vs Shahmukhi/Perso-Arabic (PK) — already ≥70 via Gurmukhi
+        Korean: 90,     // Hangul vs Hanja — already ≥70 via Hangul
+        Serbian: 96,    // Cyrillic & Latin, both transparent — already ≥70
+      };
+      const isPhonetic = (l) => Math.max(phonScore(l), LANG_SCRIPT_MAX[l] ?? 0) >= PHON_MIN;
       // Per-country language mix as population shares (0–1). Demo estimates.
       const COUNTRY_LANGS = {
         USA:[["English",.78],["Spanish",.13],["Other",.09]],
@@ -2464,7 +2475,7 @@
       // share of the population speaking a "phonetic" (score ≥ PHON_MIN) language
       const phonFrac = (pairs) => {
         let tot = 0, ph = 0;
-        for (const [l, s] of pairs) { tot += s; if (phonScore(l) >= PHON_MIN) ph += s; }
+        for (const [l, s] of pairs) { tot += s; if (isPhonetic(l)) ph += s; }
         return tot > 0 ? ph / tot : 0;
       };
       const langFor = (iso, regionName) => {
