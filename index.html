@@ -2266,9 +2266,11 @@
       }
       const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
 
+      // dark grey for the non-phonetic pie segment + no-data areas (contrasts the slate border)
+      const NONPHON = "#3f3f46";
       // --- phonetic pie: fill each area with a 2-segment pie (colored=phonetic share,
-      //     black=rest) centered at its centroid, radius > the polygon so the border
-      //     clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
+      //     non-phonetic=dark grey) centered at its centroid, radius > the polygon so the
+      //     border clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
       function cornerRadius(c, bbox) {
         if (!c || !bbox) return 0;
         const x0 = Array.isArray(bbox[0]) ? bbox[0][0] : bbox[0], y0 = Array.isArray(bbox[0]) ? bbox[0][1] : bbox[1];
@@ -2290,12 +2292,12 @@
         const color = scoreColor(perf), cx = c[0], cy = c[1];
         const f = frac < 0 ? 0 : frac > 1 ? 1 : frac;
         let wedges;
-        if (f <= 0.0005) wedges = <circle cx={cx} cy={cy} r={R} fill="#000" />;
+        if (f <= 0.0005) wedges = <circle cx={cx} cy={cy} r={R} fill={NONPHON} />;
         else if (f >= 0.9995) wedges = <circle cx={cx} cy={cy} r={R} fill={color} />;
         else {
           const a = -Math.PI / 2, am = a + 2 * Math.PI * f, ae = a + 2 * Math.PI;
           wedges = [<path key="c" d={wedgePath(cx, cy, R, a, am)} fill={color} />,
-                    <path key="b" d={wedgePath(cx, cy, R, am, ae)} fill="#000" />];
+                    <path key="b" d={wedgePath(cx, cy, R, am, ae)} fill={NONPHON} />];
         }
         return (
           <React.Fragment>
@@ -3242,7 +3244,7 @@
                       const onClick = (e) => { e.stopPropagation(); pickCountry(p); };
                       if (!p.covered) {
                         return (
-                          <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="#d4d4d8" fillOpacity={0.55}
+                          <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={NONPHON} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "not-allowed" }} onMouseEnter={onEnter} onClick={onClick} />
                         );
