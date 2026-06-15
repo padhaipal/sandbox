@@ -3229,6 +3229,9 @@
         const [legendHover, setLegendHover] = useState(null);  // outputs-chart legend hover -> highlight line
         const [osm, setOsm] = useState(null);        // { id, status:"loading"|"ok"|"error", schools:[{lat,lon,name,kind}] }
         const osmCache = useRef(new Map());          // block id -> array | "error"
+        const [udise, setUdise] = useState(null);    // India real schools: { blockId, status, points:[{lon,lat,name}] }
+        const udiseRef = useRef({ districts: null }); // parsed census districts (lon/lat) for block->district lookup
+        const udiseCache = useRef(new Map());         // "st-dt" -> {n:[],c:[[lon,lat]]} school file
 
         // --- one-time loads: world countries + ADM2 coverage list ---
         useEffect(() => {
@@ -3370,10 +3373,53 @@
           }).filter((b) => b.ring.length >= 3);
         }, [adm2, a2Idx, adm3FC, projd, country]);
 
-        // ---- schools (Head Teacher): illustrative points inside the focused block ----
-        // lazily fetch real OSM schools for the focused block (bbox via projection invert)
+        // ---- India real schools (UDISE 2021): map the block to its census district via the
+        //      block centroid (projection-inverted to lon/lat), fetch schools/<st>-<dt>.json,
+        //      then keep the points inside this block. 834k schools vs OSM's ~37k. ----
         useEffect(() => {
-          if (level !== "schools" || a3Idx == null || !blocks || !blocks[a3Idx] || !projd || !projd.proj.invert) return;
+          if (level !== "schools" || a3Idx == null || !blocks || !blocks[a3Idx] || !projd || !projd.proj.invert || !country || country.iso !== "IND") return;
+          const b = blocks[a3Idx], id = b.id;
+          let cancelled = false;
+          (async () => {
+            if (!udiseRef.current.districts) {
+              try {
+                const g = await (await fetch("india-districts.geojson")).json();
+                udiseRef.current.districts = g.features.map((f) => {
+                  const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+                  const rings = polys.map((p) => p[0]);
+                  let a = Infinity, bb = Infinity, c = -Infinity, d = -Infinity;
+                  for (const r of rings) for (const pt of r) { if (pt[0] < a) a = pt[0]; if (pt[0] > c) c = pt[0]; if (pt[1] < bb) bb = pt[1]; if (pt[1] > d) d = pt[1]; }
+                  return { key: f.properties.st + "-" + f.properties.dt, rings, bbox: [a, bb, c, d] };
+                });
+              } catch (e) { udiseRef.current.districts = []; }
+            }
+            if (cancelled) return;
+            const ll = projd.proj.invert(b.seed);
+            if (!ll || isNaN(ll[0])) { setUdise({ blockId: id, status: "error", points: [] }); return; }
+            let key = null;
+            for (const dst of udiseRef.current.districts) {
+              const [a, bb, c, d] = dst.bbox;
+              if (ll[0] < a || ll[0] > c || ll[1] < bb || ll[1] > d) continue;
+              if (dst.rings.some((r) => pointInPoly(ll, r))) { key = dst.key; break; }
+            }
+            if (!key) { setUdise({ blockId: id, status: "error", points: [] }); return; }
+            let file = udiseCache.current.get(key);
+            if (!file) {
+              try { file = await (await fetch("schools/" + key + ".json")).json(); udiseCache.current.set(key, file); }
+              catch (e) { udiseCache.current.set(key, { n: [], c: [] }); setUdise({ blockId: id, status: "error", points: [] }); return; }
+            }
+            if (cancelled) return;
+            const points = (file.c || []).map((c, i) => ({ lon: c[0], lat: c[1], name: (file.n && file.n[i]) || "School" }));
+            setUdise({ blockId: id, status: "ok", points });
+          })();
+          return () => { cancelled = true; };
+        }, [level, a3Idx, blocks, projd, country]);
+
+        // ---- schools (Head Teacher): illustrative points inside the focused block ----
+        // lazily fetch real OSM schools for the focused block (bbox via projection invert).
+        // India uses the bundled UDISE data above; OSM is for everywhere else (optional overlay).
+        useEffect(() => {
+          if (level !== "schools" || a3Idx == null || !blocks || !blocks[a3Idx] || !projd || !projd.proj.invert || (country && country.iso === "IND")) return;
           const b = blocks[a3Idx], id = b.id;
           if (osmCache.current.has(id)) { const c = osmCache.current.get(id); setOsm({ id, status: c === "error" ? "error" : "ok", schools: c === "error" ? [] : c }); return; }
           const inv = projd.proj.invert;
@@ -3396,6 +3442,17 @@
           if (!blocks || a3Idx == null || !blocks[a3Idx] || !projd) return null;
           const blk = blocks[a3Idx];
           const { proj } = projd;
+          // India: real UDISE schools — project lon/lat, keep those inside this block
+          if (udise && udise.blockId === blk.id && udise.status === "ok" && udise.points.length) {
+            const real = [];
+            for (const sc of udise.points) {
+              const p = proj([sc.lon, sc.lat]);
+              if (!p || isNaN(p[0]) || !pointInPoly(p, blk.ring)) continue;
+              const id = blk.id + ".s" + real.length;
+              real.push({ k: real.length, id, u: node(blk.id + "." + (real.length % 7)), p, name: sc.name, kind: "public", real: true });
+            }
+            if (real.length) return real;
+          }
           // real OSM schools: project lon/lat, keep those inside this block (point-in-polygon)
           if (osm && osm.id === blk.id && osm.status === "ok" && osm.schools.length) {
             const real = [];
@@ -3413,7 +3470,7 @@
             const id = blk.id + ".s" + k;
             return { k, id, u: node(blk.id + "." + (k % 7)), p, name: "School " + (k + 1), kind: "unknown", real: false };
           });
-        }, [blocks, a3Idx, projd, osm]);
+        }, [blocks, a3Idx, projd, osm, udise]);
 
         // ---- one school (force graph) ----
         const school = useMemo(() => {
