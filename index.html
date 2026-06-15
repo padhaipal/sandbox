@@ -2320,7 +2320,8 @@
       // grey filter over it so the underlying pie still shows through.
       function areaPie(clipKey, nodeId, d, c, R, frac, perf) {
         const pie = pieEls(clipKey, d, c, R, frac, perf, coverShare(nodeId));
-        if (registered(nodeId)) return pie;
+        // only dim areas where >5% of the population speaks a phonetic language
+        if (registered(nodeId) || frac <= 0.05) return pie;
         return (
           <React.Fragment>
             {pie}
