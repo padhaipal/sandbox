@@ -2330,16 +2330,28 @@
           </React.Fragment>
         );
       }
-      // "+" invite button drawn at an area's centroid (constant screen size via 1/k)
-      function PlusButton({ c, k, onClick }) {
+      // "+" invite button at an area's centroid (greyscale, no border, constant screen size).
+      // Hover shows a tooltip explaining the area has no user yet. geo = country/region/district/block.
+      function PlusButton({ c, k, geo, onClick }) {
+        const [hov, setHov] = useState(false);
         if (!c || isNaN(c[0])) return null;
-        const r = 11 / k, sw = 2.2 / k, len = 5.5 / k;
+        const r = 8.8 / k, sw = 1.8 / k, len = 4.4 / k;           // 20% smaller than before, no border
+        const s = 1 / k, tw = 168, th = 56;
         return (
           <g transform={`translate(${c[0]},${c[1]})`} style={{ cursor: "pointer" }} pointerEvents="auto"
+            onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-            <circle r={r} fill="#2563eb" stroke="#ffffff" strokeWidth={1.6 / k} />
+            <circle r={r} fill="#71717a" />
             <line x1={-len} y1={0} x2={len} y2={0} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
             <line x1={0} y1={-len} x2={0} y2={len} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
+            {hov && (
+              <foreignObject x={-(tw * s) / 2} y={-(th + 8) * s - r} width={tw * s} height={th * s} style={{ overflow: "visible", pointerEvents: "none" }}>
+                <div style={{ width: tw, height: th, transform: `scale(${s})`, transformOrigin: "top left" }}
+                  className="rounded-lg bg-zinc-900/90 px-2 py-1.5 text-[11px] leading-snug text-white shadow-lg">
+                  This {geo} has no PadhaiPal user yet — click to add one.
+                </div>
+              </foreignObject>
+            )}
           </g>
         );
       }
@@ -3394,7 +3406,6 @@
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
-                          {isDimmed(p.u.id, p.phon) && <PlusButton c={p.c} k={tf.k} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director" })} />}
                         </g>
                       );
                     })}
@@ -3408,7 +3419,6 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
-                        {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE" })} />}
                       </g>
                     ))}
 
@@ -3421,7 +3431,6 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
-                        {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA" })} />}
                       </g>
                     ))}
 
@@ -3434,9 +3443,18 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso })}
                           onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
-                        {isDimmed(b.id, b.demo.phon) && <PlusButton c={b.seed} k={tf.k} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO" })} />}
                       </g>
                     ))}
+
+                    {/* invite "+" buttons — rendered last so they sit above every area fill */}
+                    {level === "world" && worldPaths && worldPaths.map((p) => (p.covered && isDimmed(p.u.id, p.phon)
+                      ? <PlusButton key={"plus" + p.i} c={p.c} k={tf.k} geo="country" onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
+                    {level === "adm1" && adm1 && adm1.map((d0) => (isDimmed(d0.id, d0.demo.phon)
+                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
+                    {level === "adm2" && adm2 && adm2.map((d0) => (isDimmed(d0.id, d0.demo.phon)
+                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
+                    {level === "adm3" && blocks && blocks.map((b) => (isDimmed(b.id, b.demo.phon)
+                      ? <PlusButton key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
 
                     {/* schools */}
                     {level === "schools" && blk && (
