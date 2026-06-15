@@ -3030,7 +3030,7 @@
         const drag = useRef(null);
         const moved = useRef(false);
         // the world level always renders as a 3D globe (orthographic); deeper levels are flat
-        const [globeRot, setGlobeRot] = useState([-10, -8]);
+        const [globeRot, setGlobeRot] = useState([-79, -22]);   // centre the globe on India (lon 79, lat 22)
         const [chartY, setChartY] = useState("acer");          // y-axis metric for the learning-curve chart
         const [legendHover, setLegendHover] = useState(null);  // outputs-chart legend hover -> highlight line
         const [osm, setOsm] = useState(null);        // { id, status:"loading"|"ok"|"error", schools:[{lat,lon,name,kind}] }
