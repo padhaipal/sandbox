@@ -2273,6 +2273,8 @@
       const UNCOVERED = "#a1a1aa";
       const registered = (id) => (hashStr("reg:" + id) % 2) === 0;          // ~50% of nodes in network
       const coverShare = (id) => (hashStr("cov:" + id) % 1000) / 1000;      // covered fraction of the phonetic share
+      // an area is "dimmed" (grey tint + invite +) when unregistered AND >5% phonetic
+      const isDimmed = (id, frac) => !registered(id) && frac > 0.05;
       // --- phonetic pie: fill each area with a 2-segment pie (colored=phonetic share,
       //     non-phonetic=dark grey) centered at its centroid, radius > the polygon so the
       //     border clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
@@ -2320,13 +2322,61 @@
       // grey filter over it so the underlying pie still shows through.
       function areaPie(clipKey, nodeId, d, c, R, frac, perf) {
         const pie = pieEls(clipKey, d, c, R, frac, perf, coverShare(nodeId));
-        // only dim areas where >5% of the population speaks a phonetic language
-        if (registered(nodeId) || frac <= 0.05) return pie;
+        if (!isDimmed(nodeId, frac)) return pie;
         return (
           <React.Fragment>
             {pie}
             <path d={d} fill={UNCOVERED} fillOpacity={0.62} pointerEvents="none" />
           </React.Fragment>
+        );
+      }
+      // "+" invite button drawn at an area's centroid (constant screen size via 1/k)
+      function PlusButton({ c, k, onClick }) {
+        if (!c || isNaN(c[0])) return null;
+        const r = 11 / k, sw = 2.2 / k, len = 5.5 / k;
+        return (
+          <g transform={`translate(${c[0]},${c[1]})`} style={{ cursor: "pointer" }} pointerEvents="auto"
+            onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+            <circle r={r} fill="#2563eb" stroke="#ffffff" strokeWidth={1.6 / k} />
+            <line x1={-len} y1={0} x2={len} y2={0} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
+            <line x1={0} y1={-len} x2={0} y2={len} stroke="#fff" strokeWidth={sw} strokeLinecap="round" />
+          </g>
+        );
+      }
+      // modal to invite the (missing) lead for an unregistered area via WhatsApp / shareable link
+      function InviteModal({ data, onClose }) {
+        const [phone, setPhone] = useState("");
+        const [copied, setCopied] = useState(false);
+        const digits = phone.replace(/[^\d]/g, "");
+        const msg = "Hi! You're invited to join the PadhaiPal network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
+        const waHref = "https://wa.me/" + digits + "?text=" + encodeURIComponent(msg);
+        const copy = () => { try { navigator.clipboard.writeText(data.link); } catch (e) {} setCopied(true); };
+        return (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-zinc-900">Invite a {data.role}</div>
+                  <div className="text-xs text-zinc-500">{data.title} · no one registered yet</div>
+                </div>
+                <button onClick={onClose} className="-mr-1 rounded-md px-2 py-0.5 text-lg leading-none text-zinc-400 hover:bg-zinc-100">×</button>
+              </div>
+              <label className="mt-4 block text-[11px] font-semibold text-zinc-600">WhatsApp phone number</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel" autoFocus
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+              <a href={digits ? waHref : undefined} target="_blank" rel="noreferrer"
+                onClick={(e) => { if (!digits) e.preventDefault(); }}
+                className={"mt-3 block w-full rounded-lg px-3 py-2 text-center text-sm font-semibold text-white " + (digits ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-blue-300")}>
+                Send WhatsApp invite message
+              </a>
+              <div className="mt-4 text-[11px] font-semibold text-zinc-600">Or copy a link to share via another channel</div>
+              <div className="mt-1 flex items-center gap-2">
+                <input readOnly value={data.link} onFocus={(e) => e.target.select()}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-600" />
+                <button onClick={copy} className="flex-shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">{copied ? "Copied" : "Copy"}</button>
+              </div>
+            </div>
+          </div>
         );
       }
       function pointInPoly(p, ring) {
@@ -3135,6 +3185,10 @@
         const blk = a3Idx != null && blocks ? blocks[a3Idx] : null;
         const synthBlocks = blocks && blocks[0] && blocks[0].synthetic;
 
+        // ===== invite modal (for unregistered / grey-tinted areas) =====
+        const [invite, setInvite] = useState(null);   // { id, title, role, link }
+        const openInvite = (a) => setInvite({ ...a, link: "https://pp.link/invite/" + encodeURIComponent(a.id) });
+
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
         const [sendList, setSendList] = useState(() => new Map());
@@ -3285,6 +3339,7 @@
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
+                          {isDimmed(p.u.id, p.phon) && <PlusButton c={p.c} k={tf.k} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director" })} />}
                         </g>
                       );
                     })}
@@ -3298,6 +3353,7 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo })}
                           onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
+                        {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE" })} />}
                       </g>
                     ))}
 
@@ -3310,6 +3366,7 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo })}
                           onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
+                        {isDimmed(d0.id, d0.demo.phon) && <PlusButton c={d0.c} k={tf.k} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA" })} />}
                       </g>
                     ))}
 
@@ -3322,6 +3379,7 @@
                           style={{ cursor: "pointer" }}
                           onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo })}
                           onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                        {isDimmed(b.id, b.demo.phon) && <PlusButton c={b.seed} k={tf.k} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO" })} />}
                       </g>
                     ))}
 
@@ -3383,13 +3441,20 @@
               {active && (
                 <div className="pointer-events-none absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg">
                   <div className="flex items-center gap-3">
-                    <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + (active.greyed ? "#a1a1aa" : scoreColor(active.u.perf)) }} />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
-                      <div className="truncate text-xs text-zinc-500">{active.sub}</div>
-                      <div className="text-[11px] text-zinc-400">{active.u.phone}</div>
-                    </div>
-                    {!active.greyed && <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>}
+                    {(() => {
+                      const hasPerson = !active.greyed && registered(active.u.id);
+                      return (
+                        <React.Fragment>
+                          {hasPerson && <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + scoreColor(active.u.perf) }} />}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                            <div className="truncate text-xs text-zinc-500">{hasPerson ? active.sub : (active.sub || "").split(" · ")[0]}</div>
+                            {hasPerson && <div className="text-[11px] text-zinc-400">{active.u.phone}</div>}
+                          </div>
+                          {hasPerson && <span className="ml-auto self-start rounded-md px-2 py-1 text-xs font-bold" style={{ background: scoreColor(active.u.perf), color: textOn(active.u.perf) }}>{active.u.score}</span>}
+                        </React.Fragment>
+                      );
+                    })()}
                   </div>
                   {active.demo && (
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
@@ -3405,10 +3470,10 @@
                         );
                       })()}
                       {active.demo.phon != null && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie colored share)</span></span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop</span></div>
                       )}
                       {!active.greyed && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop (grey = gap)" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
                       <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script.</div>
                     </div>
@@ -3466,6 +3531,8 @@
               {toast && (
                 <div className="absolute bottom-4 right-16 z-40 max-w-xs rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white shadow-xl">{toast}</div>
               )}
+
+              {invite && <InviteModal key={invite.id} data={invite} onClose={() => setInvite(null)} />}
 
               <ComposePanel open={composeOpen} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                 recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
