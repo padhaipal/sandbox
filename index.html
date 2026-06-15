@@ -3579,7 +3579,8 @@
 
               {/* readout panel with demographics */}
               {active && (
-                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg">
+                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg"
+                  onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-3">
                     {(() => {
                       const hasPerson = !active.greyed && registered(active.u.id);
@@ -3621,7 +3622,7 @@
                             <div className="rounded bg-zinc-50 px-2 py-1.5">
                               <div className="mb-1 text-[10px] font-semibold text-zinc-500">Letters learnt</div>
                               <div className="grid grid-cols-4 gap-1 text-center">
-                                {[["Yest", ls.yest], ["Week", ls.week], ["Month", ls.month], ["Year", ls.year]].map(([k, v]) => (
+                                {[["Yesterday", ls.yest], ["Week", ls.week], ["Month", ls.month], ["Year", ls.year]].map(([k, v]) => (
                                   <div key={k}><div className="text-[9px] text-zinc-400">{k}</div><div className="text-[11px] font-semibold text-zinc-800">{fmtPop(v)}</div></div>
                                 ))}
                               </div>
@@ -3700,45 +3701,43 @@
                 </div>
               )}
 
-              {/* legend */}
-              <div className="pointer-events-none absolute bottom-4 left-[412px] z-20 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
-                <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                    <span>Speaks a phonetic script <span className="text-zinc-400">(colour = avg score 0–100)</span></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                    <span>Phonetic, but outside PadhaiPal coverage</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
-                    <span>Non-phonetic script (or no district data)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
-                      <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
-                    </span>
-                    <span>Dimmed = node not registered in PadhaiPal</span>
-                  </div>
+              {/* bottom-right stack: projection toggle, zoom, then the legend in the corner */}
+              <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+                {isWorld && (
+                  <button onClick={nextProj} title="Cycle map projection"
+                    className="pointer-events-auto rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-md hover:bg-zinc-50">
+                    {PROJ_LABEL[worldProj]}
+                  </button>
+                )}
+                <div className="pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
+                  <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
+                  <div className="h-px bg-zinc-200" />
+                  <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
                 </div>
-                <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · phonetic = script ≥{PHON_MIN} transparency · coverage is demo/random</div>
-              </div>
-
-              {/* projection toggle (world level only; cycles flat projections + 3D globe) */}
-              {isWorld && (
-                <button onClick={nextProj} title="Cycle map projection"
-                  className="absolute bottom-24 right-4 z-30 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-md hover:bg-zinc-50">
-                  {PROJ_LABEL[worldProj]}
-                </button>
-              )}
-
-              {/* zoom controls */}
-              <div className="absolute bottom-4 right-4 z-30 flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
-                <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
-                <div className="h-px bg-zinc-200" />
-                <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
+                <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
+                  <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
+                      <span>Speaks a phonetic script <span className="text-zinc-400">(colour = avg score 0–100)</span></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
+                      <span>Phonetic, but outside PadhaiPal coverage</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
+                      <span>Non-phonetic script (or no district data)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
+                        <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
+                      </span>
+                      <span>Dimmed = node not registered in PadhaiPal</span>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · phonetic = script ≥{PHON_MIN} transparency · coverage is demo/random</div>
+                </div>
               </div>
 
               {toast && (
