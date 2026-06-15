@@ -2602,6 +2602,8 @@
       }
       const fmtPop = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
       const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
+      const fmtMoney = (n) => "$" + (n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n)));
+      const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
       // National foundational-literacy assessment each government prefers (ACER is shown everywhere).
       // India = NIPUN; others use their own; unlisted countries show no second test.
@@ -2623,6 +2625,70 @@
         const band = (salt) => Math.max(0, Math.min(100, Math.round(32 + u.perf * 58 + ((hashStr(salt + u.id)) % 13) - 6)));
         const natName = NAT_TEST[iso] || null;
         return { yest, week, month, year, acer: band("acer:"), nat: natName ? { name: natName, score: band("nat:") } : null };
+      }
+
+      // illustrative time-series + cost-effectiveness for a jurisdiction (deterministic per node).
+      // months since PadhaiPal reached a parent on x; outcomes/outputs cumulative.
+      function jurisStats(u, demo, iso) {
+        const h = hashStr("juris:" + u.id);
+        const T = 12, months = Array.from({ length: T + 1 }, (_, i) => i);
+        const cov = coverShare(u.id);
+        const students0 = Math.max(40, Math.round(demo.pop * 0.12 * (0.3 + cov * 0.7)));   // children in program
+        // learning curves: rise with diminishing returns toward a score ceiling
+        const curve = (salt, lo, hi) => { const b = lo + u.perf * 18, c = hi + u.perf * 30, tau = 4 + (hashStr(salt + u.id) % 4); return months.map((t) => Math.round(b + (c - b) * (1 - Math.exp(-t / tau)))); };
+        const acer = curve("ac:", 28, 56);
+        const natName = NAT_TEST[iso] || null;
+        const nip = natName ? curve("nt:", 26, 54) : null;
+        // cumulative outputs over time
+        const students = months.map((t) => Math.round(students0 * (0.2 + 0.8 * (1 - Math.exp(-t / 3)))));
+        const letters = months.map((t) => Math.round(students[t] * (3 + u.perf * 4) * t * (1 + t * 0.04)));
+        const hours = months.map((t) => Math.round(students[t] * 1.4 * t));
+        const acerTests = months.map((t) => Math.round(students[t] * 0.5 * (1 + Math.floor(t / 6))));
+        const nipTests = natName ? months.map((t) => Math.round(students[t] * 0.45 * (1 + Math.floor(t / 6)))) : null;
+        const perStuMo = 5 + (h % 5);                                   // $/student/month
+        const spend = months.map((t) => Math.round(students[t] * perStuMo * t));   // ~ cumulative spend
+        // cost to move a child +1 SD (SD ≈ 15 pts on these scales)
+        const SD = 15, total = spend[T];
+        const costSD = (arr) => { const g = (arr[T] - arr[0]) / SD; return g > 0 ? Math.round(total / (students[T] * g)) : null; };
+        const spendNow = Math.round((spend[T] - spend[T - 1]) * 12);    // annualised run-rate
+        const fundEnd = MON[(h >>> 5) % 12] + " " + (2027 + (h % 3));
+        return { months, acer, nip, natName, letters,
+          outputs: { spend, students, hours, acerTests, nipTests, letters },
+          costAcerSD: costSD(acer), costNatSD: nip ? costSD(nip) : null, spendNow, total, fundEnd };
+      }
+
+      // tiny SVG charts (no deps). LineChart = one real-valued series; MultiChart = many, each self-normalised.
+      function LineChart({ values, w, h, color, fmtY }) {
+        const pl = 32, pr = 6, pt = 8, pb = 14, n = values.length;
+        const iw = w - pl - pr, ih = h - pt - pb;
+        let ymin = Math.min(...values), ymax = Math.max(...values); if (ymin === ymax) ymax = ymin + 1;
+        const xOf = (i) => pl + (n <= 1 ? 0 : (i / (n - 1)) * iw);
+        const yOf = (v) => pt + ih - ((v - ymin) / (ymax - ymin)) * ih;
+        const pts = values.map((v, i) => [xOf(i), yOf(v)]);
+        const line = pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+        const area = `M${xOf(0).toFixed(1)},${(pt + ih).toFixed(1)} ` + pts.map((p) => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + ` L${xOf(n - 1).toFixed(1)},${(pt + ih).toFixed(1)} Z`;
+        return (
+          <svg width={w} height={h} className="block">
+            <text x={2} y={pt + 6} fontSize="8" className="fill-zinc-400">{fmtY(ymax)}</text>
+            <text x={2} y={pt + ih} fontSize="8" className="fill-zinc-400">{fmtY(ymin)}</text>
+            <line x1={pl} y1={pt} x2={pl} y2={pt + ih} stroke="#e4e4e7" />
+            <line x1={pl} y1={pt + ih} x2={pl + iw} y2={pt + ih} stroke="#e4e4e7" />
+            <text x={pl} y={h - 3} fontSize="8" className="fill-zinc-400">0</text>
+            <text x={pl + iw} y={h - 3} textAnchor="end" fontSize="8" className="fill-zinc-400">{n - 1}mo</text>
+            <path d={area} fill={color} fillOpacity="0.12" />
+            <polyline points={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+        );
+      }
+      function MultiChart({ series, w, h }) {
+        const pl = 4, pr = 4, pt = 5, pb = 5, n = (series[0] && series[0].values.length) || 1;
+        const iw = w - pl - pr, ih = h - pt - pb;
+        const xOf = (i) => pl + (n <= 1 ? 0 : (i / (n - 1)) * iw);
+        return (
+          <svg width={w} height={h} className="block">
+            {series.map((s) => { const mx = Math.max(...s.values, 1); const pts = s.values.map((v, i) => xOf(i).toFixed(1) + "," + (pt + ih - (v / mx) * ih).toFixed(1)).join(" "); return <polyline key={s.name} points={pts} fill="none" stroke={s.color} strokeWidth="1.6" strokeLinejoin="round" opacity="0.9" />; })}
+          </svg>
+        );
       }
 
       const iso3Of = (p) => {
@@ -2948,6 +3014,7 @@
         // world-level map projection ("orthographic" = 3D globe; only used at world level)
         const [worldProj, setWorldProj] = useState("naturalEarth1");
         const [globeRot, setGlobeRot] = useState([-10, -8]);
+        const [chartY, setChartY] = useState("acer");   // y-axis metric for the learning-curve chart
         const PROJ_ORDER = ["naturalEarth1", "equalEarth", "mercator", "orthographic"];
         const PROJ_LABEL = { naturalEarth1: "🗺 Natural Earth", equalEarth: "🗺 Equal Earth", mercator: "🗺 Mercator", orthographic: "🌐 Globe" };
         const nextProj = () => setWorldProj((p) => PROJ_ORDER[(PROJ_ORDER.indexOf(p) + 1) % PROJ_ORDER.length]);
@@ -3512,7 +3579,7 @@
 
               {/* readout panel with demographics */}
               {active && (
-                <div className="pointer-events-none absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg">
+                <div className="absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg">
                   <div className="flex items-center gap-3">
                     {(() => {
                       const hasPerson = !active.greyed && registered(active.u.id);
@@ -3564,7 +3631,56 @@
                           </React.Fragment>
                         );
                       })()}
-                      <div className="text-[9px] text-zinc-400">Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script. Learning stats: illustrative.</div>
+                      {!active.greyed && registered(active.u.id) && (() => {
+                        const js = jurisStats(active.u, active.demo, active.iso);
+                        const yKey = (chartY === "nat" && js.nip) ? "nat" : chartY === "letters" ? "letters" : "acer";
+                        const curve = yKey === "letters" ? js.letters : yKey === "nat" ? js.nip : js.acer;
+                        const color = yKey === "letters" ? "#06b6d4" : yKey === "nat" ? "#8b5cf6" : "#2563eb";
+                        const fmtY = yKey === "letters" ? fmtPop : ((v) => String(Math.round(v)));
+                        const toggles = [["acer", "ACER"], js.natName && ["nat", js.natName], ["letters", "Letters"]].filter(Boolean);
+                        const W = 320;
+                        const outSeries = [
+                          { name: "Spend", color: "#10b981", values: js.outputs.spend, fmt: fmtMoney },
+                          js.outputs.nipTests && { name: js.natName + " tests", color: "#8b5cf6", values: js.outputs.nipTests, fmt: fmtPop },
+                          { name: "ACER tests", color: "#2563eb", values: js.outputs.acerTests, fmt: fmtPop },
+                          { name: "Students", color: "#f59e0b", values: js.outputs.students, fmt: fmtPop },
+                          { name: "Lesson hrs", color: "#f43f5e", values: js.outputs.hours, fmt: fmtPop },
+                          { name: "Letters", color: "#06b6d4", values: js.outputs.letters, fmt: fmtPop },
+                        ].filter(Boolean);
+                        return (
+                          <React.Fragment>
+                            <div className="rounded bg-zinc-50 px-2 py-1.5">
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-semibold text-zinc-500">Outcome vs months since PadhaiPal</span>
+                                <span className="flex gap-0.5">
+                                  {toggles.map(([k, lbl]) => (
+                                    <button key={k} onClick={() => setChartY(k)} className={"rounded px-1.5 py-0.5 text-[9px] font-semibold " + (yKey === k ? "bg-zinc-900 text-white" : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300")}>{lbl}</button>
+                                  ))}
+                                </span>
+                              </div>
+                              <LineChart values={curve} w={W} h={86} color={color} fmtY={fmtY} />
+                            </div>
+                            <div className="rounded bg-zinc-50 px-2 py-1.5">
+                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">Spend & outputs over time <span className="font-normal text-zinc-400">(each scaled to its own max)</span></div>
+                              <MultiChart series={outSeries} w={W} h={68} />
+                              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                {outSeries.map((s) => (
+                                  <div key={s.name} className="flex items-center gap-1 text-[9px]">
+                                    <span className="inline-block h-2 w-2 flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+                                    <span className="truncate text-zinc-500">{s.name}</span>
+                                    <span className="ml-auto font-semibold text-zinc-700">{s.fmt(s.values[s.values.length - 1])}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on ACER</span><span className="font-semibold">{js.costAcerSD != null ? fmtMoney(js.costAcerSD) + " / child" : "—"}</span></div>
+                            {js.costNatSD != null && <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on {js.natName}</span><span className="font-semibold">{fmtMoney(js.costNatSD)} / child</span></div>}
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Current spend (annual)</span><span className="font-semibold">{fmtMoney(js.spendNow)}</span></div>
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Funding ends</span><span className="font-semibold">{js.fundEnd} <span className="font-normal text-zinc-400">(reallocated)</span></span></div>
+                          </React.Fragment>
+                        );
+                      })()}
+                      <div className="text-[9px] text-zinc-400">Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script. Learning &amp; spend stats: illustrative.</div>
                     </div>
                   )}
                   {!active.demo && (
