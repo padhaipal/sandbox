@@ -2268,6 +2268,11 @@
 
       // dark grey for the non-phonetic pie segment + no-data areas (contrasts the slate border)
       const NONPHON = "#3f3f46";
+      // PadhaiPal coverage (demo: randomized). Each node ~50% chance of being registered;
+      // light grey = the coverage gap (3rd pie segment + whole-area shade when unregistered).
+      const UNCOVERED = "#a1a1aa";
+      const registered = (id) => (hashStr("reg:" + id) % 2) === 0;          // ~50% of nodes in network
+      const coverShare = (id) => (hashStr("cov:" + id) % 1000) / 1000;      // covered fraction of the phonetic share
       // --- phonetic pie: fill each area with a 2-segment pie (colored=phonetic share,
       //     non-phonetic=dark grey) centered at its centroid, radius > the polygon so the
       //     border clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
@@ -2285,19 +2290,24 @@
         const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy + r * Math.sin(a1)).toFixed(1);
         return `M${cx.toFixed(1)},${cy.toFixed(1)}L${x0},${y0}A${r.toFixed(1)},${r.toFixed(1)} 0 ${large} 1 ${x1},${y1}Z`;
       };
-      // clipped pie group (no border / interactions — those stay on the area path)
-      function pieEls(key, d, c, R, frac, perf) {
+      // clipped pie group (no border / interactions — those stay on the area path).
+      // 3 segments: covered-phonetic (colored) | phonetic-but-uncovered (grey) | non-phonetic (dark).
+      function pieEls(key, d, c, R, frac, perf, cover) {
         if (!c || !d || !(R > 0)) return null;
         const cid = "pie-" + String(key).replace(/[^\w-]/g, "_");
         const color = scoreColor(perf), cx = c[0], cy = c[1];
         const f = frac < 0 ? 0 : frac > 1 ? 1 : frac;
+        const cv = cover == null ? 1 : cover < 0 ? 0 : cover > 1 ? 1 : cover;
+        const segs = [
+          { f: f * cv, fill: color },           // phonetic + in PadhaiPal network
+          { f: f * (1 - cv), fill: UNCOVERED },  // phonetic but outside coverage
+          { f: 1 - f, fill: NONPHON },           // non-phonetic
+        ].filter((s) => s.f > 0.0005);
         let wedges;
-        if (f <= 0.0005) wedges = <circle cx={cx} cy={cy} r={R} fill={NONPHON} />;
-        else if (f >= 0.9995) wedges = <circle cx={cx} cy={cy} r={R} fill={color} />;
+        if (segs.length <= 1) wedges = <circle cx={cx} cy={cy} r={R} fill={(segs[0] || { fill: NONPHON }).fill} />;
         else {
-          const a = -Math.PI / 2, am = a + 2 * Math.PI * f, ae = a + 2 * Math.PI;
-          wedges = [<path key="c" d={wedgePath(cx, cy, R, a, am)} fill={color} />,
-                    <path key="b" d={wedgePath(cx, cy, R, am, ae)} fill={NONPHON} />];
+          let a = -Math.PI / 2;
+          wedges = segs.map((s, i) => { const a1 = a + 2 * Math.PI * s.f, p = wedgePath(cx, cy, R, a, a1); a = a1; return <path key={i} d={p} fill={s.fill} />; });
         }
         return (
           <React.Fragment>
@@ -3251,7 +3261,9 @@
                       }
                       return (
                         <g key={p.i}>
-                          {pieEls(p.iso || p.i, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf)}
+                          {registered(p.u.id)
+                            ? pieEls(p.iso || p.i, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, coverShare(p.u.id))
+                            : <path d={p.d} fill={UNCOVERED} pointerEvents="none" />}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
@@ -3262,7 +3274,9 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        {registered(d0.id)
+                          ? pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, coverShare(d0.id))
+                          : <path d={d0.d} fill={UNCOVERED} pointerEvents="none" />}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3274,7 +3288,9 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf)}
+                        {registered(d0.id)
+                          ? pieEls(d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, coverShare(d0.id))
+                          : <path d={d0.d} fill={UNCOVERED} pointerEvents="none" />}
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3286,7 +3302,9 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {pieEls(b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf)}
+                        {registered(b.id)
+                          ? pieEls(b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.demo.phon, b.u.perf, coverShare(b.id))
+                          : <path d={b.d} fill={UNCOVERED} pointerEvents="none" />}
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
@@ -3339,33 +3357,6 @@
                       );
                     })()}
 
-                    {/* chips (ADM1 / ADM2 / ADM3): face + name + score */}
-                    {(level === "adm1" || level === "adm2" || level === "adm3") && (() => {
-                      const items = level === "adm1"
-                        ? (adm1 || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillA1(d0.i), set: () => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo }) }))
-                        : level === "adm2"
-                        ? (adm2 || []).map((d0) => ({ id: d0.id, u: d0.u, name: d0.name, c: d0.c, go: () => drillA2(d0.j), set: () => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo }) }))
-                        : (blocks || []).map((b) => ({ id: b.id, u: b.u, name: b.name, c: b.seed, go: () => drillBlock(b.k), set: () => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo }) }));
-                      return items.sort((a, b) => ((active && a.id === active.u.id) ? 1 : 0) - ((active && b.id === active.u.id) ? 1 : 0)).map((it) => {
-                        if (!it.c || isNaN(it.c[0])) return null;
-                        const on = active && active.u.id === it.id;
-                        const BW = 92, BH = 40, s = (on ? 1.7 : 1) / tf.k, w = BW * s, h = BH * s;
-                        return (
-                          <foreignObject key={"c" + it.id} x={it.c[0] - w / 2} y={it.c[1] - h / 2} width={w} height={h} style={{ overflow: "visible", pointerEvents: "none" }}>
-                            <div onMouseEnter={it.set} onClick={(e) => { e.stopPropagation(); it.go(); }}
-                              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-black/10 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur-[1px]"
-                              style={{ width: BW, height: BH, transform: `scale(${s})`, transformOrigin: "top left", pointerEvents: "auto", outline: on ? "2px solid #0f172a" : "none" }}>
-                              <img src={it.u.face} alt="" loading="lazy" className="h-6 w-6 flex-shrink-0 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 2px " + scoreColor(it.u.perf) }} />
-                              <div className="min-w-0 leading-tight">
-                                <div className="truncate text-[9px] font-semibold text-zinc-900" style={{ maxWidth: 58 }}>{it.name}</div>
-                                <div className="truncate text-[8px] text-zinc-500" style={{ maxWidth: 58 }}>{it.u.name}</div>
-                              </div>
-                              <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold" style={{ background: scoreColor(it.u.perf), color: textOn(it.u.perf) }}>{it.u.score}</span>
-                            </div>
-                          </foreignObject>
-                        );
-                      });
-                    })()}
                   </g>
                 </svg>
               )}
@@ -3378,7 +3369,7 @@
 
               {/* readout panel with demographics */}
               {active && (
-                <div className="pointer-events-none absolute right-4 top-4 w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-lg">
+                <div className="pointer-events-none absolute right-4 top-4 w-96 max-w-[calc(100%-2rem)] rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-lg">
                   <div className="flex items-center gap-3">
                     <img src={active.u.face} alt="" className="h-12 w-12 rounded-full object-cover brightness-110" style={{ boxShadow: "0 0 0 3px " + (active.greyed ? "#a1a1aa" : scoreColor(active.u.perf)) }} />
                     <div className="min-w-0">
@@ -3392,9 +3383,12 @@
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
                       <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Area</span><span className="font-semibold">{fmtArea(active.demo.areaKm2)}</span></div>
-                      <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span>Language{active.demo.langs.length > 1 ? "s" : ""}</span><span className="truncate text-right font-semibold">{active.demo.langs.join(", ")}</span></div>
+                      <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Language{active.demo.langs.length > 1 ? "s" : ""}</span><span className="min-w-0 break-words text-right font-semibold">{active.demo.langs.join(", ")}</span></div>
                       {active.demo.phon != null && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span>Phonetic script</span><span className="font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie = colored share)</span></span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Phonetic script</span><span className="text-right font-semibold">{Math.round(active.demo.phon * 100)}% of pop <span className="text-zinc-400">(pie colored share)</span></span></div>
+                      )}
+                      {!active.greyed && (
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop (grey = gap)" : <span className="text-zinc-500">Not registered (area greyed)</span>}</span></div>
                       )}
                       <div className="text-[9px] text-zinc-400">Area: real (geoBoundaries). Population: {active.greyed ? "national (demo)" : "modeled / area-disaggregated (demo)"}. Language: {active.demo.real ? "per-region (census)" : "country-level table — demo"}. Pie: % speaking a phonetic (≥{PHON_MIN}) script.</div>
                     </div>
