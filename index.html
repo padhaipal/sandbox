@@ -3888,6 +3888,12 @@
                           { label: "Family contributions", value: js.budget.fam, color: "#10b981" },
                         ];
                         const pi = js.pausedImpact;
+                        // full location chain up to the country, e.g. "Bahraich · Uttar Pradesh · India"
+                        const locChain = [active.title];
+                        if (level === "adm3" && a2f) locChain.push(a2f.name);
+                        if ((level === "adm2" || level === "adm3") && a1f) locChain.push(a1f.name);
+                        if (level !== "world" && country) locChain.push(country.name);
+                        const locTitle = locChain.join(" · ");
                         return (
                           <div className="rounded bg-zinc-50 px-2 py-1.5">
                             {!live && <div className="mb-1 rounded bg-zinc-100 px-2 py-1 text-[9px] font-medium text-zinc-500">No PadhaiPal data collected at this level yet — metrics shown zeroed.</div>}
@@ -3912,10 +3918,10 @@
                               <div className="text-[10px] font-semibold text-amber-700">{fmtPop(js.paused)} learners paused for lack of funds</div>
                               <div className="mt-0.5 text-[9px] leading-snug text-amber-700/90">Forgone by 2050 (WWHGE): {fmtMoney(pi.gdp)} GDP · {fmtMoney(pi.tax)} tax · {fmtPop(pi.lives)} lives saved · {fmtPop(pi.marriages)} child marriages averted · {fmtPop(pi.secondary)} reaching secondary · {fmtPop(pi.employed)} youth employed</div>
                             </div>
-                            <button onClick={() => setFund({ title: active.title, id: active.u.id })}
+                            <button onClick={() => setFund({ title: locTitle, id: active.u.id })}
                               className="mt-1.5 w-full rounded-md bg-emerald-600 px-2 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">💚 Fund this location</button>
                             <div className="mt-0.5 text-center text-[9px] text-zinc-400">Open to residents, peers, donors &amp; officials</div>
-                            <button onClick={() => setPetition({ title: active.title, count: js.petitionCount, signups: js.petitionSignups })}
+                            <button onClick={() => setPetition({ title: locTitle, count: js.petitionCount, signups: js.petitionSignups })}
                               className="mt-1.5 flex w-full items-center justify-between gap-2 rounded bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100">
                               <span className="truncate">{js.petitionCount.toLocaleString()} citizens petitioned the government to fund this</span>
                               <span className="flex-shrink-0">View →</span>
