@@ -32,6 +32,24 @@
   <script type="text/babel" data-presets="react">
     const { useState, useMemo, useEffect, useCallback, useRef } = React;
 
+    // Signed-in role (whose dashboard this is). Transparency = philanthropic donor → the whole
+    // global picture (a dedicated donor dashboard). Every other role sees only its parent node +
+    // peers + peers' descendants, which on the geographic map means navigation is *capped* at the
+    // role's home level. Non-donor roles are anchored on India → Uttar Pradesh → Lucknow (the BEO
+    // example) and the app auto-navigates there on sign-in.
+    // levels:   world  adm1   adm2   adm3   schools  school
+    // org node: donor  DGSE   BSA    BEO    Head-T   Teacher/Student
+    const LEVEL_ORDER = ["world", "adm1", "adm2", "adm3", "schools", "school"];
+    const ROLES = [
+      { code: "transparency", label: "Transparency", home: "world",   who: "Global Education Secretary", where: "Global · donor view", nav: {} },
+      { code: "dgse",         label: "DGSE",         home: "adm1",    who: "DGSE",         where: "Uttar Pradesh",    nav: { iso: "IND" } },
+      { code: "bsa",          label: "BSA",          home: "adm2",    who: "BSA",          where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh" } },
+      { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" } },
+      { code: "ht",           label: "Head Teacher", home: "schools", who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0 } },
+      { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
+    ];
+    const ROLE_BY = {}; ROLES.forEach((r) => { ROLE_BY[r.code] = r; });
+
     // #####################################################################
     // ## VIEW 4 — Global map (geoBoundaries ADM1/2/3, live-loaded).        ##
     // ## World -> Country -> ADM1(DGSE) -> ADM2(BSA) -> ADM3(BEO, w/       ##
@@ -819,7 +837,7 @@
         const [done, setDone] = useState(null);
         const amt = custom ? Math.max(0, parseFloat(custom) || 0) : amount;
         const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
-        const TABS = [["individual", "Individual"], ["government", "Government"], ["philanthropy", "Philanthropic org"]];
+        const TABS = [["individual", "Individual"], ["philanthropy", "Philanthropic org"]];
         return (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
             <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1386,29 +1404,213 @@
       }
 
       // ===================================================================
-      // Signed-in role (whose dashboard this is). Transparency = philanthropic
-      // donor → the whole global picture. Every other role sees only its parent
-      // node + peers + peers' descendants, which on this geographic map means
-      // navigation is *capped* at the role's home level (it can't zoom out past
-      // its parent). Each non-donor role is anchored on India → Uttar Pradesh →
-      // Lucknow (the BEO example), and the app auto-navigates there on sign-in.
-      // levels:        world  adm1   adm2   adm3   schools  school
-      // org node:      donor  DGSE   BSA    BEO    Head-T   Teacher/Student
-      const LEVEL_ORDER = ["world", "adm1", "adm2", "adm3", "schools", "school"];
-      const ROLES = [
-        { code: "transparency", label: "Transparency", home: "world",   who: "Global Education Secretary", where: "Global · donor view", nav: {} },
-        { code: "dgse",         label: "DGSE",         home: "adm1",    who: "DGSE",         where: "Uttar Pradesh",    nav: { iso: "IND" } },
-        { code: "bsa",          label: "BSA",          home: "adm2",    who: "BSA",          where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh" } },
-        { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" } },
-        { code: "ht",           label: "Head Teacher", home: "schools", who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0 } },
-        { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
+      // Transparency (philanthropic donor) dashboard — replaces the map for the
+      // donor: a full-width single-line time graph (toggle metrics, adjustable
+      // time scale), a Donate CTA, and an expandable learners table that mirrors
+      // the pp-dashboard /dashboard + user/{id} pages. All data is demo/dummy.
+      // ===================================================================
+      const DONOR_METRICS = [
+        { key: "money",    label: "Money in bank",      color: "#059669", fmt: (n) => fmtMoney(n) },
+        { key: "users",    label: "Users",              color: "#2563eb", fmt: (n) => fmtPop(n) },
+        { key: "dau",      label: "Daily active users", color: "#0891b2", fmt: (n) => fmtPop(n) },
+        { key: "letters",  label: "Letters learnt",     color: "#7c3aed", fmt: (n) => fmtPop(n) },
+        { key: "lessons",  label: "Lessons delivered",  color: "#db2777", fmt: (n) => fmtPop(n) },
+        { key: "hours",    label: "Total hours used",   color: "#d97706", fmt: (n) => fmtPop(n) },
+        { key: "avghours", label: "Average hours used", color: "#65a30d", fmt: (n) => n.toFixed(1) + "h" },
       ];
-      const ROLE_BY = {}; ROLES.forEach((r) => { ROLE_BY[r.code] = r; });
+      const TIME_WINDOWS = [
+        { key: "1d",  label: "1 day",    days: 1,    points: 24 },
+        { key: "1w",  label: "1 week",   days: 7,    points: 14 },
+        { key: "1m",  label: "1 month",  days: 30,   points: 30 },
+        { key: "3m",  label: "3 months", days: 91,   points: 26 },
+        { key: "1y",  label: "1 year",   days: 365,  points: 24 },
+        { key: "5y",  label: "5 years",  days: 1826, points: 20 },
+        { key: "10y", label: "10 years", days: 3652, points: 20 },
+      ];
+      function fmtAxis(ms, days) {
+        const d = new Date(ms);
+        if (days <= 1) return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+        if (days <= 92) return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+        if (days <= 800) return d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+        return String(d.getFullYear());
+      }
+      function donorMetricVal(key, frac, h) {
+        const noise = ((h % 21) - 10) / 100;   // ±0.10
+        if (key === "money")    return Math.max(0, (2.4e6 - 1.55e6 * frac) * (1 + noise * 0.35));  // declining runway
+        if (key === "users")    return Math.round((8000 + 26000 * frac) * (1 + noise * 0.5));
+        if (key === "dau")      return Math.round((1800 + 9000 * frac) * (1 + noise));
+        if (key === "letters")  return Math.round((1.2e6 + 9.6e6 * frac) * (1 + noise * 0.3));
+        if (key === "lessons")  return Math.round((30000 + 240000 * frac) * (1 + noise * 0.4));
+        if (key === "hours")    return Math.round((9000 + 72000 * frac) * (1 + noise * 0.4));
+        if (key === "avghours") return Math.max(0.2, Math.round((1.2 + 1.8 * frac) * (1 + noise) * 10) / 10);
+        return 0;
+      }
+      function donorSeries(key, win) {
+        const vals = [], labels = [];
+        for (let i = 0; i < win.points; i++) {
+          const frac = win.points <= 1 ? 1 : i / (win.points - 1);
+          const tms = NOW_MS - win.days * 864e5 * (1 - frac);
+          vals.push(donorMetricVal(key, frac, hashStr(key + ":" + win.key + ":" + i)));
+          labels.push(fmtAxis(tms, win.days));
+        }
+        return { vals, labels };
+      }
+      function TimeLineChart({ vals, labels, color, fmt }) {
+        const W = 1000, H = 280, pl = 70, pr = 20, pt = 16, pb = 32;
+        const iw = W - pl - pr, ih = H - pt - pb, n = vals.length;
+        let ymin = Math.min(0, ...vals), ymax = Math.max(...vals); if (ymin === ymax) ymax = ymin + 1;
+        const xOf = (i) => pl + (n <= 1 ? 0 : (i / (n - 1)) * iw);
+        const yOf = (v) => pt + ih - ((v - ymin) / (ymax - ymin)) * ih;
+        const pts = vals.map((v, i) => xOf(i).toFixed(1) + "," + yOf(v).toFixed(1));
+        const area = "M" + xOf(0).toFixed(1) + "," + (pt + ih).toFixed(1) + " L" + pts.join(" L") + " L" + xOf(n - 1).toFixed(1) + "," + (pt + ih).toFixed(1) + " Z";
+        const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => ymin + (ymax - ymin) * f);
+        const xStep = Math.max(1, Math.ceil(n / 8));
+        return (
+          <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }} className="block">
+            {yTicks.map((v, i) => (
+              <g key={i}>
+                <line x1={pl} y1={yOf(v)} x2={W - pr} y2={yOf(v)} stroke="#e4e4e7" />
+                <text x={pl - 8} y={yOf(v) + 4} textAnchor="end" fontSize="11" className="fill-zinc-400">{fmt(v)}</text>
+              </g>
+            ))}
+            {labels.map((lb, i) => (i % xStep === 0 || i === n - 1) ? (
+              <text key={i} x={xOf(i)} y={H - 10} textAnchor="middle" fontSize="11" className="fill-zinc-400">{lb}</text>
+            ) : null)}
+            <path d={area} fill={color} fillOpacity="0.10" />
+            <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+        );
+      }
+      function ActivityBars({ activity }) {
+        const H = 32, MIN = 2, FIVE = 5 * 60 * 1000;
+        const max = Math.max(FIVE, ...activity);
+        return (
+          <div className="relative" style={{ height: H, width: "fit-content" }}>
+            <div className="flex items-end gap-[3px]" style={{ height: H }}>
+              {activity.map((ms, i) => (
+                <div key={i} title={Math.round(ms / 60000) + " min"} className="w-3 rounded-sm"
+                  style={{ height: Math.max(MIN, (ms / max) * H), backgroundColor: ms >= FIVE ? "#10b981" : "#ef4444", opacity: ms === 0 ? 0.4 : 1 }} />
+              ))}
+            </div>
+            <div className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-zinc-400" style={{ top: H - (FIVE / max) * H }} />
+          </div>
+        );
+      }
+      function donorStudent(i) {
+        const id = "donor.stu." + i, h = hashStr("ds:" + id), rh = hashStr("ref:" + id);
+        const referrer = rh % 3 === 0 ? null : (rh % 2 === 0
+          ? { name: FIRST[rh % FIRST.length] + " " + LAST[(rh >>> 5) % LAST.length], external_id: null }
+          : { name: null, external_id: "+9197" + String(1000000 + (rh % 9000000)) });
+        const nl = h % 7, letters = [];
+        for (let k = 0; k < nl; k++) letters.push(DEVA[hashStr("l:" + id + ":" + k) % DEVA.length]);
+        const activity = [];
+        for (let d = 0; d < 7; d++) { const a = hashStr("a:" + id + ":" + d); activity.push(a % 5 === 0 ? 0 : (a % 60) * 60000); }
+        return { id, name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 7) % LAST.length], phone: "+9198" + String(1000000 + (h % 9000000)), referrer, score: h % 101, letters, activity };
+      }
+      function StudentDashboard({ t }) {
+        const TOTAL = 60;
+        const [visible, setVisible] = useState(10);
+        const [open, setOpen] = useState(null);
+        const users = useMemo(() => Array.from({ length: TOTAL }, (_, i) => donorStudent(i)), []);
+        const shown = users.slice(0, visible);
+        return (
+          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
+                    <th className="px-4 py-3 font-medium">#</th>
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Referred by</th>
+                    <th className="px-4 py-3 font-medium">Phone</th>
+                    <th className="px-4 py-3 font-medium">Letters Learnt</th>
+                    <th className="px-4 py-3 font-medium">Activity (7d)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((u, i) => (
+                    <React.Fragment key={u.id}>
+                      <tr onClick={() => setOpen(open === u.id ? null : u.id)} className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50">
+                        <td className="px-4 py-2.5 text-zinc-400">{i + 1}</td>
+                        <td className="px-4 py-2.5 font-medium text-zinc-900">{u.name}<span className="ml-1 text-zinc-300">{open === u.id ? "▾" : "▸"}</span></td>
+                        <td className="px-4 py-2.5 text-zinc-600">{u.referrer ? (u.referrer.name ? <span>{u.referrer.name}</span> : <span className="font-mono">{u.referrer.external_id}</span>) : <span className="text-zinc-300">—</span>}</td>
+                        <td className="px-4 py-2.5 font-mono text-zinc-600">{u.phone}</td>
+                        <td className="px-4 py-2.5">{u.letters.length ? <span className="text-zinc-700">{u.letters.join(" ")}</span> : <span className="italic text-zinc-400">none</span>}</td>
+                        <td className="px-4 py-2.5"><ActivityBars activity={u.activity} /></td>
+                      </tr>
+                      {open === u.id && (
+                        <tr className="border-b border-zinc-100 bg-zinc-50">
+                          <td colSpan={6} className="px-4 pb-4 pt-1">
+                            <StudentCard u={{ id: u.id, name: u.name, score: u.score }} t={t} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
+              <span className="text-xs text-zinc-400">Showing {Math.min(visible, TOTAL)} of {TOTAL}+ learners · click a row to expand</span>
+              {visible < TOTAL
+                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 10))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
+                : <span className="text-xs text-zinc-400">All learners loaded</span>}
+            </div>
+          </div>
+        );
+      }
+      function DonorDashboard({ t, onDonate }) {
+        const [metric, setMetric] = useState("money");
+        const [winKey, setWinKey] = useState("1m");
+        const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
+        const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
+        const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
+        return (
+          <div className="flex-1 overflow-y-auto bg-zinc-50">
+            <div className="mx-auto max-w-6xl space-y-5 p-6">
+              {/* funding runway — always above the graph, no matter which line is shown */}
+              <div className="flex items-center gap-4 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 shadow-sm">
+                <span className="text-4xl leading-none">⏳</span>
+                <div>
+                  <div className="text-2xl font-extrabold text-amber-800">35 days of funding left</div>
+                  <div className="text-xs font-medium text-amber-700">At the current burn rate the global programme's bank runs dry in 35 days — top it up below.</div>
+                </div>
+              </div>
+              {/* full-width time graph (one line at a time) */}
+              <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {DONOR_METRICS.map((m) => (
+                      <button key={m.key} onClick={() => setMetric(m.key)}
+                        className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
+                        style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
+                    <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
+                      {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="mb-1 text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
+              </div>
+              {/* call to action */}
+              <button onClick={onDonate} className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate</button>
+              {/* learners (pp-dashboard /dashboard + user/{id}) */}
+              <div>
+                <div className="mb-2 text-sm font-semibold text-zinc-900">Learners</div>
+                <StudentDashboard t={t} />
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       // =====================================================================
       //  The map app
       // =====================================================================
-      function WorldMap() {
+      function WorldMap({ role, setRole }) {
         const wrapRef = useRef(null);
         const [size, setSize] = useState({ w: 1000, h: 640 });
         const [worldGeo, setWorldGeo] = useState(null);     // null | "error" | FeatureCollection
@@ -1429,8 +1631,7 @@
         const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; hover stops swapping it
         const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
         const t = useCallback((s) => translate(uiLang, s), [uiLang]);
-        const [role, setRole] = useState("transparency");   // signed-in role (visibility scope)
-        const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;
+        const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;   // `role` comes from Root (top-bar toggle)
         const capIdx = LEVEL_ORDER.indexOf(roleCfg.home);   // can't navigate above this level
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
@@ -1824,13 +2025,12 @@
           else if (level === "adm1") goLevel("world");
         }, [level, goLevel, role]);
 
-        // sign in as a role: hard-reset to world, then the auto-nav effect drives to the role's home
-        const signIn = useCallback((code) => {
-          setRole(code);
+        // on sign-in (role change), hard-reset the map nav; the auto-nav effect then drives to the home
+        useEffect(() => {
           setLevel("world"); setCountry(null); setAdm1FC(null); setAdm2FC(null); setAdm3FC(null);
           setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null); setPinned(false);
           setTf({ k: 1, x: 0, y: 0 });
-        }, []);
+        }, [role]);
 
         // auto-navigate toward the signed-in role's home (India → Uttar Pradesh → Lucknow → …).
         // Each step fires one drill; the resulting state change re-runs the effect for the next step.
@@ -2264,7 +2464,11 @@
         const showHover = (payload) => { if (!pinned) setActive(payload); };
 
         return (
-          <div className="flex h-full flex-col">
+          <div className="relative flex h-full flex-col">
+            {role === "transparency" ? (
+              <DonorDashboard t={t} onDonate={() => setFund({ title: "PadhaiPal — global programme", id: "donor" })} />
+            ) : (
+            <React.Fragment>
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
               <div>
                 <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
@@ -2289,10 +2493,6 @@
                 <p className="text-xs text-zinc-500"><span className="font-semibold text-zinc-700">Signed in: {roleCfg.who} · {roleCfg.where}</span> · {bannerText}</p>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                <select value={role} onChange={(e) => signIn(e.target.value)} title="Signed-in role / dashboard"
-                  className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 font-semibold text-blue-700 hover:bg-blue-100">
-                  {ROLES.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-                </select>
                 <select value={uiLang} onChange={(e) => setUiLang(e.target.value)} title="Language / भाषा"
                   className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50">
                   {UI_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
@@ -2597,11 +2797,14 @@
 
               {invite && <InviteModal key={invite.id} data={invite} initial={pendingInvites.get(invite.id) || null} onClose={() => setInvite(null)} onSent={(person) => recordInvite(invite.id, person)} />}
               {petition && <PetitionPage title={petition.title} count={petition.count} signups={petition.signups} onClose={() => setPetition(null)} />}
-              {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
             </div>
 
             <BarGraph entities={entities} selectedIds={selectedIds} hoverId={hoverId}
               onHover={setHoverId} onToggle={toggleSend} onAddRange={addEntities} />
+            </React.Fragment>
+            )}
+            {/* Fund / Donate modal — shared by the map's "Fund this location" and the donor's Donate CTA */}
+            {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
           </div>
         );
       }
@@ -2614,13 +2817,21 @@
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
+      const [role, setRole] = useState("transparency");   // signed-in role (lifted so the toggle lives in the top bar)
       return (
         <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
             <span className="text-xs font-semibold text-white">PadhaiPal · Educator Network</span>
+            <label className="ml-auto flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
+              Signed in as
+              <select value={role} onChange={(e) => setRole(e.target.value)} title="Switch dashboard / signed-in role"
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-white hover:bg-zinc-700 focus:outline-none">
+                {ROLES.map((r) => <option key={r.code} value={r.code} className="bg-zinc-800 text-white">{r.label}</option>)}
+              </select>
+            </label>
           </div>
           <div className="relative min-h-0 flex-1">
-            <WorldMapApp />
+            <WorldMapApp role={role} setRole={setRole} />
           </div>
         </div>
       );
