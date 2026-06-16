@@ -1597,7 +1597,6 @@
       const BLUE_HUE = 217;
       const blueByLight = (share) => "hsl(" + BLUE_HUE + ", 85%, " + Math.round(90 - clamp(share, 0, 1) * 42) + "%)";
       const BLUE_FULL = "hsl(" + BLUE_HUE + ", 85%, 48%)";
-      const BAR_BLUE = "hsl(" + BLUE_HUE + ", 82%, 73%)";   // supply-curve bars: ~50% lighter
       const findCostRow = (l) => COST_TABLE.find((r) => r.lang.split("/").some((p) => p.trim() === l)) || (l === "Indonesian" ? COST_TABLE.find((r) => r.lang === "Bahasa Indonesia") : null);
       // cost-curve bars in roadmap build order (Hindi first, then Amharic, …), deduped by cost-table row
       const ROADMAP_BARS = (() => {
@@ -1658,7 +1657,7 @@
         );
       }
       function CostCurve({ builtSet }) {
-        const W = 520, H = 330, pl = 58, pr = 14, pt = 16, pb = 56;
+        const W = 520, H = 330, pl = 58, pr = 14, pt = 66, pb = 56;
         const iw = W - pl - pr, ih = H - pt - pb, axisY = pt + ih;
         const sig1 = (v) => (v ? String(parseFloat(Number(v).toPrecision(1))) : "0");   // one significant figure
         // only built languages, in roadmap build order (Hindi → Amharic → …); not-yet-built are hidden
@@ -1675,9 +1674,9 @@
           const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2, top = axisY - bh; x += bw;
           return (
             <g key={b.label}>
-              <rect x={x0} y={top} width={Math.max(0.6, bw)} height={bh} fill={BAR_BLUE} stroke="#ffffff" strokeWidth={0.7} />
-              {/* label stretches vertically from the baseline up to the top of the chart */}
-              {bw > 7 ? <text x={cx} y={axisY - 3} transform={"rotate(-90," + cx + "," + (axisY - 3) + ")"} textAnchor="start" textLength={ih - 8} lengthAdjust="spacingAndGlyphs" fontSize="11" fontWeight="700" fill="#1e3a8a">{b.label.split("/")[0]}</text> : null}
+              <rect x={x0} y={top} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
+              {/* label sits vertically *above* the bar */}
+              {bw > 7 ? <text x={cx} y={top - 4} transform={"rotate(-90," + cx + "," + (top - 4) + ")"} textAnchor="start" fontSize="10" fontWeight="600" fill="#334155">{b.label.split("/")[0]}</text> : null}
             </g>
           );
         });
