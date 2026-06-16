@@ -1657,19 +1657,20 @@
         );
       }
       function CostCurve({ builtSet }) {
-        const W = 520, H = 300, pl = 46, pr = 10, pt = 10, pb = 30;
-        const iw = W - pl - pr, ih = H - pt - pb;
+        const W = 520, H = 330, pl = 58, pr = 14, pt = 14, pb = 56;
+        const iw = W - pl - pr, ih = H - pt - pb, axisY = pt + ih;
+        const sig1 = (v) => (v ? String(parseFloat(Number(v).toPrecision(1))) : "0");   // one significant figure
         // only built languages, in roadmap build order (Hindi → Amharic → …); not-yet-built are hidden
         const shown = ROADMAP_BARS.filter((b) => langBuilt(b.label, builtSet));
         const totalW = shown.reduce((s, b) => s + b.w, 0) || 1;
-        const yOf = (v) => pt + ih - (v / ROADMAP_MAX_H) * ih;
+        const yOf = (v) => axisY - (v / ROADMAP_MAX_H) * ih;
         let x = pl;
-        const bars = shown.map((b, i) => {
-          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x; x += bw;
+        const bars = shown.map((b) => {
+          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2; x += bw;
           return (
             <g key={b.label}>
-              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
-              {bw > 22 ? <text x={x0 + bw / 2} y={pt + ih - bh - 2} textAnchor="middle" fontSize="7" className="fill-zinc-600">{b.label.split("/")[0]}</text> : null}
+              <rect x={x0} y={axisY - bh} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
+              {bw > 9 ? <text x={cx} y={axisY - 5} transform={"rotate(-90," + cx + "," + (axisY - 5) + ")"} textAnchor="start" fontSize="10" fontWeight="600" fill="#0f172a">{b.label.split("/")[0]}</text> : null}
             </g>
           );
         });
@@ -1677,13 +1678,25 @@
           <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }}>
             {[0, 0.1, 0.2, 0.3, 0.4, 0.5].map((v, i) => (
               <g key={i}>
-                <line x1={pl} y1={yOf(v)} x2={W - pr} y2={yOf(v)} stroke="#f1f5f9" />
-                <text x={pl - 6} y={yOf(v) + 3} textAnchor="end" fontSize="8" className="fill-zinc-400">{v.toFixed(2)}</text>
+                <line x1={pl} y1={yOf(v)} x2={W - pr} y2={yOf(v)} stroke="#eef2f7" />
+                <line x1={pl - 5} y1={yOf(v)} x2={pl} y2={yOf(v)} stroke="#94a3b8" strokeWidth={1.2} />
+                <text x={pl - 9} y={yOf(v) + 4} textAnchor="end" fontSize="12" className="fill-zinc-500">{sig1(v)}</text>
               </g>
             ))}
             {bars}
-            <text x={pl} y={H - 8} fontSize="9" className="fill-zinc-500">Deployable market ($M) →</text>
-            <text transform={"translate(11," + (pt + ih / 2) + ") rotate(-90)"} textAnchor="middle" fontSize="9" className="fill-zinc-500">Doublings per $</text>
+            {/* x axis: cumulative deployable market ($M), one significant figure */}
+            <line x1={pl} y1={axisY} x2={W - pr} y2={axisY} stroke="#94a3b8" strokeWidth={1.2} />
+            {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
+              const xx = pl + f * iw;
+              return (
+                <g key={i}>
+                  <line x1={xx} y1={axisY} x2={xx} y2={axisY + 5} stroke="#94a3b8" strokeWidth={1.2} />
+                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{sig1(f * totalW)}</text>
+                </g>
+              );
+            })}
+            <text x={pl + iw / 2} y={H - 6} textAnchor="middle" fontSize="12" className="fill-zinc-600">Deployable market ($M)</text>
+            <text transform={"translate(15," + (pt + ih / 2) + ") rotate(-90)"} textAnchor="middle" fontSize="12" className="fill-zinc-600">Income doublings per donated dollar</text>
           </svg>
         );
       }
@@ -1711,7 +1724,7 @@
                 <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} />
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Cost-effectiveness · width = market $M · height = doublings/$</div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">PadhaiPal Supply Curve</div>
                 <CostCurve builtSet={builtSet} />
               </div>
             </div>
@@ -1733,7 +1746,6 @@
                 <span className="text-4xl leading-none">⏳</span>
                 <div>
                   <div className="text-2xl font-extrabold text-amber-800">35 days of funding left</div>
-                  <div className="text-xs font-medium text-amber-700">At the current burn rate the global programme's bank runs dry in 35 days — top it up below.</div>
                 </div>
               </div>
               {/* full-width time graph (one line at a time) */}
@@ -1795,7 +1807,7 @@
                     { icon: "📜", title: "Procure", body: "Convert that top-down demand into funded government contracts by navigating the budget and procurement pathway (AWP&B/PAB, GeM or NGO grant-in-aid) so money reaches PadhaiPal's account." },
                   ].map((c, i) => (
                     <div key={c.title} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-center gap-2"><span className="text-2xl leading-none">{c.icon}</span><span className="text-xs font-bold text-zinc-400">{i + 1}</span></div>
+                      <div className="flex items-baseline gap-2"><span className="text-4xl font-extrabold leading-none text-zinc-800">{i + 1})</span><span className="text-2xl leading-none">{c.icon}</span></div>
                       <div className="mt-2 text-sm font-bold text-zinc-900">{c.title}</div>
                       <div className="mt-1 text-xs leading-relaxed text-zinc-600">{c.body}</div>
                     </div>
