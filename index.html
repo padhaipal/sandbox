@@ -1593,44 +1593,76 @@
       const costColor = (eff) => scoreColor(clamp(eff / 0.08, 0, 1));
       const langBuilt = (lang, builtSet) => lang.split("/").some((p) => builtSet.has(p.trim()));
       const countryEff = (iso, name, builtSet) => { let best = -1; for (const l of langFor(iso, name).langs) if (builtSet.has(l) && LANG_EFF[l] != null && LANG_EFF[l] > best) best = LANG_EFF[l]; return best; };
+      const findCostRow = (l) => COST_TABLE.find((r) => r.lang.split("/").some((p) => p.trim() === l)) || (l === "Indonesian" ? COST_TABLE.find((r) => r.lang === "Bahasa Indonesia") : null);
+      // cost-curve bars in roadmap build order (Hindi first, then Amharic, …), deduped by cost-table row
+      const ROADMAP_BARS = (() => {
+        const seenRow = new Set(), out = [];
+        for (const stop of ROADMAP_STOPS) for (const l of stop.langs) {
+          const row = findCostRow(l); if (!row || seenRow.has(row.lang)) continue;
+          seenRow.add(row.lang); out.push({ label: row.lang, h: row.h, w: row.w });
+        }
+        return out;
+      })();
+      const ROADMAP_MAX_H = Math.max.apply(null, ROADMAP_BARS.map((b) => b.h));
 
       function RoadmapGlobe({ worldGeo, builtSet }) {
-        const W = 360, H = 300;
+        const W = 360, H = 300, R0 = (Math.min(W, H) - 16) / 2;   // base globe radius
+        const [rot, setRot] = useState([-45, -12]);               // [lon, lat] rotation
+        const [zoom, setZoom] = useState(1);
+        const drag = useRef(null);
+        const ref = useRef(null);
         const proj = useMemo(() => {
           if (!worldGeo || worldGeo === "error") return null;
-          const p = d3.geoOrthographic().rotate([-45, -12]).clipAngle(90);
-          p.fitExtent([[8, 8], [W - 8, H - 8]], { type: "Sphere" });
-          return p;
-        }, [worldGeo]);
+          return d3.geoOrthographic().rotate(rot).clipAngle(90).scale(R0 * zoom).translate([W / 2, H / 2]);
+        }, [worldGeo, rot, zoom, R0]);
         const path = useMemo(() => (proj ? d3.geoPath(proj) : null), [proj]);
-        if (!proj) return <div className="flex items-center justify-center rounded-lg bg-blue-50 text-xs text-zinc-400" style={{ height: H }}>Loading globe…</div>;
+        // wheel-to-zoom via a non-passive listener so the page doesn't scroll while zooming
+        useEffect(() => {
+          const el = ref.current; if (!el) return;
+          const onWheel = (e) => { e.preventDefault(); setZoom((z) => clamp(z * (e.deltaY < 0 ? 1.18 : 1 / 1.18), 1, 9)); };
+          el.addEventListener("wheel", onWheel, { passive: false });
+          return () => el.removeEventListener("wheel", onWheel);
+        }, []);
+        if (!proj) return <div ref={ref} className="flex items-center justify-center rounded-lg bg-blue-50 text-xs text-zinc-400" style={{ height: H }}>Loading globe…</div>;
+        const onDown = (e) => { drag.current = { x: e.clientX, y: e.clientY, rot }; e.currentTarget.setPointerCapture(e.pointerId); };
+        const onMove = (e) => { if (!drag.current) return; const k = 0.35 / zoom; setRot([drag.current.rot[0] + (e.clientX - drag.current.x) * k, clamp(drag.current.rot[1] - (e.clientY - drag.current.y) * k, -89, 89)]); };
+        const onUp = () => { drag.current = null; };
         return (
-          <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }} className="rounded-lg">
-            <path d={path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1} />
-            <path d={path(d3.geoGraticule10())} fill="none" stroke="#bfdbfe" strokeWidth={0.5} opacity={0.6} />
-            {worldGeo.features.map((f, i) => {
-              if (f.properties.ADMIN === "Antarctica") return null;
-              const d = path(f); if (!d) return null;
-              const eff = countryEff(iso3Of(f.properties), f.properties.ADMIN, builtSet);
-              return <path key={i} d={d} fill={eff >= 0 ? costColor(eff) : "#e5e7eb"} fillOpacity={eff >= 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
-            })}
-          </svg>
+          <div ref={ref} className="relative">
+            <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", touchAction: "none", cursor: drag.current ? "grabbing" : "grab" }} className="rounded-lg"
+              onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+              <path d={path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1} />
+              <path d={path(d3.geoGraticule10())} fill="none" stroke="#bfdbfe" strokeWidth={0.5} opacity={0.6} />
+              {worldGeo.features.map((f, i) => {
+                if (f.properties.ADMIN === "Antarctica") return null;
+                const d = path(f); if (!d) return null;
+                const eff = countryEff(iso3Of(f.properties), f.properties.ADMIN, builtSet);
+                return <path key={i} d={d} fill={eff >= 0 ? costColor(eff) : "#e5e7eb"} fillOpacity={eff >= 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
+              })}
+            </svg>
+            <div className="absolute right-1.5 top-1.5 flex flex-col overflow-hidden rounded-md border border-zinc-300 bg-white/90 shadow-sm">
+              <button onClick={() => setZoom((z) => clamp(z * 1.4, 1, 9))} title="Zoom in" className="flex h-6 w-6 items-center justify-center text-sm font-semibold text-zinc-600 hover:bg-zinc-100">+</button>
+              <div className="h-px bg-zinc-200" />
+              <button onClick={() => setZoom((z) => clamp(z / 1.4, 1, 9))} title="Zoom out" className="flex h-6 w-6 items-center justify-center text-sm font-semibold text-zinc-600 hover:bg-zinc-100">−</button>
+            </div>
+            <div className="pointer-events-none absolute bottom-1 left-2 text-[8px] text-zinc-400">drag to rotate · scroll / ± to zoom</div>
+          </div>
         );
       }
       function CostCurve({ builtSet }) {
         const W = 520, H = 300, pl = 46, pr = 10, pt = 10, pb = 30;
         const iw = W - pl - pr, ih = H - pt - pb;
-        const totalW = COST_TABLE.reduce((s, r) => s + r.w, 0);
-        const maxH = Math.max.apply(null, COST_TABLE.map((r) => r.h));
-        const yOf = (v) => pt + ih - (v / maxH) * ih;
+        // only built languages, in roadmap build order (Hindi → Amharic → …); not-yet-built are hidden
+        const shown = ROADMAP_BARS.filter((b) => langBuilt(b.label, builtSet));
+        const totalW = shown.reduce((s, b) => s + b.w, 0) || 1;
+        const yOf = (v) => pt + ih - (v / ROADMAP_MAX_H) * ih;
         let x = pl;
-        const bars = COST_TABLE.map((r, i) => {
-          const bw = (r.w / totalW) * iw, bh = (r.h / maxH) * ih, x0 = x; x += bw;
-          const built = langBuilt(r.lang, builtSet);
+        const bars = shown.map((b, i) => {
+          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x; x += bw;
           return (
-            <g key={i}>
-              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={costColor(r.h)} fillOpacity={built ? 1 : 0.28} stroke="#ffffff" strokeWidth={0.5} />
-              {bw > 26 ? <text x={x0 + bw / 2} y={pt + ih - bh - 2} textAnchor="middle" fontSize="7" className="fill-zinc-600">{r.lang.split("/")[0]}</text> : null}
+            <g key={b.label}>
+              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={costColor(b.h)} stroke="#ffffff" strokeWidth={0.7} />
+              {bw > 22 ? <text x={x0 + bw / 2} y={pt + ih - bh - 2} textAnchor="middle" fontSize="7" className="fill-zinc-600">{b.label.split("/")[0]}</text> : null}
             </g>
           );
         });
@@ -1660,7 +1692,12 @@
               <span className="text-[10px] text-zinc-400">{idx + 1} / {ROADMAP_STOPS.length}</span>
             </div>
             <input type="range" min={0} max={ROADMAP_STOPS.length - 1} step={1} value={idx} onChange={(e) => setIdx(+e.target.value)} className="w-full accent-emerald-600" />
-            <div className="mb-3 flex justify-between px-0.5 text-[8px] text-zinc-300">{ROADMAP_STOPS.map((s, i) => <span key={i}>|</span>)}</div>
+            <div className="mb-3 mt-1 flex">
+              {ROADMAP_STOPS.map((s, i) => (
+                <button key={i} onClick={() => setIdx(i)} title={s.label}
+                  className={"flex-1 px-0.5 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}>{s.label}</button>
+              ))}
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Coverage · colour = cost-efficiency</div>
@@ -1724,7 +1761,7 @@
 
               {/* Education Operating System */}
               <div>
-                <div className="mb-2 text-base font-bold text-zinc-900">Education Operating System</div>
+                <div className="mb-4 mt-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Education Operating System</div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   {[
                     { icon: "📏", title: "Measure", body: "Continuously measure digital equivalents of ASER tests — every interaction assesses a child's letter- and word-level reading, so progress is visible in real time." },
@@ -1742,7 +1779,7 @@
 
               {/* Scalable Distribution */}
               <div>
-                <div className="mb-2 text-base font-bold text-zinc-900">Scalable Distribution</div>
+                <div className="mb-4 mt-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Scalable Distribution</div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {[
                     { icon: "🤝", title: "Partner", body: "Team up with an established education NGO that already has trusted staff and school relationships across multiple blocks, districts, or states in a new geography." },
