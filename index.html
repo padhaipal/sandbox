@@ -1593,6 +1593,12 @@
       const costColor = (eff) => scoreColor(clamp(eff / 0.08, 0, 1));
       const langBuilt = (lang, builtSet) => lang.split("/").some((p) => builtSet.has(p.trim()));
       const countryEff = (iso, name, builtSet) => { let best = -1; for (const l of langFor(iso, name).langs) if (builtSet.has(l) && LANG_EFF[l] != null && LANG_EFF[l] > best) best = LANG_EFF[l]; return best; };
+      // share (0..1) of a country's population that speaks a built language
+      const countryBuiltShare = (iso, name, builtSet) => { let s = 0; for (const [l, sh] of (langFor(iso, name).pairs || [])) if (builtSet.has(l)) s += sh; return s; };
+      // single blue hue; saturation encodes the value (globe = % speakers, bars = full)
+      const BLUE_HUE = 217;
+      const blueBySat = (sat) => "hsl(" + BLUE_HUE + ", " + Math.round(clamp(sat, 0, 100)) + "%, 48%)";
+      const BLUE_FULL = blueBySat(100);
       const findCostRow = (l) => COST_TABLE.find((r) => r.lang.split("/").some((p) => p.trim() === l)) || (l === "Indonesian" ? COST_TABLE.find((r) => r.lang === "Bahasa Indonesia") : null);
       // cost-curve bars in roadmap build order (Hindi first, then Amharic, …), deduped by cost-table row
       const ROADMAP_BARS = (() => {
@@ -1636,8 +1642,9 @@
               {worldGeo.features.map((f, i) => {
                 if (f.properties.ADMIN === "Antarctica") return null;
                 const d = path(f); if (!d) return null;
-                const eff = countryEff(iso3Of(f.properties), f.properties.ADMIN, builtSet);
-                return <path key={i} d={d} fill={eff >= 0 ? costColor(eff) : "#e5e7eb"} fillOpacity={eff >= 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
+                const share = countryBuiltShare(iso3Of(f.properties), f.properties.ADMIN, builtSet);
+                // saturation rises with the % of the population speaking a built language
+                return <path key={i} d={d} fill={share > 0 ? blueBySat(10 + share * 88) : "#e5e7eb"} fillOpacity={share > 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
               })}
             </svg>
             <div className="absolute right-1.5 top-1.5 flex flex-col overflow-hidden rounded-md border border-zinc-300 bg-white/90 shadow-sm">
@@ -1661,7 +1668,7 @@
           const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x; x += bw;
           return (
             <g key={b.label}>
-              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={costColor(b.h)} stroke="#ffffff" strokeWidth={0.7} />
+              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
               {bw > 22 ? <text x={x0 + bw / 2} y={pt + ih - bh - 2} textAnchor="middle" fontSize="7" className="fill-zinc-600">{b.label.split("/")[0]}</text> : null}
             </g>
           );
@@ -1700,7 +1707,7 @@
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Coverage · colour = cost-efficiency</div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Coverage · saturation = % population reached</div>
                 <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} />
               </div>
               <div>
