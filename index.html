@@ -1609,7 +1609,7 @@
       })();
       const ROADMAP_MAX_H = Math.max.apply(null, ROADMAP_BARS.map((b) => b.h));
 
-      function RoadmapGlobe({ worldGeo, builtSet }) {
+      function RoadmapGlobe({ worldGeo, builtSet, reach }) {
         const W = 360, H = 300, R0 = (Math.min(W, H) - 16) / 2;   // base globe radius
         const [rot, setRot] = useState([-79, -22]);               // [lon, lat] rotation — centred on India
         const [zoom, setZoom] = useState(1);
@@ -1640,8 +1640,10 @@
               {worldGeo.features.map((f, i) => {
                 if (f.properties.ADMIN === "Antarctica") return null;
                 const d = path(f); if (!d) return null;
-                const share = countryBuiltShare(iso3Of(f.properties), f.properties.ADMIN, builtSet);
-                // lightness encodes the % population speaking a built language (bright = low, full colour = 100%)
+                // `reach` caps the rollout at this stop (Current = 5% of population, e.g. India 44% → 5%)
+                const base = countryBuiltShare(iso3Of(f.properties), f.properties.ADMIN, builtSet);
+                const share = base > 0 ? Math.min(base, reach == null ? 1 : reach) : 0;
+                // lightness encodes the % population reached (bright = low, full colour = 100%)
                 return <path key={i} d={d} fill={share > 0 ? blueByLight(share) : "#e5e7eb"} fillOpacity={share > 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
               })}
             </svg>
@@ -1655,7 +1657,7 @@
         );
       }
       function CostCurve({ builtSet }) {
-        const W = 520, H = 330, pl = 58, pr = 14, pt = 14, pb = 56;
+        const W = 520, H = 330, pl = 58, pr = 14, pt = 66, pb = 56;
         const iw = W - pl - pr, ih = H - pt - pb, axisY = pt + ih;
         const sig1 = (v) => (v ? String(parseFloat(Number(v).toPrecision(1))) : "0");   // one significant figure
         // only built languages, in roadmap build order (Hindi → Amharic → …); not-yet-built are hidden
@@ -1664,11 +1666,12 @@
         const yOf = (v) => axisY - (v / ROADMAP_MAX_H) * ih;
         let x = pl;
         const bars = shown.map((b) => {
-          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2; x += bw;
+          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2, top = axisY - bh; x += bw;
           return (
             <g key={b.label}>
-              <rect x={x0} y={axisY - bh} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
-              {bw > 9 ? <text x={cx} y={axisY - 5} transform={"rotate(-90," + cx + "," + (axisY - 5) + ")"} textAnchor="start" fontSize="10" fontWeight="600" fill="#0f172a">{b.label.split("/")[0]}</text> : null}
+              <rect x={x0} y={top} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
+              {/* label sits vertically *above* the bar */}
+              {bw > 7 ? <text x={cx} y={top - 4} transform={"rotate(-90," + cx + "," + (top - 4) + ")"} textAnchor="start" fontSize="10" fontWeight="600" fill="#334155">{b.label.split("/")[0]}</text> : null}
             </g>
           );
         });
@@ -1682,18 +1685,18 @@
               </g>
             ))}
             {bars}
-            {/* x axis: cumulative deployable market ($M), one significant figure */}
+            {/* x axis: cumulative PadhaiPal spend ($B), one significant figure */}
             <line x1={pl} y1={axisY} x2={W - pr} y2={axisY} stroke="#94a3b8" strokeWidth={1.2} />
             {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
               const xx = pl + f * iw;
               return (
                 <g key={i}>
                   <line x1={xx} y1={axisY} x2={xx} y2={axisY + 5} stroke="#94a3b8" strokeWidth={1.2} />
-                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{sig1(f * totalW)}</text>
+                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{sig1((f * totalW) / 1000)}</text>
                 </g>
               );
             })}
-            <text x={pl + iw / 2} y={H - 6} textAnchor="middle" fontSize="12" className="fill-zinc-600">Deployable market ($M)</text>
+            <text x={pl + iw / 2} y={H - 6} textAnchor="middle" fontSize="12" className="fill-zinc-600">PadhaiPal Spend ($B)</text>
             <text transform={"translate(15," + (pt + ih / 2) + ") rotate(-90)"} textAnchor="middle" fontSize="12" className="fill-zinc-600">Income doublings per donated dollar</text>
           </svg>
         );
@@ -1719,7 +1722,7 @@
             <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Coverage · lightness = % population reached</div>
-                <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} />
+                <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} reach={idx === 0 ? 0.05 : 1} />
               </div>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">PadhaiPal Supply Curve</div>
@@ -1811,13 +1814,12 @@
                   ].map((c, i, arr) => (
                     <React.Fragment key={c.title}>
                       <div className="relative flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                        <span className="pointer-events-none absolute -right-2 -top-3 text-7xl font-black leading-none" style={{ color: c.color + "14" }}>{i + 1}</span>
-                        <div className="relative flex items-center gap-2">
-                          <span className="text-4xl font-black leading-none" style={{ color: c.color }}>{i + 1}</span>
-                          <span className="text-3xl leading-none">{c.icon}</span>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="text-3xl font-black leading-none" style={{ color: c.color }}>{i + 1}</span>
+                          <span className="text-2xl leading-none">{c.icon}</span>
+                          <span className="text-lg font-extrabold text-zinc-900">{c.title}</span>
                         </div>
-                        <div className="relative mt-3 text-lg font-extrabold text-zinc-900">{c.title}</div>
-                        <div className="relative mt-1 text-xs font-medium text-zinc-600">{c.tag}</div>
+                        <div className="mt-2 text-xs font-medium text-zinc-600">{c.tag}</div>
                       </div>
                       {i < arr.length - 1 && <div className="hidden shrink-0 items-center justify-center text-3xl font-light text-zinc-300 lg:flex">›</div>}
                     </React.Fragment>
