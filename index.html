@@ -1559,7 +1559,123 @@
           </div>
         );
       }
-      function DonorDashboard({ t, onDonate }) {
+      // ---- Roadmap: build order + cost-effectiveness landscape ----------------
+      // Height = doublings of reading ability per $ (cost-efficiency); Width = deployable market ($M).
+      const COST_TABLE = [
+        { lang: "Amharic", h: 0.527, w: 161.3 }, { lang: "Burmese", h: 0.444, w: 62.8 },
+        { lang: "French", h: 0.414, w: 319.8 }, { lang: "Swahili", h: 0.414, w: 93.1 },
+        { lang: "Nepali", h: 0.401, w: 26.7 }, { lang: "Urdu", h: 0.359, w: 429.7 },
+        { lang: "Khmer", h: 0.316, w: 33.4 }, { lang: "English", h: 0.244, w: 753.2 },
+        { lang: "Hindi", h: 0.212, w: 585.0 }, { lang: "Telugu", h: 0.212, w: 93.1 },
+        { lang: "Marathi", h: 0.212, w: 93.1 }, { lang: "Tamil", h: 0.212, w: 63.5 },
+        { lang: "Bengali", h: 0.199, w: 161.2 }, { lang: "Vietnamese", h: 0.129, w: 13.8 },
+        { lang: "Filipino/Tagalog", h: 0.127, w: 116.7 }, { lang: "Persian/Farsi", h: 0.127, w: 41.1 },
+        { lang: "Bahasa Indonesia", h: 0.110, w: 229.1 }, { lang: "Arabic", h: 0.103, w: 437.3 },
+        { lang: "Portuguese", h: 0.063, w: 158.0 }, { lang: "Spanish", h: 0.058, w: 381.2 },
+      ];
+      // each slider stop unlocks language(s); the built set is cumulative up to the stop
+      const ROADMAP_STOPS = [
+        { label: "Current", langs: ["Hindi"] },
+        { label: "100% Hindi", langs: ["Hindi"] },
+        { label: "100% Amharic", langs: ["Amharic"] },
+        { label: "100% Swahili", langs: ["Swahili"] },
+        { label: "100% Urdu", langs: ["Urdu"] },
+        { label: "100% Telugu / Marathi / Tamil / Bengali", langs: ["Telugu", "Marathi", "Tamil", "Bengali"] },
+        { label: "100% Vietnamese", langs: ["Vietnamese"] },
+        { label: "100% Filipino", langs: ["Filipino", "Tagalog"] },
+        { label: "100% Arabic / Farsi", langs: ["Arabic", "Persian", "Farsi"] },
+        { label: "100% Indonesian", langs: ["Indonesian", "Bahasa Indonesia"] },
+        { label: "100% Spanish / Portuguese", langs: ["Spanish", "Portuguese"] },
+      ];
+      const LANG_EFF = (() => { const m = {}; for (const r of COST_TABLE) for (const p of r.lang.split("/")) m[p.trim()] = r.h; m["Indonesian"] = m["Bahasa Indonesia"]; return m; })();
+      const builtCumulative = (idx) => { const s = new Set(); for (let i = 0; i <= idx; i++) for (const l of ROADMAP_STOPS[i].langs) s.add(l); return s; };
+      // green→red cost-efficiency scale with 0.04 as the yellow midpoint → every table value sits in the green half
+      const costColor = (eff) => scoreColor(clamp(eff / 0.08, 0, 1));
+      const langBuilt = (lang, builtSet) => lang.split("/").some((p) => builtSet.has(p.trim()));
+      const countryEff = (iso, name, builtSet) => { let best = -1; for (const l of langFor(iso, name).langs) if (builtSet.has(l) && LANG_EFF[l] != null && LANG_EFF[l] > best) best = LANG_EFF[l]; return best; };
+
+      function RoadmapGlobe({ worldGeo, builtSet }) {
+        const W = 360, H = 300;
+        const proj = useMemo(() => {
+          if (!worldGeo || worldGeo === "error") return null;
+          const p = d3.geoOrthographic().rotate([-45, -12]).clipAngle(90);
+          p.fitExtent([[8, 8], [W - 8, H - 8]], { type: "Sphere" });
+          return p;
+        }, [worldGeo]);
+        const path = useMemo(() => (proj ? d3.geoPath(proj) : null), [proj]);
+        if (!proj) return <div className="flex items-center justify-center rounded-lg bg-blue-50 text-xs text-zinc-400" style={{ height: H }}>Loading globe…</div>;
+        return (
+          <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }} className="rounded-lg">
+            <path d={path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1} />
+            <path d={path(d3.geoGraticule10())} fill="none" stroke="#bfdbfe" strokeWidth={0.5} opacity={0.6} />
+            {worldGeo.features.map((f, i) => {
+              if (f.properties.ADMIN === "Antarctica") return null;
+              const d = path(f); if (!d) return null;
+              const eff = countryEff(iso3Of(f.properties), f.properties.ADMIN, builtSet);
+              return <path key={i} d={d} fill={eff >= 0 ? costColor(eff) : "#e5e7eb"} fillOpacity={eff >= 0 ? 0.95 : 0.55} stroke="#ffffff" strokeWidth={0.3} />;
+            })}
+          </svg>
+        );
+      }
+      function CostCurve({ builtSet }) {
+        const W = 520, H = 300, pl = 46, pr = 10, pt = 10, pb = 30;
+        const iw = W - pl - pr, ih = H - pt - pb;
+        const totalW = COST_TABLE.reduce((s, r) => s + r.w, 0);
+        const maxH = Math.max.apply(null, COST_TABLE.map((r) => r.h));
+        const yOf = (v) => pt + ih - (v / maxH) * ih;
+        let x = pl;
+        const bars = COST_TABLE.map((r, i) => {
+          const bw = (r.w / totalW) * iw, bh = (r.h / maxH) * ih, x0 = x; x += bw;
+          const built = langBuilt(r.lang, builtSet);
+          return (
+            <g key={i}>
+              <rect x={x0} y={pt + ih - bh} width={Math.max(0.6, bw)} height={bh} fill={costColor(r.h)} fillOpacity={built ? 1 : 0.28} stroke="#ffffff" strokeWidth={0.5} />
+              {bw > 26 ? <text x={x0 + bw / 2} y={pt + ih - bh - 2} textAnchor="middle" fontSize="7" className="fill-zinc-600">{r.lang.split("/")[0]}</text> : null}
+            </g>
+          );
+        });
+        return (
+          <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }}>
+            {[0, 0.1, 0.2, 0.3, 0.4, 0.5].map((v, i) => (
+              <g key={i}>
+                <line x1={pl} y1={yOf(v)} x2={W - pr} y2={yOf(v)} stroke="#f1f5f9" />
+                <text x={pl - 6} y={yOf(v) + 3} textAnchor="end" fontSize="8" className="fill-zinc-400">{v.toFixed(2)}</text>
+              </g>
+            ))}
+            {bars}
+            <text x={pl} y={H - 8} fontSize="9" className="fill-zinc-500">Deployable market ($M) →</text>
+            <text transform={"translate(11," + (pt + ih / 2) + ") rotate(-90)"} textAnchor="middle" fontSize="9" className="fill-zinc-500">Doublings per $</text>
+          </svg>
+        );
+      }
+      function DonorRoadmap({ worldGeo }) {
+        const [idx, setIdx] = useState(0);
+        const builtSet = useMemo(() => builtCumulative(idx), [idx]);
+        return (
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="text-base font-bold text-zinc-900">Roadmap</div>
+            <div className="mb-2 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
+              <span className="text-[10px] text-zinc-400">{idx + 1} / {ROADMAP_STOPS.length}</span>
+            </div>
+            <input type="range" min={0} max={ROADMAP_STOPS.length - 1} step={1} value={idx} onChange={(e) => setIdx(+e.target.value)} className="w-full accent-emerald-600" />
+            <div className="mb-3 flex justify-between px-0.5 text-[8px] text-zinc-300">{ROADMAP_STOPS.map((s, i) => <span key={i}>|</span>)}</div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Coverage · colour = cost-efficiency</div>
+                <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} />
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Cost-effectiveness · width = market $M · height = doublings/$</div>
+                <CostCurve builtSet={builtSet} />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function DonorDashboard({ t, onDonate, worldGeo }) {
         const [metric, setMetric] = useState("money");
         const [winKey, setWinKey] = useState("1m");
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
@@ -1601,6 +1717,46 @@
               <div>
                 <div className="mb-2 text-sm font-semibold text-zinc-900">Learners</div>
                 <StudentDashboard t={t} />
+              </div>
+
+              {/* roadmap: slider + globe coverage + cost-effectiveness curve */}
+              <DonorRoadmap worldGeo={worldGeo} />
+
+              {/* Education Operating System */}
+              <div>
+                <div className="mb-2 text-base font-bold text-zinc-900">Education Operating System</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {[
+                    { icon: "📏", title: "Measure", body: "Continuously measure digital equivalents of ASER tests — every interaction assesses a child's letter- and word-level reading, so progress is visible in real time." },
+                    { icon: "📚", title: "Teach", body: "Deliver personalised, phonics-first lessons over WhatsApp that adapt to each child's level and serve the next letter or word they're ready for." },
+                    { icon: "💬", title: "Communicate", body: "Keep parents, teachers and officials in the loop with automated nudges, progress updates and follow-ups — in the family's own language." },
+                  ].map((c) => (
+                    <div key={c.title} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                      <div className="text-2xl leading-none">{c.icon}</div>
+                      <div className="mt-2 text-sm font-bold text-zinc-900">{c.title}</div>
+                      <div className="mt-1 text-xs leading-relaxed text-zinc-600">{c.body}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scalable Distribution */}
+              <div>
+                <div className="mb-2 text-base font-bold text-zinc-900">Scalable Distribution</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { icon: "🤝", title: "Partner", body: "Team up with an established education NGO that already has trusted staff and school relationships across multiple blocks, districts, or states in a new geography." },
+                    { icon: "🌱", title: "Plant", body: "Have those partners pitch principals and BEOs in several locations, using proven results from elsewhere, to get PadhaiPal running in a first set of schools." },
+                    { icon: "📈", title: "Propagate", body: "Adopting principals and BEOs generate strong performance reports that they share upward, prompting their superiors to adopt in turn, so usage spreads sideways and climbs the hierarchy." },
+                    { icon: "📜", title: "Procure", body: "Convert that top-down demand into funded government contracts by navigating the budget and procurement pathway (AWP&B/PAB, GeM or NGO grant-in-aid) so money reaches PadhaiPal's account." },
+                  ].map((c, i) => (
+                    <div key={c.title} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center gap-2"><span className="text-2xl leading-none">{c.icon}</span><span className="text-xs font-bold text-zinc-400">{i + 1}</span></div>
+                      <div className="mt-2 text-sm font-bold text-zinc-900">{c.title}</div>
+                      <div className="mt-1 text-xs leading-relaxed text-zinc-600">{c.body}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -2466,7 +2622,7 @@
         return (
           <div className="relative flex h-full flex-col">
             {role === "transparency" ? (
-              <DonorDashboard t={t} onDonate={() => setFund({ title: "PadhaiPal — global programme", id: "donor" })} />
+              <DonorDashboard t={t} worldGeo={worldGeo} onDonate={() => setFund({ title: "PadhaiPal — global programme", id: "donor" })} />
             ) : (
             <React.Fragment>
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
