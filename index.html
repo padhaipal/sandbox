@@ -2213,6 +2213,40 @@
       const API = "https://www.geoboundaries.org/api/current/gbOpen/";
       const WORLD_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
 
+      // ===================================================================
+      // i18n: UI text is looked up via t(key). English is the source/default.
+      // Add a language = add a { code, label } to UI_LANGS and a dictionary
+      // (key -> translation) to I18N. Missing keys fall back to the English key.
+      // ===================================================================
+      const UI_LANGS = [
+        { code: "en", label: "English" },
+        { code: "hi", label: "हिन्दी" },
+      ];
+      const I18N = {
+        hi: {
+          "World": "विश्व", "School": "विद्यालय",
+          "Area": "क्षेत्र", "Roadmap": "रोडमैप", "Compose": "संदेश", "Legend": "संकेत",
+          "Reset": "रीसेट", "Report": "रिपोर्ट", "Drill in →": "अंदर जाएँ →",
+          "Hover a region on the map to see its details.": "विवरण देखने के लिए मानचित्र पर किसी क्षेत्र पर माउस ले जाएँ।",
+          "Click a pinned area’s ✕, press Esc, or click empty space to unpin.": "अनपिन करने के लिए पिन किए गए क्षेत्र का ✕ दबाएँ, Esc दबाएँ, या खाली जगह पर क्लिक करें।",
+          "click empty space to go up one level": "एक स्तर ऊपर जाने के लिए खाली जगह पर क्लिक करें",
+          "Population": "जनसंख्या", "Adult literacy": "वयस्क साक्षरता",
+          "Teaching / building": "पढ़ा रहे / बना रहे", "On the roadmap": "रोडमैप पर",
+          "Beyond our method": "हमारी पद्धति से परे", "Reach": "पहुँच",
+          "PadhaiPal coverage": "पधाईपाल कवरेज", "Fund this location": "इस स्थान को वित्त दें",
+          "Letters learnt": "सीखे गए अक्षर", "Yesterday": "कल", "Week": "सप्ताह", "Month": "महीना", "Year": "वर्ष",
+          "Templates": "टेम्पलेट", "Message": "संदेश", "Find recipients": "प्राप्तकर्ता खोजें", "Send list": "भेजने की सूची",
+          "Search name…": "नाम खोजें…", "Location…": "स्थान…", "Any level": "कोई भी स्तर",
+          "Add all": "सभी जोड़ें", "Clear": "साफ़ करें", "Save filters": "फ़िल्टर सहेजें",
+          "Any gender": "कोई भी लिंग", "Female": "महिला", "Male": "पुरुष",
+          "Any language": "कोई भी भाषा", "Any setting": "कोई भी क्षेत्र", "Urban": "शहरी", "Rural": "ग्रामीण",
+          "Active any time": "कभी भी सक्रिय", "Active ≤ 7 days": "सक्रिय ≤ 7 दिन", "Active ≤ 30 days": "सक्रिय ≤ 30 दिन",
+          "Any device": "कोई भी डिवाइस", "Smartphone": "स्मार्टफ़ोन", "Feature phone": "फ़ीचर फ़ोन",
+          "Language": "भाषा",
+        },
+      };
+      const translate = (lang, s) => (lang && I18N[lang] && I18N[lang][s]) || s;
+
       // --- helpers (mirror the other views; IIFEs stay independent) ---
       function hashStr(s) {
         let h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
@@ -2247,6 +2281,17 @@
       // children-per-node range, by org level. Only school->teacher->student are procedural;
       // country/ADM1/ADM2/ADM3 counts come from the live map data.
       const FANOUT = [null, null, null, null, null, [2, 7], [12, 28]];
+      // deterministic per-node metadata (demo) — plausible attributes the recipient search filters on.
+      const META_GENDERS = ["Female", "Male"];
+      const META_SETTINGS = ["Urban", "Rural"];
+      const META_DEVICES = ["Smartphone", "Feature phone"];
+      const META_LANGS = ["Hindi", "English", "Bengali", "Tamil", "Telugu", "Marathi", "Urdu", "Gujarati", "Kannada", "Punjabi"];
+      // School people-graph card geometry (world units). Cards are world-anchored (they zoom with
+      // the map), so the layout collide radius == the rendered card footprint guarantees the node
+      // UIs never overlap. uiR ≥ half the card width (CARD_W/2) so neighbours can't touch.
+      const SCHOOL_CARD_W = 76;
+      const schoolFaceR = (g) => (g === "ht" ? 22 : g === "teacher" ? 15 : 10);
+      const schoolUiR = (g) => (g === "ht" ? 48 : g === "teacher" ? 42 : 40);
       function node(id) {
         const lvl = id.split(".").length - 1;
         const h = hashStr("u:" + id);
@@ -2258,6 +2303,13 @@
           perf, score: Math.round(perf * 100),
           face: "faces/" + (student ? "child" : "adult") + "/" + (hashStr("face:" + id) % (student ? FACE_COUNT.child : FACE_COUNT.adult)) + ".jpg",
           phone: "+9198" + String(1000000 + (h % 9000000)),
+          // --- metadata categories (deterministic; demo) ---
+          gender: META_GENDERS[(h >>> 3) % 2],
+          setting: META_SETTINGS[(h >>> 5) % 2],
+          device: student ? META_DEVICES[(h >>> 7) % 2] : "Smartphone",
+          language: META_LANGS[(h >>> 11) % META_LANGS.length],
+          experience: student ? 0 : 1 + ((h >>> 13) % 25),   // years in role (educators)
+          lastActiveDays: (h >>> 17) % 31,                    // days since last active (0–30)
         };
       }
       function baseChildCount(id) {
@@ -2650,6 +2702,17 @@
         GHA:33e6, LKA:22e6, MMR:54e6, MOZ:33e6, ITA:59e6, POL:38e6, KOR:52e6, CHE:9e6, BEL:12e6, MYS:33e6, PER:34e6,
         FJI:0.9e6, MUS:1.3e6, ARE:9.4e6,
       };
+      // UNESCO UIS adult literacy rate (% of population ages 15+, most recent year). National
+      // figures only — sub-national levels (ADM1/2/3, block, school) copy the nearest ancestor
+      // that has a value (here: their country), per the data-availability convention.
+      const ADULT_LITERACY = {
+        USA:99, IND:74, CHN:97, BRA:94, FRA:99, DEU:99, GBR:99, NGA:62, PAK:58,
+        IDN:96, MEX:95, JPN:99, RUS:100, BGD:75, ETH:52, PHL:96, EGY:73, VNM:96,
+        COD:80, TUR:96, IRN:86, THA:94, ZAF:95, TZA:82, KEN:83, ESP:98, COL:95, ARG:99,
+        DZA:81, CAN:99, UGA:79, IRQ:86, MAR:76, AFG:37, SAU:98, UKR:100, AUS:99, NPL:71,
+        GHA:80, LKA:92, MMR:89, MOZ:63, ITA:99, POL:99, KOR:98, CHE:99, BEL:99, MYS:95, PER:94,
+        FJI:99, MUS:92, ARE:98,
+      };
       // a few India ADM1 overrides to demonstrate per-region language variation
       const REGION_LANG = {
         "Tamil Nadu": ["Tamil"], "Kerala": ["Malayalam"], "Karnataka": ["Kannada"], "Andhra Pradesh": ["Telugu"],
@@ -2693,7 +2756,9 @@
         const pop = isCountry && COUNTRY_POP[iso] ? COUNTRY_POP[iso] : Math.max(1, Math.round(areaKm2 * dens));
         // sub-levels inherit the parent's language mix (proportions); only pop/area differ
         const lang = inherit ? { langs: inherit.langs, pairs: inherit.pairs, real: inherit.real, phon: inherit.phon, teach: inherit.teach } : langFor(iso, regionName);
-        return { pop, areaKm2, ...lang };
+        // adult literacy: national value only — sub-levels copy the nearest ancestor that has one
+        const lit = inherit && inherit.lit != null ? inherit.lit : (ADULT_LITERACY[iso] != null ? ADULT_LITERACY[iso] : null);
+        return { pop, areaKm2, lit, ...lang };
       }
       const fmtPop = (n) => n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(Math.round(n));
       const fmtArea = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M km²" : n >= 1e3 ? Math.round(n).toLocaleString() + " km²" : Math.round(n) + " km²";
@@ -3126,24 +3191,32 @@
       // =====================================================================
       //  Compose drawer
       // =====================================================================
-      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport, glow, embed }) {
+      function ComposePanel({ open, onToggle, entities, recipients, onAddMany, onRemove, onClear, savedTemplates, setSavedTemplates, savedFilters, setSavedFilters, ai, setAi, onSend, onGenerateReport, glow, embed, t = (s) => s }) {
         const glowCls = "transition-shadow duration-700 " + (glow ? "shadow-[0_0_30px_8px_rgba(37,99,235,0.65)]" : "");
         const [tplId, setTplId] = useState(null);
         const [text, setText] = useState("");
-        const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "" });
+        const [filters, setFilters] = useState({ q: "", level: "All", location: "", scoreMin: 0, scoreMax: 100, rankMax: "", gender: "All", language: "All", setting: "All", device: "All", active: "any" });
         const allTemplates = useMemo(() => [...TEMPLATES, ...savedTemplates], [savedTemplates]);
         const levels = useMemo(() => ["All", ...Array.from(new Set(entities.map((e) => e.level)))], [entities]);
+        const langOpts = useMemo(() => ["All", ...Array.from(new Set(entities.map((e) => e.u && e.u.language).filter(Boolean)))], [entities]);
         const recipIds = useMemo(() => new Set(recipients.map((r) => r.id)), [recipients]);
-        const tpl = allTemplates.find((t) => t.id === tplId);
+        const tpl = allTemplates.find((tp) => tp.id === tplId);
 
         const results = useMemo(() => {
           const q = filters.q.trim().toLowerCase(), loc = filters.location.trim().toLowerCase();
           return entities.filter((e) => {
+            const m = e.u || {};
             if (q && !((e.u.name || "").toLowerCase().includes(q) || (e.name || "").toLowerCase().includes(q))) return false;
             if (filters.level !== "All" && e.level !== filters.level) return false;
             if (loc && !(e.location || "").toLowerCase().includes(loc)) return false;
             if (e.score < filters.scoreMin || e.score > filters.scoreMax) return false;
             if (filters.rankMax !== "" && e.rank > +filters.rankMax) return false;
+            // --- metadata categories ---
+            if (filters.gender !== "All" && m.gender !== filters.gender) return false;
+            if (filters.language !== "All" && m.language !== filters.language) return false;
+            if (filters.setting !== "All" && m.setting !== filters.setting) return false;
+            if (filters.device !== "All" && m.device !== filters.device) return false;
+            if (filters.active !== "any" && (m.lastActiveDays == null || m.lastActiveDays > +filters.active)) return false;
             return true;
           }).sort((a, b) => a.rank - b.rank);
         }, [entities, filters]);
@@ -3163,12 +3236,12 @@
         const body = (
           <React.Fragment>
               <section>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Templates</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{t("Templates")}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {allTemplates.map((t) => (
-                    <button key={t.id} onClick={() => selectTpl(t)}
-                      className={"rounded-full border px-2 py-1 text-[11px] " + (tplId === t.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}>
-                      {t.title}{t.tags && t.tags.includes("image") ? " 🖼" : ""}{t.tags && t.tags.includes("report") ? " 📊" : ""}
+                  {allTemplates.map((tp) => (
+                    <button key={tp.id} onClick={() => selectTpl(tp)}
+                      className={"rounded-full border px-2 py-1 text-[11px] " + (tplId === tp.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}>
+                      {tp.title}{tp.tags && tp.tags.includes("image") ? " 🖼" : ""}{tp.tags && tp.tags.includes("report") ? " 📊" : ""}
                     </button>
                   ))}
                 </div>
@@ -3176,7 +3249,7 @@
 
               <section>
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Message</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{t("Message")}</span>
                   <span className="text-[10px] text-zinc-400">tokens: &lt;name&gt; &lt;area&gt; &lt;level&gt; &lt;score&gt; &lt;rank&gt;</span>
                 </div>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} placeholder="Write a message, or pick a template above…" className={inp + " resize-y font-mono leading-relaxed"} />
@@ -3197,14 +3270,35 @@
               </section>
 
               <section>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Find recipients</div>
-                <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name…" className={inp} />
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{t("Find recipients")}</div>
+                <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder={t("Search name…")} className={inp} />
                 <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                   <select value={filters.level} onChange={(e) => setFilters({ ...filters, level: e.target.value })} className={inp}>
-                    {levels.map((l) => <option key={l} value={l}>{l === "All" ? "Any level" : l}</option>)}
+                    {levels.map((l) => <option key={l} value={l}>{l === "All" ? t("Any level") : l}</option>)}
                   </select>
-                  <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} placeholder="Location…" className={inp} />
+                  <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} placeholder={t("Location…")} className={inp} />
+                  <select value={filters.gender} onChange={(e) => setFilters({ ...filters, gender: e.target.value })} className={inp}>
+                    <option value="All">{t("Any gender")}</option>
+                    {META_GENDERS.map((g) => <option key={g} value={g}>{t(g)}</option>)}
+                  </select>
+                  <select value={filters.language} onChange={(e) => setFilters({ ...filters, language: e.target.value })} className={inp}>
+                    <option value="All">{t("Any language")}</option>
+                    {langOpts.filter((l) => l !== "All").map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                  <select value={filters.setting} onChange={(e) => setFilters({ ...filters, setting: e.target.value })} className={inp}>
+                    <option value="All">{t("Any setting")}</option>
+                    {META_SETTINGS.map((s) => <option key={s} value={s}>{t(s)}</option>)}
+                  </select>
+                  <select value={filters.device} onChange={(e) => setFilters({ ...filters, device: e.target.value })} className={inp}>
+                    <option value="All">{t("Any device")}</option>
+                    {META_DEVICES.map((d) => <option key={d} value={d}>{t(d)}</option>)}
+                  </select>
                 </div>
+                <select value={filters.active} onChange={(e) => setFilters({ ...filters, active: e.target.value })} className={inp + " mt-1.5"}>
+                  <option value="any">{t("Active any time")}</option>
+                  <option value="7">{t("Active ≤ 7 days")}</option>
+                  <option value="30">{t("Active ≤ 30 days")}</option>
+                </select>
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
                   <span>score</span>
                   <input type="number" value={filters.scoreMin} min={0} max={100} onChange={(e) => setFilters({ ...filters, scoreMin: +e.target.value || 0 })} className={inp + " w-14"} />
@@ -3215,7 +3309,7 @@
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <button onClick={() => setSavedFilters([...savedFilters, { name: "Filter " + (savedFilters.length + 1), filters: { ...filters } }])}
-                    className="rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">Save filters</button>
+                    className="rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50">{t("Save filters")}</button>
                   {savedFilters.map((sf, i) => (
                     <button key={i} onClick={() => setFilters({ ...sf.filters })} className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-200">{sf.name}</button>
                   ))}
@@ -3274,7 +3368,6 @@
                 </select>
               </label>
               <div className="flex gap-2">
-                <button onClick={onGenerateReport} className="rounded-md border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">⤓ Report</button>
                 <button onClick={() => onSend(text, ai)} disabled={!recipients.length || !text.trim()}
                   className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
                   Send to {recipients.length} recipient{recipients.length === 1 ? "" : "s"}
@@ -3324,6 +3417,9 @@
         const [a3Idx, setA3Idx] = useState(null);
         const [selHt, setSelHt] = useState(null);
         const [active, setActive] = useState(null);         // { u, title, sub, demo }
+        const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; hover stops swapping it
+        const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
+        const t = useCallback((s) => translate(uiLang, s), [uiLang]);
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
@@ -3648,15 +3744,25 @@
           const total = nodes.length;
           [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
           const sim = d3.forceSimulation(nodes)
-            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => (l.source.group === "ht" ? 75 : 30)).strength(0.75))
-            .force("charge", d3.forceManyBody().strength(-55).distanceMax(280))
-            .force("collide", d3.forceCollide().radius((d) => d.r + 2).iterations(2))
-            .force("x", d3.forceX(0).strength(0.045)).force("y", d3.forceY(0).strength(0.045))
+            // Connection length encodes the child's score: higher score → shorter link (sits closer
+            // to its parent), lower score → longer link. Base ≥ parent+child collide radii so the
+            // collide force never fights the link force.
+            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => {
+              const norm = (l.target.u.score || 0) / 100;
+              const base = schoolUiR(l.source.group) + schoolUiR(l.target.group) + 6;
+              const range = l.source.group === "ht" ? 70 : 55;
+              return base + (1 - norm) * range;
+            }).strength(0.6))
+            .force("charge", d3.forceManyBody().strength(-90).distanceMax(500))
+            // collide radius == rendered card footprint → node UI elements can't overlap
+            .force("collide", d3.forceCollide().radius((d) => schoolUiR(d.group)).strength(1).iterations(4))
+            .force("x", d3.forceX(0).strength(0.03)).force("y", d3.forceY(0).strength(0.03))
             .stop();
-          for (let i = 0; i < 300; i++) sim.tick();
+          for (let i = 0; i < 400; i++) sim.tick();
           let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
           for (const n of nodes) { if (n.x < minx) minx = n.x; if (n.x > maxx) maxx = n.x; if (n.y < miny) miny = n.y; if (n.y > maxy) maxy = n.y; }
-          return { nodes, links, htU, bbox: [minx - 24, miny - 24, maxx + 24, maxy + 24],
+          // pad by the card footprint so edge cards aren't clipped (face above, label box below)
+          return { nodes, links, htU, bbox: [minx - 46, miny - 32, maxx + 46, maxy + 60],
             counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
         }, [selHt]);
 
@@ -3722,7 +3828,17 @@
           else setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
-        const onBgClick = useCallback(() => { if (!moved.current && level !== "world") popUp(); }, [popUp, level]);
+        // empty-space click: if a card is pinned, first click just unpins; otherwise go up a level
+        const onBgClick = useCallback(() => { if (moved.current) return; if (pinned) { setPinned(false); return; } if (level !== "world") popUp(); }, [popUp, level, pinned]);
+        // Esc unpins the area card
+        useEffect(() => {
+          if (!pinned) return;
+          const onKey = (e) => { if (e.key === "Escape") setPinned(false); };
+          window.addEventListener("keydown", onKey);
+          return () => window.removeEventListener("keydown", onKey);
+        }, [pinned]);
+        // any drill (level change) clears the pin so the next level's card is hover-driven again
+        useEffect(() => { setPinned(false); }, [level]);
         const zoomBy = useCallback((factor) => {
           setTf((t) => { const k = clamp(t.k * factor, ZMIN, ZMAX); const s = k / t.k; const cx = size.w / 2, cy = size.h / 2; return { k, x: cx - (cx - t.x) * s, y: cy - (cy - t.y) * s }; });
         }, [size]);
@@ -3834,6 +3950,16 @@
 
         const areaBody = active ? (
                 <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    {active.drill && (
+                      <button onClick={() => active.drill()} className="rounded-md bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-blue-700">{t("Drill in →")}</button>
+                    )}
+                    {pinned
+                      ? <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600">📌 Pinned</span>
+                      : <span className="text-[10px] text-zinc-400">Click the area to pin</span>}
+                    {pinned && <button onClick={() => { setPinned(false); setActive(null); }} title="Unpin (Esc)"
+                      className="ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600">✕</button>}
+                  </div>
                   <div className="flex items-center gap-3">
                     {(() => {
                       const hasPerson = !active.greyed && registered(active.u.id);
@@ -3905,7 +4031,10 @@
                   </div>
                   {active.demo && (
                     <div className="mt-2 space-y-1 text-[11px] text-zinc-600">
-                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Population</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
+                      <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{t("Population")}</span><span className="font-semibold">{fmtPop(active.demo.pop)}</span></div>
+                      {active.demo.lit != null && (
+                        <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{t("Adult literacy")} <span className="text-zinc-400">(UNESCO)</span></span><span className="font-semibold">{active.demo.lit}%</span></div>
+                      )}
                       {(() => {
                         const { now, soon, never } = splitLangs(active.demo.pairs, builtLangs);
                         return (
@@ -4070,15 +4199,19 @@
                   )}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-[11px] text-zinc-400">Hover a region on the map to see its details.</div>
+                <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-[11px] text-zinc-400">{t("Hover a region on the map to see its details.")}</div>
         );
+
+        // click-to-pin: hover previews the card (unless one is pinned); a single click on an area
+        // pins it (set active + pinned); double-click or the card's "Drill in →" button drills in.
+        const showHover = (payload) => { if (!pinned) setActive(payload); };
 
         return (
           <div className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
               <div>
                 <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
-                  <button onClick={() => goLevel("world")} className={level === "world" ? "text-zinc-900" : "text-blue-600 hover:underline"}>World</button>
+                  <button onClick={() => goLevel("world")} className={level === "world" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{t("World")}</button>
                   {country && <span className="text-zinc-300">›</span>}
                   {country && <button onClick={() => goLevel("adm1")} className={level === "adm1" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{country.name}</button>}
                   {a1f && <span className="text-zinc-300">›</span>}
@@ -4088,19 +4221,23 @@
                   {blk && <span className="text-zinc-300">›</span>}
                   {blk && <button onClick={() => goLevel("schools")} className={level === "schools" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{blk.name}</button>}
                   {level === "school" && <span className="text-zinc-300">›</span>}
-                  {level === "school" && <span className="text-zinc-900">School</span>}
+                  {level === "school" && <span className="text-zinc-900">{t("School")}</span>}
                 </h1>
                 <p className="text-xs text-zinc-500">{bannerText}</p>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <select value={uiLang} onChange={(e) => setUiLang(e.target.value)} title="Language / भाषा"
+                  className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50">
+                  {UI_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+                </select>
                 <span>score</span><span>0</span>
                 <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
                 <span>100</span>
                 <button onClick={() => setTf(level === "school" && school ? frame(school.bbox) : level === "schools" && blk ? frame(blk.bbox) : level === "adm3" && a2f ? frame(a2f.bbox) : level === "adm2" && a1f ? frame(a1f.bbox) : { k: 1, x: 0, y: 0 })}
-                  className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">Reset</button>
-                <button onClick={genReport} className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">⤓ Report</button>
+                  className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">{t("Reset")}</button>
+                <button onClick={genReport} className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">⤓ {t("Report")}</button>
                 <button onClick={() => toggleSec("compose")} className="rounded-md bg-blue-600 px-2.5 py-1 font-semibold text-white hover:bg-blue-700">
-                  ✉ Compose{sendList.size ? <span className="ml-1 rounded-full bg-white/25 px-1.5">{sendList.size}</span> : null}
+                  ✉ {t("Compose")}{sendList.size ? <span className="ml-1 rounded-full bg-white/25 px-1.5">{sendList.size}</span> : null}
                 </button>
               </div>
             </header>
@@ -4124,22 +4261,23 @@
                     {/* WORLD: every country */}
                     {level === "world" && worldPaths && worldPaths.map((p) => {
                       const on = active && p.u && active.u.id === p.u.id;
-                      const onEnter = () => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered, iso: p.iso });
-                      const onClick = (e) => { e.stopPropagation(); pickCountry(p); };
+                      const payload = p.u ? { u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered, iso: p.iso, drill: p.covered ? () => pickCountry(p) : null } : null;
+                      const hov = () => payload && showHover(payload);
+                      const pin = (e) => { e.stopPropagation(); if (payload) { setActive(payload); setPinned(true); } };
+                      const onDbl = (e) => { e.stopPropagation(); pickCountry(p); };
                       if (roadmapOpen) {
                         // flat-colour analytics mode: single fill encoding the selected metric, no pies / no plus buttons
-                        const enterFlat = () => p.u && setActive({ u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered, iso: p.iso });
                         return (
                           <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={flatColorFor(p)} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: p.covered ? "pointer" : "default" }} onMouseEnter={enterFlat} onClick={onClick} />
+                            style={{ cursor: p.covered ? "pointer" : "default" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
                         );
                       }
                       if (!p.covered) {
                         return (
                           <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={NONPHON} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: "not-allowed" }} onMouseEnter={onEnter} onClick={onClick} />
+                            style={{ cursor: "pointer" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
                         );
                       }
                       return (
@@ -4147,7 +4285,7 @@
                           {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, teachBuilt(p.pairs))}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: "pointer" }} onMouseEnter={onEnter} onClick={onClick} />
+                            style={{ cursor: "pointer" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
                         </g>
                       );
                     })}
@@ -4159,8 +4297,9 @@
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso })}
-                          onClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
+                          onMouseEnter={() => showHover({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) })}
+                          onClick={(e) => { e.stopPropagation(); setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) }); setPinned(true); }}
+                          onDoubleClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
                       </g>
                     ))}
 
@@ -4171,8 +4310,9 @@
                         <path d={d0.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso })}
-                          onClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
+                          onMouseEnter={() => showHover({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) })}
+                          onClick={(e) => { e.stopPropagation(); setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) }); setPinned(true); }}
+                          onDoubleClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
                       </g>
                     ))}
 
@@ -4183,8 +4323,9 @@
                         <path d={b.d} fill="none" pointerEvents="all"
                           stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso })}
-                          onClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
+                          onMouseEnter={() => showHover({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) })}
+                          onClick={(e) => { e.stopPropagation(); setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) }); setPinned(true); }}
+                          onDoubleClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
                       </g>
                     ))}
 
@@ -4206,8 +4347,9 @@
                     {level === "schools" && schools && schools.map((sc) => (
                       <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(active && active.u.id === sc.id ? 9 : 6) / tf.k}
                         fill={scoreColor(sc.u.perf)} stroke="#ffffff" strokeWidth={1.2 / tf.k} style={{ cursor: "pointer" }}
-                        onMouseEnter={() => setActive({ u: sc.u, title: sc.name, sub: (sc.kind && sc.kind !== "unknown" ? sc.kind[0].toUpperCase() + sc.kind.slice(1) + " school · " : "") + "Head Teacher · " + sc.u.name })}
-                        onClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
+                        onMouseEnter={() => showHover({ u: sc.u, title: sc.name, sub: (sc.kind && sc.kind !== "unknown" ? sc.kind[0].toUpperCase() + sc.kind.slice(1) + " school · " : "") + "Head Teacher · " + sc.u.name, drill: () => drillSchool(sc) })}
+                        onClick={(e) => { e.stopPropagation(); setActive({ u: sc.u, title: sc.name, sub: (sc.kind && sc.kind !== "unknown" ? sc.kind[0].toUpperCase() + sc.kind.slice(1) + " school · " : "") + "Head Teacher · " + sc.u.name, drill: () => drillSchool(sc) }); setPinned(true); }}
+                        onDoubleClick={(e) => { e.stopPropagation(); drillSchool(sc); }} />
                     ))}
 
                     {/* school force graph */}
@@ -4219,19 +4361,24 @@
                         ))}
                         {school.nodes.map((n) => {
                           const on = active && active.u.id === n.id;
-                          const s = 1 / tf.k;
-                          const faceR = n.group === "ht" ? 22 : n.group === "teacher" ? 15 : 10;
-                          const ring = n.group === "ht" ? 3 : 2;
-                          const W = 76, lbl = n.group === "ht" ? "HT" : n.group === "teacher" ? "Tchr" : "Std";
+                          const faceR = schoolFaceR(n.group);
+                          const ring = n.group === "ht" ? 4 : 3;          // slightly thicker picture border
+                          const W = SCHOOL_CARD_W, lbl = n.group === "ht" ? "HT" : n.group === "teacher" ? "Tchr" : "Std";
                           const nm = n.u.name.length > 14 ? n.u.name.slice(0, 13) + "…" : n.u.name;
                           const title = n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student";
+                          const col = scoreColor(n.u.perf);
+                          // world-anchored (no 1/tf.k counter-scale): the layout collide radius == this
+                          // footprint, so cards can't overlap; they zoom with the map.
                           return (
-                            <foreignObject key={n.id} x={n.x - (W * s) / 2} y={n.y - faceR * s} width={W * s} height={(faceR * 2 + 32) * s} style={{ overflow: "visible", pointerEvents: "none" }}>
-                              <div style={{ width: W, transform: `scale(${s})`, transformOrigin: "top left" }} className="flex flex-col items-center"
-                                onMouseEnter={() => setActive({ u: n.u, title, sub: n.u.name })} onClick={(e) => e.stopPropagation()}>
-                                <img src={n.u.face} alt="" loading="lazy" className="rounded-full object-cover brightness-110"
-                                  style={{ width: faceR * 2, height: faceR * 2, boxShadow: "0 0 0 " + ring + "px " + scoreColor(n.u.perf), outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
-                                <div className="mt-0.5 max-w-full rounded px-1.5 text-center leading-tight shadow-sm" style={{ background: scoreColor(n.u.perf), color: textOn(n.u.perf), pointerEvents: "auto" }}>
+                            <foreignObject key={n.id} x={n.x - W / 2} y={n.y - faceR - ring} width={W} height={faceR * 2 + 44} style={{ overflow: "visible", pointerEvents: "none" }}>
+                              <div style={{ width: W }} className="flex flex-col items-center"
+                                onMouseEnter={() => { if (!pinned) setActive({ u: n.u, title, sub: n.u.name }); }}
+                                onClick={(e) => { e.stopPropagation(); setActive({ u: n.u, title, sub: n.u.name }); setPinned(true); }}>
+                                <img src={n.u.face} alt="" loading="lazy" className="relative rounded-full object-cover brightness-110"
+                                  style={{ width: faceR * 2, height: faceR * 2, zIndex: 2, boxShadow: "0 0 0 " + ring + "px " + col, outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: "auto" }} />
+                                {/* picture circle overlaps the label box — pull the box up under the face */}
+                                <div className="max-w-full rounded px-1.5 pb-0.5 text-center leading-tight shadow-sm"
+                                  style={{ position: "relative", zIndex: 1, marginTop: -faceR * 0.42, paddingTop: faceR * 0.42 + 2, background: col, color: textOn(n.u.perf), pointerEvents: "auto" }}>
                                   <div className="truncate font-semibold" style={{ fontSize: 10 }}>{nm}</div>
                                   <div style={{ fontSize: 9, opacity: 0.9 }}>{lbl} · {n.u.score} · #{n.rank}/{n.total}</div>
                                 </div>
@@ -4285,9 +4432,9 @@
                   };
                   return (
                     <React.Fragment>
-                      {section("area", "Area", null, areaBody)}
+                      {section("area", t("Area"), null, areaBody)}
 
-                      {section("roadmap", "Roadmap", builtLangs.size, (
+                      {section("roadmap", t("Roadmap"), builtLangs.size, (
                         <React.Fragment>
                         <p className="mb-2 text-[11px] leading-snug text-zinc-500">Languages PadhaiPal could build. Selecting one unlocks every country with speakers of it.</p>
                         <ol className="space-y-1">
@@ -4326,11 +4473,11 @@
                       </React.Fragment>
                       ))}
 
-                      {section("compose", "Compose", sendList.size || null, (
+                      {section("compose", t("Compose"), sendList.size || null, (
                         <ComposePanel embed open={true} onToggle={() => setComposeOpen((v) => !v)} entities={entities}
                           recipients={[...sendList.values()]} onAddMany={addEntities} onRemove={removeSend} onClear={clearSend}
                           savedTemplates={savedTemplates} setSavedTemplates={setSavedTemplates} savedFilters={savedFilters} setSavedFilters={setSavedFilters}
-                          ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} glow={composeGlow} />
+                          ai={ai} setAi={setAi} onSend={onSend} onGenerateReport={genReport} glow={composeGlow} t={t} />
                       ))}
 
                     </React.Fragment>
@@ -4340,7 +4487,7 @@
 
               {level !== "world" && (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
-                  click empty space to go up one level
+                  {t("click empty space to go up one level")}
                 </div>
               )}
 
