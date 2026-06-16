@@ -874,6 +874,12 @@
                   <label className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
                     <input type="checkbox" checked={monthly} onChange={(e) => setMonthly(e.target.checked)} /> Make this a monthly gift
                   </label>
+                  <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                    {amt > 0
+                      ? <React.Fragment>{(monthly ? "$" + amt + "/mo" : "$" + amt)} ≈ <b>{Math.max(1, Math.round(amt / 0.5)).toLocaleString()}</b> child-weeks of reading{monthly ? ", every month" : ""}.</React.Fragment>
+                      : "Pick an amount to see your impact."}
+                    {data.earmark ? <span className="ml-1">Earmarked for <b>{data.earmark}</b>.</span> : null}
+                  </div>
                   <button onClick={() => amt > 0 && setDone("individual")} disabled={!(amt > 0)}
                     className="mt-3 flex w-full items-center justify-center gap-1 rounded-full py-2.5 text-base font-bold shadow-sm hover:brightness-95 disabled:opacity-50" style={{ background: "#ffc439" }}>
                     <span style={{ color: "#003087" }}>Pay</span><span style={{ color: "#0070ba" }}>Pal</span>
@@ -1531,8 +1537,8 @@
                       <tr onClick={() => setOpen(open === u.id ? null : u.id)} className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50">
                         <td className="px-4 py-2.5 text-zinc-400">{i + 1}</td>
                         <td className="px-4 py-2.5 font-medium text-zinc-900">{u.name}<span className="ml-1 text-zinc-300">{open === u.id ? "▾" : "▸"}</span></td>
-                        <td className="px-4 py-2.5 text-zinc-600">{u.referrer ? (u.referrer.name ? <span>{u.referrer.name}</span> : <span className="font-mono">{u.referrer.external_id}</span>) : <span className="text-zinc-300">—</span>}</td>
-                        <td className="px-4 py-2.5 font-mono text-zinc-600">{u.phone}</td>
+                        <td className="px-4 py-2.5 text-zinc-600">{u.referrer ? (u.referrer.name ? <span>{u.referrer.name}</span> : <span className="font-mono">{maskPhone(u.referrer.external_id)}</span>) : <span className="text-zinc-300">—</span>}</td>
+                        <td className="px-4 py-2.5 font-mono text-zinc-600">{maskPhone(u.phone)}</td>
                         <td className="px-4 py-2.5">{u.letters.length ? <span className="text-zinc-700">{u.letters.join(" ")}</span> : <span className="italic text-zinc-400">none</span>}</td>
                         <td className="px-4 py-2.5"><ActivityBars activity={u.activity} /></td>
                       </tr>
@@ -1734,6 +1740,7 @@
                 <CostCurve builtSet={builtSet} />
               </div>
             </div>
+            <div className="mt-2 text-[10px] text-zinc-400">Height = modelled income-doublings per donated dollar (cost-efficiency); width = deployable market. Estimates blend our measured per-letter cost with published returns-to-literacy. <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Methodology ↗</a></div>
           </div>
         );
       }
@@ -1836,23 +1843,141 @@
         );
       }
 
+      const maskPhone = (p) => "+91 " + p.slice(3, 5) + "••• ••" + p.slice(-2);   // hide PII on a public page
+
+      // Impact hero — cost-per-outcome headline + live counters
+      function DonorHero({ onDonate }) {
+        const stats = [
+          { v: "1.24M", l: "children reached", c: "#bfdbfe" },
+          { v: "9.4M", l: "letters learnt", c: "#bfdbfe" },
+          { v: "340", l: "schools live", c: "#bfdbfe" },
+          { v: "12", l: "govt partnerships", c: "#bfdbfe" },
+        ];
+        return (
+          <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-md sm:p-8">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-200">Cost-effectiveness</div>
+            <div className="mt-1 flex flex-wrap items-end gap-x-3">
+              <span className="text-5xl font-black leading-none sm:text-6xl">$34</span>
+              <span className="pb-1 text-lg font-semibold text-blue-100">per child reading at grade level</span>
+            </div>
+            <div className="mt-2 text-sm text-blue-200">≈ $1 donated → 0.21 income doublings — among the most cost-effective literacy interventions measured.</div>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {stats.map((s) => (
+                <div key={s.l} className="rounded-xl bg-white/10 p-3">
+                  <div className="text-2xl font-black tabular-nums sm:text-3xl">{s.v}</div>
+                  <div className="text-[11px] font-medium text-blue-100">{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => onDonate()} className="mt-5 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-blue-700 shadow hover:bg-blue-50">💚 Donate</button>
+          </div>
+        );
+      }
+      // Evidence / proof strip
+      function DonorProof() {
+        return (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-3xl font-black text-emerald-700">+0.42σ</div>
+              <div className="mt-1 text-xs font-bold text-emerald-800">reading gain in 6 months</div>
+              <div className="mt-1 text-[11px] text-emerald-700/80">vs. a matched control group, on a digital ASER-equivalent assessment.</div>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-white p-4">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Measured, not surveyed</div>
+              <div className="mt-1 text-sm font-bold text-zinc-800">Every interaction is an assessment</div>
+              <div className="mt-1 text-[11px] text-zinc-500">Reading is scored from each child's own audio, so impact is observed continuously — not self-reported.</div>
+              <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">Methodology ↗</a>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-white p-4">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Built on trusted data</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">{["ASER", "RCT-evaluated", "State SCERT", "UDISE+ schools"].map((n) => <span key={n} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600">{n}</span>)}</div>
+              <div className="mt-2 text-[11px] text-zinc-500">Outcomes benchmarked to the government's own literacy yardstick.</div>
+            </div>
+          </div>
+        );
+      }
+      // The ask — runway gap, spend breakdown, earmarking, Donate
+      function DonorAsk({ onDonate }) {
+        const raised = 2.1, target = 6, pct = Math.round((raised / target) * 100);
+        const spend = [["Programme", 78, "#2563eb"], ["Technology", 12, "#7c3aed"], ["Operations", 6, "#10b981"], ["Fundraising", 4, "#f59e0b"]];
+        return (
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Help us reach a 12-month runway</div>
+            <div className="mx-auto mt-1 max-w-xl text-center text-xs text-zinc-500">We run a lean, fully-committed budget. Closing this gap keeps every live child learning and ships the next language.</div>
+            <div className="mx-auto mt-4 max-w-xl">
+              <div className="flex justify-between text-xs font-semibold text-zinc-600"><span className="text-emerald-700">${raised}M raised</span><span className="text-zinc-400">${target}M goal</span></div>
+              <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: pct + "%" }} /></div>
+            </div>
+            <div className="mx-auto mt-5 max-w-xl">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Where your money goes</div>
+              <div className="flex h-3 w-full overflow-hidden rounded-full">{spend.map(([n, p, c]) => <div key={n} title={n + " " + p + "%"} style={{ width: p + "%", background: c }} />)}</div>
+              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">{spend.map(([n, p, c]) => <span key={n} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: c }} />{n} {p}%</span>)}</div>
+            </div>
+            <div className="mx-auto mt-5 max-w-xl text-center">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Or earmark a specific language</div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {["Hindi", "Amharic", "Swahili", "Urdu"].map((l) => <button key={l} onClick={() => onDonate(l)} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-semibold text-zinc-700 hover:border-emerald-400 hover:bg-emerald-50">Fund {l}</button>)}
+              </div>
+            </div>
+            <button onClick={() => onDonate()} className="mx-auto mt-6 block w-full max-w-xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now</button>
+            <div className="mt-2 text-center text-[10px] text-zinc-400">Tax-deductible in the US (501c3) &amp; India (80G) · one-time or monthly · DAF &amp; bank transfer available</div>
+          </div>
+        );
+      }
+      // Footer — trust, governance, links back to the main site
+      function DonorFooter() {
+        const cols = [
+          { h: "PadhaiPal", links: [["About", "https://www.padhaipal.com"], ["How it works", "https://www.padhaipal.com"], ["Contact", "https://www.padhaipal.com"]] },
+          { h: "Trust", links: [["Annual report", "https://www.padhaipal.com"], ["Financials", "https://www.padhaipal.com"], ["Governance", "https://www.padhaipal.com"]] },
+          { h: "Safety", links: [["Child safeguarding", "https://www.padhaipal.com"], ["Data &amp; privacy", "https://www.padhaipal.com"]] },
+        ];
+        return (
+          <div className="mt-2 rounded-2xl border border-zinc-200 bg-white p-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="col-span-2 sm:col-span-1">
+                <div className="text-lg font-black text-blue-700">PadhaiPal</div>
+                <div className="mt-1 text-[11px] text-zinc-500">Teaching every child to read, over WhatsApp.</div>
+                <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">www.padhaipal.com ↗</a>
+              </div>
+              {cols.map((col) => (
+                <div key={col.h}>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">{col.h}</div>
+                  <div className="mt-2 space-y-1">{col.links.map(([n, u]) => <a key={n} href={u} target="_blank" rel="noreferrer" className="block text-xs text-zinc-600 hover:text-blue-600">{n}</a>)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 border-t border-zinc-100 pt-3 text-[10px] text-zinc-400">Figures on this page are illustrative demo data. PadhaiPal is a registered non-profit · child data is processed under our privacy &amp; safeguarding policy.</div>
+          </div>
+        );
+      }
+
       function DonorDashboard({ t, onDonate, worldGeo }) {
-        const [metric, setMetric] = useState("money");
+        const [metric, setMetric] = useState("letters");   // lead with traction, not the bank balance
         const [winKey, setWinKey] = useState("1m");
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
         const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
         return (
           <div className="flex-1 overflow-y-auto bg-zinc-50">
-            <div className="mx-auto max-w-6xl space-y-5 p-6">
-              {/* funding runway — always above the graph, no matter which line is shown */}
-              <div className="flex items-center gap-4 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 shadow-sm">
-                <span className="text-4xl leading-none">⏳</span>
-                <div>
-                  <div className="text-2xl font-extrabold text-amber-800">35 days of funding left</div>
-                </div>
+            {/* site header — links back to the main marketing site */}
+            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white/95 px-6 py-3 backdrop-blur">
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-black text-blue-700">PadhaiPal</span>
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Impact &amp; Transparency</span>
               </div>
-              {/* full-width time graph (one line at a time) */}
+              <div className="flex items-center gap-3">
+                <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600 hover:underline">padhaipal.com ↗</a>
+                <button onClick={() => onDonate()} className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">💚 Donate</button>
+              </div>
+            </div>
+            <div className="mx-auto max-w-6xl space-y-6 p-6">
+              {/* 1 · impact hero */}
+              <DonorHero onDonate={onDonate} />
+
+              {/* 2 · proof */}
+              <DonorProof />
+
+              {/* 3 · traction */}
               <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap gap-1.5">
@@ -1868,31 +1993,40 @@
                     </select>
                   </label>
                 </div>
-                <div className="mb-1 text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                  <span className="text-[10px] text-zinc-400">observed · demo data</span>
+                </div>
                 <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
               </div>
-              {/* call to action */}
-              <button onClick={onDonate} className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate</button>
-              {/* learners (pp-dashboard /dashboard + user/{id}) */}
+
+              {/* 4 · real learners (anonymised) */}
               <div>
-                <div className="mb-2 text-sm font-semibold text-zinc-900">Learners</div>
+                <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Real learners, live</div>
+                <div className="mb-3 text-center text-xs text-zinc-400">A live window into individual progress — anonymised, phone numbers masked. Click a row to open a learner's record.</div>
                 <StudentDashboard t={t} />
               </div>
 
-              {/* roadmap: slider + globe coverage + cost-effectiveness curve */}
-              <DonorRoadmap worldGeo={worldGeo} />
-
-              {/* Education Operating System */}
+              {/* 5 · how it works */}
               <div className="pt-2">
                 <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Education Operating System</div>
                 <EOSCards />
               </div>
 
-              {/* Scalable Distribution */}
+              {/* 6 · how it scales */}
               <div className="pt-2">
                 <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Scalable Distribution</div>
                 <DistCards />
               </div>
+
+              {/* 7 · the opportunity */}
+              <DonorRoadmap worldGeo={worldGeo} />
+
+              {/* 8 · the ask */}
+              <DonorAsk onDonate={onDonate} />
+
+              {/* 9 · footer / trust */}
+              <DonorFooter />
             </div>
           </div>
         );
@@ -2757,7 +2891,7 @@
         return (
           <div className="relative flex h-full flex-col">
             {role === "transparency" ? (
-              <DonorDashboard t={t} worldGeo={worldGeo} onDonate={() => setFund({ title: "PadhaiPal — global programme", id: "donor" })} />
+              <DonorDashboard t={t} worldGeo={worldGeo} onDonate={(earmark) => setFund({ title: earmark ? "PadhaiPal · " + earmark : "PadhaiPal — global programme", id: "donor", earmark: earmark || null })} />
             ) : (
             <React.Fragment>
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
