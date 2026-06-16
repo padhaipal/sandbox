@@ -837,7 +837,7 @@
         const [done, setDone] = useState(null);
         const amt = custom ? Math.max(0, parseFloat(custom) || 0) : amount;
         const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
-        const TABS = [["individual", "Individual"], ["philanthropy", "Philanthropic org"]];
+        const TABS = [["individual", "Individual"], ["philanthropy", "Organization"]];
         return (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
             <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1315,7 +1315,7 @@
         const xOf = (i) => pl + (maxLen <= 1 ? 0 : (i / (maxLen - 1)) * iw);
         const yOf = (v) => pt + ih - (v / 100) * ih;
         return (
-          <svg width={w} height={h} className="block">
+          <svg viewBox={"0 0 " + w + " " + h} style={{ width: "100%", height: "auto" }} className="block">
             {[0, 50, 100].map((v) => (
               <g key={v}>
                 <line x1={pl} y1={yOf(v)} x2={pl + iw} y2={yOf(v)} stroke="#e4e4e7" />
