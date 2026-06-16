@@ -1665,6 +1665,11 @@
         const shown = ROADMAP_BARS.filter((b) => langBuilt(b.label, builtSet));
         const totalW = shown.reduce((s, b) => s + b.w, 0) || 1;
         const yOf = (v) => axisY - (v / ROADMAP_MAX_H) * ih;
+        // x axis: evenly spaced, round $B ticks at their true positions (no rounding-collisions)
+        const maxB = totalW / 1000;
+        const niceStep = (r) => { const p = Math.pow(10, Math.floor(Math.log10(r))); const n = r / p; return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p; };
+        const xStep = niceStep(maxB / 4);
+        const xTicks = []; for (let v = 0; v <= maxB + 1e-9; v += xStep) xTicks.push(Math.round(v / xStep) * xStep);
         let x = pl;
         const bars = shown.map((b) => {
           const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2, top = axisY - bh; x += bw;
@@ -1686,14 +1691,14 @@
               </g>
             ))}
             {bars}
-            {/* x axis: cumulative PadhaiPal spend ($B), one significant figure */}
+            {/* x axis: cumulative PadhaiPal spend ($B) — round ticks at their true positions */}
             <line x1={pl} y1={axisY} x2={W - pr} y2={axisY} stroke="#94a3b8" strokeWidth={1.2} />
-            {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
-              const xx = pl + f * iw;
+            {xTicks.map((v, i) => {
+              const xx = pl + (maxB ? v / maxB : 0) * iw;
               return (
                 <g key={i}>
                   <line x1={xx} y1={axisY} x2={xx} y2={axisY + 5} stroke="#94a3b8" strokeWidth={1.2} />
-                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{sig1((f * totalW) / 1000)}</text>
+                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{parseFloat(v.toFixed(2))}</text>
                 </g>
               );
             })}
