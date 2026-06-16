@@ -76,7 +76,7 @@
           "Language": "भाषा",
           "Score": "स्कोर", "Days since signup": "साइन-अप से दिन", "Active minutes": "सक्रिय मिनट", "Days > 5 min": "5+ मिनट वाले दिन",
           "Letter scores over time": "समय के साथ अक्षर स्कोर", "Recent audio": "हाल का ऑडियो",
-          "Time": "समय", "Audio": "ऑडियो", "Sarvam": "सर्वम", "Answer": "उत्तर",
+          "Time": "समय", "Audio": "ऑडियो", "Transcript": "प्रतिलेख", "Answer": "उत्तर",
           "Show 10 more": "10 और दिखाएँ", "left": "शेष", "All audio shown": "सारा ऑडियो दिखाया गया", "demo data": "डेमो डेटा",
         },
       };
@@ -1358,7 +1358,7 @@
                     <tr className="text-zinc-400">
                       <th className="pb-1 pr-1 font-medium">{t("Time")}</th>
                       <th className="pb-1 pr-1 font-medium">{t("Audio")}</th>
-                      <th className="pb-1 pr-1 font-medium">{t("Sarvam")}</th>
+                      <th className="pb-1 pr-1 font-medium">{t("Transcript")}</th>
                       <th className="pb-1 font-medium">{t("Answer")}</th>
                     </tr>
                   </thead>
@@ -1385,6 +1385,26 @@
         );
       }
 
+      // ===================================================================
+      // Signed-in role (whose dashboard this is). Transparency = philanthropic
+      // donor → the whole global picture. Every other role sees only its parent
+      // node + peers + peers' descendants, which on this geographic map means
+      // navigation is *capped* at the role's home level (it can't zoom out past
+      // its parent). Each non-donor role is anchored on India → Uttar Pradesh →
+      // Lucknow (the BEO example), and the app auto-navigates there on sign-in.
+      // levels:        world  adm1   adm2   adm3   schools  school
+      // org node:      donor  DGSE   BSA    BEO    Head-T   Teacher/Student
+      const LEVEL_ORDER = ["world", "adm1", "adm2", "adm3", "schools", "school"];
+      const ROLES = [
+        { code: "transparency", label: "Transparency", home: "world",   who: "Global Education Secretary", where: "Global · donor view", nav: {} },
+        { code: "dgse",         label: "DGSE",         home: "adm1",    who: "DGSE",         where: "Uttar Pradesh",    nav: { iso: "IND" } },
+        { code: "bsa",          label: "BSA",          home: "adm2",    who: "BSA",          where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh" } },
+        { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" } },
+        { code: "ht",           label: "Head Teacher", home: "schools", who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0 } },
+        { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
+      ];
+      const ROLE_BY = {}; ROLES.forEach((r) => { ROLE_BY[r.code] = r; });
+
       // =====================================================================
       //  The map app
       // =====================================================================
@@ -1409,6 +1429,9 @@
         const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; hover stops swapping it
         const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
         const t = useCallback((s) => translate(uiLang, s), [uiLang]);
+        const [role, setRole] = useState("transparency");   // signed-in role (visibility scope)
+        const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;
+        const capIdx = LEVEL_ORDER.indexOf(roleCfg.home);   // can't navigate above this level
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
@@ -1783,21 +1806,51 @@
         const drillSchool = useCallback((sc) => { if (moved.current) return; setSelHt(sc.u.id); setActive(null); setLevel("school"); }, []);
 
         const goLevel = useCallback((target) => {
+          if (LEVEL_ORDER.indexOf(target) < LEVEL_ORDER.indexOf((ROLE_BY[role] || ROLE_BY.transparency).home)) return; // capped: can't zoom past the role's parent
           setActive(null);
           if (target === "world") { setLevel("world"); setCountry(null); setAdm1FC(null); setAdm2FC(null); setAdm3FC(null); setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
           else if (target === "adm1") { setLevel("adm1"); setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setTf({ k: 1, x: 0, y: 0 }); }
           else if (target === "adm2") { setLevel("adm2"); setA2Idx(null); setA3Idx(null); setSelHt(null); if (adm1 && a1Idx != null && adm1[a1Idx]) setTf(frame(adm1[a1Idx].bbox)); }
           else if (target === "adm3") { setLevel("adm3"); setA3Idx(null); setSelHt(null); if (adm2 && a2Idx != null && adm2[a2Idx]) setTf(frame(adm2[a2Idx].bbox)); }
           else if (target === "schools") { setLevel("schools"); setSelHt(null); if (blocks && a3Idx != null && blocks[a3Idx]) setTf(frame(blocks[a3Idx].bbox)); }
-        }, [adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, frame]);
+        }, [adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, frame, role]);
 
         const popUp = useCallback(() => {
+          if (LEVEL_ORDER.indexOf(level) <= LEVEL_ORDER.indexOf((ROLE_BY[role] || ROLE_BY.transparency).home)) return; // capped at the role's home level
           if (level === "school") goLevel("schools");
           else if (level === "schools") goLevel("adm3");
           else if (level === "adm3") goLevel("adm2");
           else if (level === "adm2") goLevel("adm1");
           else if (level === "adm1") goLevel("world");
-        }, [level, goLevel]);
+        }, [level, goLevel, role]);
+
+        // sign in as a role: hard-reset to world, then the auto-nav effect drives to the role's home
+        const signIn = useCallback((code) => {
+          setRole(code);
+          setLevel("world"); setCountry(null); setAdm1FC(null); setAdm2FC(null); setAdm3FC(null);
+          setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null); setPinned(false);
+          setTf({ k: 1, x: 0, y: 0 });
+        }, []);
+
+        // auto-navigate toward the signed-in role's home (India → Uttar Pradesh → Lucknow → …).
+        // Each step fires one drill; the resulting state change re-runs the effect for the next step.
+        useEffect(() => {
+          const nav = (ROLE_BY[role] || ROLE_BY.transparency).nav;
+          if (!nav || !nav.iso || busy) return;                       // transparency or mid-fetch: nothing to do
+          const byName = (arr, q) => { const i = arr.findIndex((x) => (x.name || "").toLowerCase().includes(q)); return i >= 0 ? i : 0; };
+          if (!country || country.iso !== nav.iso) {
+            if (worldPaths) { const it = worldPaths.find((p) => p.iso === nav.iso); if (it && it.covered) { moved.current = false; pickCountry(it); } }
+            return;
+          }
+          if (nav.a1 == null) return;
+          if (a1Idx == null) { if (adm1 && adm1.length) { moved.current = false; drillA1(byName(adm1, nav.a1)); } return; }
+          if (nav.a2 == null) return;
+          if (a2Idx == null) { if (adm2 && adm2.length) { moved.current = false; drillA2(byName(adm2, nav.a2)); } return; }
+          if (nav.block == null) return;
+          if (a3Idx == null) { if (blocks && blocks.length) { moved.current = false; drillBlock(Math.min(nav.block, blocks.length - 1)); } return; }
+          if (nav.school == null) return;
+          if (!selHt) { if (schools && schools.length) { moved.current = false; drillSchool(schools[Math.min(nav.school, schools.length - 1)]); } }
+        }, [role, busy, worldPaths, country, adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, schools, selHt]);
 
         useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox)); }, [school, level, frame]);
 
@@ -1818,7 +1871,7 @@
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
         // empty-space click: if a card is pinned, first click just unpins; otherwise go up a level
-        const onBgClick = useCallback(() => { if (moved.current) return; if (pinned) { setPinned(false); return; } if (level !== "world") popUp(); }, [popUp, level, pinned]);
+        const onBgClick = useCallback(() => { if (moved.current) return; if (pinned) { setPinned(false); return; } if (LEVEL_ORDER.indexOf(level) > capIdx) popUp(); }, [popUp, level, pinned, capIdx]);
         // Esc unpins the area card
         useEffect(() => {
           if (!pinned) return;
@@ -2215,21 +2268,31 @@
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
               <div>
                 <h1 className="flex flex-wrap items-center gap-1.5 text-lg font-semibold text-zinc-900">
-                  <button onClick={() => goLevel("world")} className={level === "world" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{t("World")}</button>
-                  {country && <span className="text-zinc-300">›</span>}
-                  {country && <button onClick={() => goLevel("adm1")} className={level === "adm1" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{country.name}</button>}
-                  {a1f && <span className="text-zinc-300">›</span>}
-                  {a1f && <button onClick={() => goLevel("adm2")} className={level === "adm2" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{a1f.name}</button>}
-                  {a2f && <span className="text-zinc-300">›</span>}
-                  {a2f && <button onClick={() => goLevel("adm3")} className={level === "adm3" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{a2f.name}</button>}
-                  {blk && <span className="text-zinc-300">›</span>}
-                  {blk && <button onClick={() => goLevel("schools")} className={level === "schools" ? "text-zinc-900" : "text-blue-600 hover:underline"}>{blk.name}</button>}
-                  {level === "school" && <span className="text-zinc-300">›</span>}
-                  {level === "school" && <span className="text-zinc-900">{t("School")}</span>}
+                  {(() => {
+                    const crumbs = [];
+                    if (capIdx <= 0) crumbs.push({ k: "world", label: t("World"), lvl: "world" });
+                    if (capIdx <= 1 && country) crumbs.push({ k: "c", label: country.name, lvl: "adm1" });
+                    if (capIdx <= 2 && a1f) crumbs.push({ k: "a1", label: a1f.name, lvl: "adm2" });
+                    if (capIdx <= 3 && a2f) crumbs.push({ k: "a2", label: a2f.name, lvl: "adm3" });
+                    if (capIdx <= 4 && blk) crumbs.push({ k: "blk", label: blk.name, lvl: "schools" });
+                    if (level === "school") crumbs.push({ k: "school", label: t("School"), lvl: "school" });
+                    return crumbs.map((c, i) => (
+                      <React.Fragment key={c.k}>
+                        {i > 0 && <span className="text-zinc-300">›</span>}
+                        {level !== c.lvl
+                          ? <button onClick={() => goLevel(c.lvl)} className="text-blue-600 hover:underline">{c.label}</button>
+                          : <span className="text-zinc-900">{c.label}</span>}
+                      </React.Fragment>
+                    ));
+                  })()}
                 </h1>
-                <p className="text-xs text-zinc-500">{bannerText}</p>
+                <p className="text-xs text-zinc-500"><span className="font-semibold text-zinc-700">Signed in: {roleCfg.who} · {roleCfg.where}</span> · {bannerText}</p>
               </div>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+                <select value={role} onChange={(e) => signIn(e.target.value)} title="Signed-in role / dashboard"
+                  className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 font-semibold text-blue-700 hover:bg-blue-100">
+                  {ROLES.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                </select>
                 <select value={uiLang} onChange={(e) => setUiLang(e.target.value)} title="Language / भाषा"
                   className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50">
                   {UI_LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
@@ -2489,7 +2552,7 @@
                 })()}
               </aside>
 
-              {level !== "world" && (
+              {LEVEL_ORDER.indexOf(level) > capIdx && (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
                   {t("click empty space to go up one level")}
                 </div>
