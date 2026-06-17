@@ -1516,14 +1516,14 @@
         for (let d = 0; d < 7; d++) { const a = hashStr("a:" + id + ":" + d); activity.push(a % 5 === 0 ? 0 : (a % 60) * 60000); }
         return { id, name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 7) % LAST.length], phone: "+9198" + String(1000000 + (h % 9000000)), referrer, score: h % 101, letters, activity };
       }
-      function StudentDashboard({ t }) {
+      function StudentDashboard({ t, bare }) {
         const TOTAL = 60;
-        const [visible, setVisible] = useState(10);
+        const [visible, setVisible] = useState(5);
         const [open, setOpen] = useState(null);
         const users = useMemo(() => Array.from({ length: TOTAL }, (_, i) => donorStudent(i)), []);
         const shown = users.slice(0, visible);
         return (
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className={bare ? "overflow-hidden" : "overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -1562,7 +1562,7 @@
             <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
               <span className="text-xs text-zinc-400">Showing {Math.min(visible, TOTAL)} of {TOTAL}+ learners · click a row to expand</span>
               {visible < TOTAL
-                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 10))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
+                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 5))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
                 : <span className="text-xs text-zinc-400">All learners loaded</span>}
             </div>
           </div>
@@ -1720,19 +1720,40 @@
       function DonorRoadmap({ worldGeo }) {
         const [idx, setIdx] = useState(0);
         const builtSet = useMemo(() => builtCumulative(idx), [idx]);
+        const N = ROADMAP_STOPS.length, INSET = 6;          // % inset so the ends aren't flush with the bar
+        const posOf = (i) => INSET + (N <= 1 ? 0 : (i / (N - 1)) * (100 - 2 * INSET));
+        const trackRef = useRef(null), dragging = useRef(false);
+        const setFromX = (clientX) => {
+          const r = trackRef.current && trackRef.current.getBoundingClientRect(); if (!r || !r.width) return;
+          const pct = ((clientX - r.left) / r.width) * 100;
+          setIdx(Math.max(0, Math.min(N - 1, Math.round(((pct - INSET) / (100 - 2 * INSET)) * (N - 1)))));
+        };
         return (
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-base font-bold text-zinc-900">Roadmap</div>
-            <div className="mb-2 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
-            <div className="mb-1 flex items-center justify-between">
+            <div className="text-2xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Roadmap</div>
+            <div className="mb-3 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
+            <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
-              <span className="text-[10px] text-zinc-400">{idx + 1} / {ROADMAP_STOPS.length}</span>
+              <span className="text-[10px] text-zinc-400">{idx + 1} / {N}</span>
             </div>
-            <input type="range" min={0} max={ROADMAP_STOPS.length - 1} step={1} value={idx} onChange={(e) => setIdx(+e.target.value)} className="w-full accent-emerald-600" />
-            <div className="mb-3 mt-1 flex">
+            {/* custom inset slider: green tail before the first dot, not-full after the last */}
+            <div ref={trackRef} className="relative h-6 cursor-pointer touch-none select-none"
+              onPointerDown={(e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
+              onPointerMove={(e) => { if (dragging.current) setFromX(e.clientX); }}
+              onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }}>
+              <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-200" />
+              <div className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-emerald-500" style={{ width: posOf(idx) + "%" }} />
+              {ROADMAP_STOPS.map((s, i) => (
+                <div key={i} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: posOf(i) + "%", background: i <= idx ? "#10b981" : "#d4d4d8" }} />
+              ))}
+              <div className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-600 shadow-md" style={{ left: posOf(idx) + "%" }} />
+            </div>
+            {/* labels: centre of each lines up with its dot */}
+            <div className="relative mb-3 mt-1 h-12">
               {ROADMAP_STOPS.map((s, i) => (
                 <button key={i} onClick={() => setIdx(i)} title={s.label}
-                  className={"flex-1 px-0.5 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}>{s.label}</button>
+                  className={"absolute top-0 w-16 -translate-x-1/2 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
+                  style={{ left: posOf(i) + "%" }}>{s.label}</button>
               ))}
             </div>
             <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
@@ -1856,7 +1877,7 @@
         const spend = [["Programme", 78, "#2563eb"], ["Technology", 12, "#7c3aed"], ["Operations", 6, "#10b981"], ["Fundraising", 4, "#f59e0b"]];
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Help us reach a 12-month runway</div>
+            <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl" style={{ color: "#1d9edf" }}>Help us reach a 12-month runway</div>
             <div className="mx-auto mt-1 max-w-xl text-center text-xs text-zinc-500">We run a lean, fully-committed budget. Closing this gap keeps every live child learning and ships the next language.</div>
             <div className="mx-auto mt-4 max-w-xl">
               <div className="flex justify-between text-xs font-semibold text-zinc-600"><span className="text-emerald-700">${raised}M raised</span><span className="text-zinc-400">${target}M goal</span></div>
@@ -1911,25 +1932,33 @@
       const CG_LINK = "https://coefficientgiving.org/research/our-planned-allocation-to-givewells-recommendations-for-the-next-few-years/";
       const PP_ANALYSIS = "https://www.padhaipal.com";   // TODO: replace with the real analysis link
 
-      // Logo + headline value proposition, with interactive inline "cards"
+      // Logo mark + stylized padhAIpal wordmark (5× size)
       function ValueHero() {
-        const tip = "absolute left-1/2 top-full z-30 hidden -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-normal leading-snug shadow-lg group-hover:block";
         return (
           <div className="text-center">
-            {/* logo mark + stylized padhAIpal wordmark, 5× size */}
             <img src={PP_LOGO} alt="padhAIpal logo" className="mx-auto h-72 w-72 sm:h-80 sm:w-80" />
             <div className="mt-2 text-[72px] leading-none sm:text-[150px]" style={{ fontFamily: "'Baloo 2', system-ui, sans-serif", fontWeight: 800, color: "#1d9edf" }}>padh<span>AI</span>pal</div>
-            <div className="mt-3 text-sm font-medium text-zinc-500 sm:text-base">Conversational AI to teach children literacy in India</div>
-            <p className="mx-auto mt-7 max-w-3xl text-lg leading-relaxed text-zinc-700 sm:text-xl">
-              <span className="group relative inline-block cursor-help rounded-md bg-blue-50 px-1.5 font-extrabold text-blue-700">$200T
-                <span className={tip + " w-56"}><a href={WWHGE_PDF} target="_blank" rel="noreferrer" className="pointer-events-auto text-blue-600 underline">actually $196T USD but who's counting</a></span>
+          </div>
+        );
+      }
+      // Headline value proposition — its own large section, with interactive inline "cards"
+      function ValueStatement() {
+        const tip = "absolute left-1/2 top-full z-30 hidden -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm font-normal leading-snug shadow-lg group-hover:block";
+        return (
+          <div className="mx-auto max-w-5xl text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+            <p>
+              <span className="group relative inline-block cursor-help rounded-lg bg-blue-50 px-2 font-extrabold text-blue-700">$200T
+                <span className={tip + " w-64"}><a href={WWHGE_PDF} target="_blank" rel="noreferrer" className="pointer-events-auto text-blue-600 underline">actually $196T USD but who's counting</a></span>
               </span>{" "}of economic value would be{" "}
-              <span className="group cursor-help rounded-md bg-emerald-50 px-1.5 font-semibold text-emerald-700"><span className="hidden group-hover:inline">counterfactually </span>unlocked</span>{" "}
-              if every child could read. PadhaiPal's goal is to{" "}
-              <span className="group relative inline-block cursor-help rounded-md bg-amber-50 px-1.5 font-semibold text-amber-700">cost effectively
-                <span className={tip + " w-60"}><a href={CG_LINK} target="_blank" rel="noreferrer" className="pointer-events-auto text-amber-700 underline">achieves Coefficient Giving's funding bar of $50/DALY</a></span>
+              <span className="group cursor-help rounded-lg bg-emerald-50 px-2 font-semibold text-emerald-700"><span className="hidden group-hover:inline">counterfactually </span>unlocked</span>{" "}
+              if every child could read.
+            </p>
+            <p className="mt-5">
+              PadhaiPal's goal is to{" "}
+              <span className="group relative inline-block cursor-help rounded-lg bg-amber-50 px-2 font-semibold text-amber-700">cost effectively
+                <span className={tip + " w-72"}><a href={CG_LINK} target="_blank" rel="noreferrer" className="pointer-events-auto text-amber-700 underline">achieves Coefficient Giving's funding bar of $50/DALY</a></span>
               </span>{" "}capture{" "}
-              <span className="group cursor-help rounded-md bg-violet-50 px-1.5 font-extrabold text-violet-700"><span className="group-hover:text-zinc-400 group-hover:line-through">50%</span><span className="hidden group-hover:inline"> 47% <a href={PP_ANALYSIS} target="_blank" rel="noreferrer" className="text-violet-700 underline">and here is our analysis</a></span></span>{" "}of that.
+              <span className="group cursor-help rounded-lg bg-violet-50 px-2 font-extrabold text-violet-700"><span className="group-hover:text-zinc-400 group-hover:line-through">50%</span><span className="hidden group-hover:inline"> 47% <a href={PP_ANALYSIS} target="_blank" rel="noreferrer" className="text-violet-700 underline">and here is our analysis</a></span></span>{" "}of that.
             </p>
           </div>
         );
@@ -1942,61 +1971,67 @@
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
         const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
+        const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
         return (
           <div className="flex-1 overflow-y-auto bg-zinc-50">
-            <div className="mx-auto max-w-6xl space-y-8 p-6">
-              {/* 1 · logo + headline value proposition */}
+            <div className="mx-auto max-w-6xl space-y-12 p-6">
+              {/* 1 · logo + wordmark */}
               <div className="pt-2"><ValueHero /></div>
 
-              {/* 2 · what PadhaiPal does */}
+              {/* 2 · headline value proposition (its own section) */}
+              <div className="py-2"><ValueStatement /></div>
+
+              {/* 3 · what PadhaiPal does */}
               <div>
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">What PadhaiPal Does</div>
+                <div className={"mb-6 " + H} style={HC}>What PadhaiPal Does</div>
                 <EOSCards />
               </div>
 
-              {/* 3 · theory of change */}
+              {/* 4 · theory of change */}
               <div>
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Theory of Change</div>
+                <div className={"mb-6 " + H} style={HC}>Theory of Change</div>
                 <DistCards />
               </div>
 
-              {/* 4 · traction — toggleable DAU / lessons / letters + real learners */}
+              {/* 5 · traction — one card: toggleable DAU / lessons / letters graph + real learners */}
               <div>
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Traction</div>
-                <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {TRACTION_METRICS.map((m) => (
-                        <button key={m.key} onClick={() => setMetric(m.key)}
-                          className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
-                          style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
-                      ))}
+                <div className={"mb-6 " + H} style={HC}>Traction</div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <div className="p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {TRACTION_METRICS.map((m) => (
+                          <button key={m.key} onClick={() => setMetric(m.key)}
+                            className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
+                            style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
+                        ))}
+                      </div>
+                      <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
+                        <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
+                          {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                        </select>
+                      </label>
                     </div>
-                    <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
-                      <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
-                        {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
-                      </select>
-                    </label>
+                    <div className="mb-1 flex items-baseline justify-between">
+                      <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                      <span className="text-[10px] text-zinc-400">observed · demo data</span>
+                    </div>
+                    <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
                   </div>
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
-                    <span className="text-[10px] text-zinc-400">observed · demo data</span>
+                  <div className="border-t border-zinc-200 p-4">
+                    <div className="mb-2 text-sm font-semibold text-zinc-900">Real learners, live <span className="font-normal text-zinc-400">· anonymised, phone numbers masked</span></div>
+                    <StudentDashboard t={t} bare />
                   </div>
-                  <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
-                </div>
-                <div className="mt-4">
-                  <div className="mb-1 text-sm font-semibold text-zinc-900">Real learners, live <span className="font-normal text-zinc-400">· anonymised, phone numbers masked</span></div>
-                  <StudentDashboard t={t} />
                 </div>
               </div>
 
-              {/* 5 · the opportunity */}
+              {/* 6 · the opportunity */}
               <DonorRoadmap worldGeo={worldGeo} />
 
-              {/* 6 · the ask */}
+              {/* 7 · the ask */}
               <DonorAsk onDonate={onDonate} />
 
-              {/* 7 · footer / trust */}
+              {/* 8 · footer / trust */}
               <DonorFooter />
             </div>
           </div>
