@@ -1845,57 +1845,6 @@
 
       const maskPhone = (p) => "+91 " + p.slice(3, 5) + "••• ••" + p.slice(-2);   // hide PII on a public page
 
-      // Impact hero — cost-per-outcome headline + live counters
-      function DonorHero({ onDonate }) {
-        const stats = [
-          { v: "1.24M", l: "children reached", c: "#bfdbfe" },
-          { v: "9.4M", l: "letters learnt", c: "#bfdbfe" },
-          { v: "340", l: "schools live", c: "#bfdbfe" },
-          { v: "12", l: "govt partnerships", c: "#bfdbfe" },
-        ];
-        return (
-          <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-md sm:p-8">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-200">Cost-effectiveness</div>
-            <div className="mt-1 flex flex-wrap items-end gap-x-3">
-              <span className="text-5xl font-black leading-none sm:text-6xl">$34</span>
-              <span className="pb-1 text-lg font-semibold text-blue-100">per child reading at grade level</span>
-            </div>
-            <div className="mt-2 text-sm text-blue-200">≈ $1 donated → 0.21 income doublings — among the most cost-effective literacy interventions measured.</div>
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {stats.map((s) => (
-                <div key={s.l} className="rounded-xl bg-white/10 p-3">
-                  <div className="text-2xl font-black tabular-nums sm:text-3xl">{s.v}</div>
-                  <div className="text-[11px] font-medium text-blue-100">{s.l}</div>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => onDonate()} className="mt-5 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-blue-700 shadow hover:bg-blue-50">💚 Donate</button>
-          </div>
-        );
-      }
-      // Evidence / proof strip
-      function DonorProof() {
-        return (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="text-3xl font-black text-emerald-700">+0.42σ</div>
-              <div className="mt-1 text-xs font-bold text-emerald-800">reading gain in 6 months</div>
-              <div className="mt-1 text-[11px] text-emerald-700/80">vs. a matched control group, on a digital ASER-equivalent assessment.</div>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Measured, not surveyed</div>
-              <div className="mt-1 text-sm font-bold text-zinc-800">Every interaction is an assessment</div>
-              <div className="mt-1 text-[11px] text-zinc-500">Reading is scored from each child's own audio, so impact is observed continuously — not self-reported.</div>
-              <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">Methodology ↗</a>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Built on trusted data</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">{["ASER", "RCT-evaluated", "State SCERT", "UDISE+ schools"].map((n) => <span key={n} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600">{n}</span>)}</div>
-              <div className="mt-2 text-[11px] text-zinc-500">Outcomes benchmarked to the government's own literacy yardstick.</div>
-            </div>
-          </div>
-        );
-      }
       // The ask — runway gap, spend breakdown, earmarking, Donate
       function DonorAsk({ onDonate }) {
         const raised = 2.1, target = 6, pct = Math.round((raised / target) * 100);
@@ -1951,81 +1900,97 @@
         );
       }
 
+      // brand + sources
+      const PP_LOGO = "https://framerusercontent.com/images/O8OuegVZwL9Qy2rsKnI1plw4b60.png";
+      const WWHGE_PDF = "https://www.wwhge.org/wp-content/uploads/2026/02/WWHGE_Universal-Foundational-Learning-Insight-Note.pdf";
+      const CG_LINK = "https://coefficientgiving.org/research/our-planned-allocation-to-givewells-recommendations-for-the-next-few-years/";
+      const PP_ANALYSIS = "https://www.padhaipal.com";   // TODO: replace with the real analysis link
+
+      // Logo + headline value proposition, with interactive inline "cards"
+      function ValueHero() {
+        const tip = "absolute left-1/2 top-full z-30 hidden -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-normal leading-snug shadow-lg group-hover:block";
+        return (
+          <div className="text-center">
+            <img src={PP_LOGO} alt="PadhaiPal logo" className="mx-auto h-16 w-16" />
+            <div className="mt-2 text-3xl font-black tracking-tight text-zinc-900">PadhaiPal</div>
+            <div className="text-xs font-medium text-zinc-500">Conversational AI to teach children literacy in India</div>
+            <p className="mx-auto mt-7 max-w-3xl text-lg leading-relaxed text-zinc-700 sm:text-xl">
+              <span className="group relative inline-block cursor-help rounded-md bg-blue-50 px-1.5 font-extrabold text-blue-700">$200T
+                <span className={tip + " w-56"}><a href={WWHGE_PDF} target="_blank" rel="noreferrer" className="pointer-events-auto text-blue-600 underline">actually $196T USD but who's counting</a></span>
+              </span>{" "}of economic value would be{" "}
+              <span className="group cursor-help rounded-md bg-emerald-50 px-1.5 font-semibold text-emerald-700"><span className="hidden group-hover:inline">counterfactually </span>unlocked</span>{" "}
+              if every child could read. PadhaiPal's goal is to{" "}
+              <span className="group relative inline-block cursor-help rounded-md bg-amber-50 px-1.5 font-semibold text-amber-700">cost effectively
+                <span className={tip + " w-60"}><a href={CG_LINK} target="_blank" rel="noreferrer" className="pointer-events-auto text-amber-700 underline">achieves Coefficient Giving's funding bar of $50/DALY</a></span>
+              </span>{" "}capture{" "}
+              <span className="group cursor-help rounded-md bg-violet-50 px-1.5 font-extrabold text-violet-700"><span className="group-hover:text-zinc-400 group-hover:line-through">50%</span><span className="hidden group-hover:inline"> 47% <a href={PP_ANALYSIS} target="_blank" rel="noreferrer" className="text-violet-700 underline">and here is our analysis</a></span></span>{" "}of that.
+            </p>
+          </div>
+        );
+      }
+
       function DonorDashboard({ t, onDonate, worldGeo }) {
-        const [metric, setMetric] = useState("letters");   // lead with traction, not the bank balance
+        const TRACTION_METRICS = DONOR_METRICS.filter((m) => ["dau", "lessons", "letters"].includes(m.key));
+        const [metric, setMetric] = useState("letters");   // traction default
         const [winKey, setWinKey] = useState("1m");
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
         const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
         return (
           <div className="flex-1 overflow-y-auto bg-zinc-50">
-            {/* site header — links back to the main marketing site */}
-            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white/95 px-6 py-3 backdrop-blur">
-              <div className="flex items-baseline gap-2">
-                <span className="text-lg font-black text-blue-700">PadhaiPal</span>
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Impact &amp; Transparency</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600 hover:underline">padhaipal.com ↗</a>
-                <button onClick={() => onDonate()} className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">💚 Donate</button>
-              </div>
-            </div>
-            <div className="mx-auto max-w-6xl space-y-6 p-6">
-              {/* 1 · impact hero */}
-              <DonorHero onDonate={onDonate} />
+            <div className="mx-auto max-w-6xl space-y-8 p-6">
+              {/* 1 · logo + headline value proposition */}
+              <div className="pt-2"><ValueHero /></div>
 
-              {/* 2 · proof */}
-              <DonorProof />
-
-              {/* 3 · traction */}
-              <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {DONOR_METRICS.map((m) => (
-                      <button key={m.key} onClick={() => setMetric(m.key)}
-                        className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
-                        style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
-                    ))}
-                  </div>
-                  <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
-                    <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
-                      {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-                <div className="mb-1 flex items-baseline justify-between">
-                  <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
-                  <span className="text-[10px] text-zinc-400">observed · demo data</span>
-                </div>
-                <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
-              </div>
-
-              {/* 4 · real learners (anonymised) */}
+              {/* 2 · what PadhaiPal does */}
               <div>
-                <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Real learners, live</div>
-                <div className="mb-3 text-center text-xs text-zinc-400">A live window into individual progress — anonymised, phone numbers masked. Click a row to open a learner's record.</div>
-                <StudentDashboard t={t} />
-              </div>
-
-              {/* 5 · how it works */}
-              <div className="pt-2">
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Education Operating System</div>
+                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">What PadhaiPal Does</div>
                 <EOSCards />
               </div>
 
-              {/* 6 · how it scales */}
-              <div className="pt-2">
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Scalable Distribution</div>
+              {/* 3 · theory of change */}
+              <div>
+                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Theory of Change</div>
                 <DistCards />
               </div>
 
-              {/* 7 · the opportunity */}
+              {/* 4 · traction — toggleable DAU / lessons / letters + real learners */}
+              <div>
+                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Traction</div>
+                <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {TRACTION_METRICS.map((m) => (
+                        <button key={m.key} onClick={() => setMetric(m.key)}
+                          className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
+                          style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
+                      <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
+                        {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                    <span className="text-[10px] text-zinc-400">observed · demo data</span>
+                  </div>
+                  <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
+                </div>
+                <div className="mt-4">
+                  <div className="mb-1 text-sm font-semibold text-zinc-900">Real learners, live <span className="font-normal text-zinc-400">· anonymised, phone numbers masked</span></div>
+                  <StudentDashboard t={t} />
+                </div>
+              </div>
+
+              {/* 5 · the opportunity */}
               <DonorRoadmap worldGeo={worldGeo} />
 
-              {/* 8 · the ask */}
+              {/* 6 · the ask */}
               <DonorAsk onDonate={onDonate} />
 
-              {/* 9 · footer / trust */}
+              {/* 7 · footer / trust */}
               <DonorFooter />
             </div>
           </div>
