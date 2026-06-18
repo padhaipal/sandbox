@@ -6,6 +6,10 @@
   <title>PadhaiPal — Educator Network (global map)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> <!-- card icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet"> <!-- hand-scribbled annotations -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/d3@7"></script>                              <!-- global map + school force graph -->
@@ -1350,14 +1354,14 @@
         const shown = rows.slice(0, visible);
         const fmtTime = (ms) => new Date(ms).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
         const stat = (val, lbl) => (
-          <div className="flex-1 rounded bg-zinc-50 px-1.5 py-1.5 text-center">
-            <div className="text-base font-semibold tabular-nums text-zinc-900">{val}</div>
-            <div className="text-[9px] leading-tight text-zinc-500">{lbl}</div>
+          <div className="flex-1 rounded-lg bg-zinc-50 px-3 py-3 text-center">
+            <div className="text-2xl font-bold tabular-nums text-zinc-900">{val}</div>
+            <div className="mt-0.5 text-xs leading-tight text-zinc-500">{lbl}</div>
           </div>
         );
         return (
           <div className="mt-2 space-y-2">
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               {stat(u.score, t("Score"))}
               {stat(sum.daysSinceSignup, t("Days since signup"))}
               {stat(sum.activeMin + "m", t("Active minutes"))}
@@ -1511,14 +1515,14 @@
         for (let d = 0; d < 7; d++) { const a = hashStr("a:" + id + ":" + d); activity.push(a % 5 === 0 ? 0 : (a % 60) * 60000); }
         return { id, name: FIRST[h % FIRST.length] + " " + LAST[(h >>> 7) % LAST.length], phone: "+9198" + String(1000000 + (h % 9000000)), referrer, score: h % 101, letters, activity };
       }
-      function StudentDashboard({ t }) {
+      function StudentDashboard({ t, bare }) {
         const TOTAL = 60;
-        const [visible, setVisible] = useState(10);
+        const [visible, setVisible] = useState(5);
         const [open, setOpen] = useState(null);
         const users = useMemo(() => Array.from({ length: TOTAL }, (_, i) => donorStudent(i)), []);
         const shown = users.slice(0, visible);
         return (
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className={bare ? "overflow-hidden" : "overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -1536,8 +1540,8 @@
                     <React.Fragment key={u.id}>
                       <tr onClick={() => setOpen(open === u.id ? null : u.id)} className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50">
                         <td className="px-4 py-2.5 text-zinc-400">{i + 1}</td>
-                        <td className="px-4 py-2.5 font-medium text-zinc-900">{u.name}<span className="ml-1 text-zinc-300">{open === u.id ? "▾" : "▸"}</span></td>
-                        <td className="px-4 py-2.5 text-zinc-600">{u.referrer ? (u.referrer.name ? <span>{u.referrer.name}</span> : <span className="font-mono">{maskPhone(u.referrer.external_id)}</span>) : <span className="text-zinc-300">—</span>}</td>
+                        <td className="px-4 py-2.5 font-medium text-zinc-900">{maskName(u.name)}<span className="ml-1 text-zinc-300">{open === u.id ? "▾" : "▸"}</span></td>
+                        <td className="px-4 py-2.5 text-zinc-600">{u.referrer ? (u.referrer.name ? <span>{maskName(u.referrer.name)}</span> : <span className="font-mono">{maskPhone(u.referrer.external_id)}</span>) : <span className="text-zinc-300">—</span>}</td>
                         <td className="px-4 py-2.5 font-mono text-zinc-600">{maskPhone(u.phone)}</td>
                         <td className="px-4 py-2.5">{u.letters.length ? <span className="text-zinc-700">{u.letters.join(" ")}</span> : <span className="italic text-zinc-400">none</span>}</td>
                         <td className="px-4 py-2.5"><ActivityBars activity={u.activity} /></td>
@@ -1557,7 +1561,7 @@
             <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
               <span className="text-xs text-zinc-400">Showing {Math.min(visible, TOTAL)} of {TOTAL}+ learners · click a row to expand</span>
               {visible < TOTAL
-                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 10))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
+                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 5))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
                 : <span className="text-xs text-zinc-400">All learners loaded</span>}
             </div>
           </div>
@@ -1715,19 +1719,40 @@
       function DonorRoadmap({ worldGeo }) {
         const [idx, setIdx] = useState(0);
         const builtSet = useMemo(() => builtCumulative(idx), [idx]);
+        const N = ROADMAP_STOPS.length, INSET = 6;          // % inset so the ends aren't flush with the bar
+        const posOf = (i) => INSET + (N <= 1 ? 0 : (i / (N - 1)) * (100 - 2 * INSET));
+        const trackRef = useRef(null), dragging = useRef(false);
+        const setFromX = (clientX) => {
+          const r = trackRef.current && trackRef.current.getBoundingClientRect(); if (!r || !r.width) return;
+          const pct = ((clientX - r.left) / r.width) * 100;
+          setIdx(Math.max(0, Math.min(N - 1, Math.round(((pct - INSET) / (100 - 2 * INSET)) * (N - 1)))));
+        };
         return (
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-base font-bold text-zinc-900">Roadmap</div>
-            <div className="mb-2 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
-            <div className="mb-1 flex items-center justify-between">
+            <div className="text-2xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Roadmap</div>
+            <div className="mb-3 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
+            <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
-              <span className="text-[10px] text-zinc-400">{idx + 1} / {ROADMAP_STOPS.length}</span>
+              <span className="text-[10px] text-zinc-400">{idx + 1} / {N}</span>
             </div>
-            <input type="range" min={0} max={ROADMAP_STOPS.length - 1} step={1} value={idx} onChange={(e) => setIdx(+e.target.value)} className="w-full accent-emerald-600" />
-            <div className="mb-3 mt-1 flex">
+            {/* custom inset slider: green tail before the first dot, not-full after the last */}
+            <div ref={trackRef} className="relative h-6 cursor-pointer touch-none select-none"
+              onPointerDown={(e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
+              onPointerMove={(e) => { if (dragging.current) setFromX(e.clientX); }}
+              onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }}>
+              <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-200" />
+              <div className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-emerald-500" style={{ width: posOf(idx) + "%" }} />
+              {ROADMAP_STOPS.map((s, i) => (
+                <div key={i} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: posOf(i) + "%", background: i <= idx ? "#10b981" : "#d4d4d8" }} />
+              ))}
+              <div className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-600 shadow-md" style={{ left: posOf(idx) + "%" }} />
+            </div>
+            {/* labels: centre of each lines up with its dot */}
+            <div className="relative mb-3 mt-1 h-12">
               {ROADMAP_STOPS.map((s, i) => (
                 <button key={i} onClick={() => setIdx(i)} title={s.label}
-                  className={"flex-1 px-0.5 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}>{s.label}</button>
+                  className={"absolute top-0 w-16 -translate-x-1/2 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
+                  style={{ left: posOf(i) + "%" }}>{s.label}</button>
               ))}
             </div>
             <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
@@ -1747,73 +1772,38 @@
 
       // Education Operating System — three expandable cards, each with a small bespoke visual
       function EOSCards() {
-        const [open, setOpen] = useState(null);
         const cards = [
-          { icon: "📏", title: "Measure", tag: "Digital ASER, every tap", color: "#6366f1", body: (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[10px] font-semibold text-zinc-400"><span>Live reading level</span><span style={{ color: "#6366f1" }}>62 / 100</span></div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full" style={{ width: "62%", background: "#6366f1" }} /></div>
-              <div className="flex flex-wrap gap-1">{["क", "ख", "ग", "म", "प", "र"].map((l, j) => <span key={j} className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold" style={{ background: "#6366f120", color: "#4f46e5" }}>{l}</span>)}</div>
-            </div>
-          ) },
-          { icon: "📚", title: "Teach", tag: "Adaptive phonics on WhatsApp", color: "#10b981", body: (
-            <div className="space-y-1.5">
-              <div className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-sm bg-emerald-500 px-3 py-1.5 text-xs text-white">Say this word: <b>कमल</b> 🌸</div>
-              <div className="w-fit max-w-[90%] rounded-2xl rounded-bl-sm bg-zinc-100 px-3 py-1.5 text-xs text-zinc-700">🎤 “ka-mal” ✅ +1</div>
-            </div>
-          ) },
-          { icon: "💬", title: "Communicate", tag: "Nudge parents & officials", color: "#0ea5e9", body: (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">{[["📲", "Parent"], ["👩‍🏫", "Teacher"], ["🏛️", "Official"]].map(([e, n], j) => <span key={j} className="flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">{e} {n}</span>)}</div>
-              <div className="rounded-lg bg-sky-50 px-2 py-1 text-[11px] text-sky-800">“Aarav learnt 4 new letters this week 🎉”</div>
-            </div>
-          ) },
+          { icon: "fa-gauge-high", title: "Measure", tag: "Digital ASER, every week", color: "#6366f1",
+            body: "PadhaiPal conducts a digital version of the internationally recognised ASER test every week for active users to gauge a student's progress." },
+          { icon: "fa-book-open-reader", title: "Teach", tag: "WhatsApp voice message lessons every evening", color: "#10b981",
+            body: "PadhaiPal tracks the student's performance across every letter to make lessons as efficient as possible." },
+          { icon: "fa-comments", title: "Communicate", tag: "parent, teacher, government official group chats", color: "#0ea5e9",
+            body: "Become the main communication channel between parents, teachers and government officials. Facilitate report sharing up the hierarchy, instructions down the hierarchy and surface peer performance." },
         ];
         return (
           <div className="flex flex-col items-start gap-3 md:flex-row">
-            {cards.map((c, i) => {
-              const isOpen = open === i;
-              return (
-                <div key={c.title} onClick={() => setOpen(isOpen ? null : i)}
-                  className="w-full flex-1 cursor-pointer rounded-2xl border bg-white p-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                  style={{ borderColor: c.color + "33" }}>
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-4xl" style={{ background: c.color + "1f" }}>{c.icon}</div>
-                  <div className="mt-3 text-lg font-extrabold" style={{ color: c.color }}>{c.title}</div>
-                  <div className="mt-1 text-xs font-medium text-zinc-500">{c.tag}</div>
-                  {isOpen && <div className="mt-3 border-t border-zinc-100 pt-3 text-left">{c.body}</div>}
-                  <div className="mt-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: c.color, opacity: 0.55 }}>{isOpen ? "Less ▴" : "More ▾"}</div>
-                </div>
-              );
-            })}
+            {cards.map((c) => (
+              <div key={c.title} className="group w-full flex-1 cursor-default rounded-2xl border bg-white p-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: c.color + "33" }}>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-3xl" style={{ background: c.color + "1f", color: c.color }}><i className={"fa-solid " + c.icon} /></div>
+                <div className="mt-3 text-lg font-extrabold" style={{ color: c.color }}>{c.title}</div>
+                <div className="mt-1 text-xs font-medium text-zinc-500">{c.tag}</div>
+                <div className="mt-3 hidden border-t border-zinc-100 pt-3 text-left text-xs leading-relaxed text-zinc-600 group-hover:block">{c.body}</div>
+              </div>
+            ))}
           </div>
         );
       }
-      // Scalable Distribution — four expandable, subtly chevron-shaped cards
+      // Scalable Distribution — four subtly chevron-shaped cards; detail appears on hover
       function DistCards() {
-        const [open, setOpen] = useState(null);
         const cards = [
-          { icon: "🤝", title: "Partner", tag: "Trusted NGOs with real school ties", color: "#f59e0b", body: (
-            <div className="flex items-center gap-2">
-              <div className="flex -space-x-2">{[0, 1, 2, 3].map((j) => <span key={j} className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-sm" style={{ background: "#f59e0b26" }}>🏫</span>)}</div>
-              <span className="text-xs font-semibold text-zinc-500">+12 NGO partners</span>
-            </div>
-          ) },
-          { icon: "🌱", title: "Plant", tag: "Pitch BEOs → first schools go live", color: "#10b981", body: (
-            <div className="space-y-1.5">
-              <div className="flex h-10 items-end gap-1">{[3, 5, 4, 7, 9, 8, 10].map((h, j) => <div key={j} className="flex-1 rounded-sm" style={{ height: h * 4, background: "#10b981" }} />)}</div>
-              <div className="text-xs font-semibold text-zinc-500">340 schools live</div>
-            </div>
-          ) },
-          { icon: "📈", title: "Propagate", tag: "Strong results climb the hierarchy", color: "#3b82f6", body: (
-            <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold">
-              {["HT", "BEO", "BSA", "DGSE"].map((n, j) => <React.Fragment key={j}>{j > 0 && <span className="text-zinc-300">↑</span>}<span className="rounded px-1.5 py-0.5" style={{ background: "#3b82f624", color: "#1d4ed8" }}>{n}</span></React.Fragment>)}
-            </div>
-          ) },
-          { icon: "📜", title: "Procure", tag: "Top-down demand → funded contracts", color: "#8b5cf6", body: (
-            <div className="flex flex-wrap items-center gap-1 text-[11px] font-bold">
-              {["AWP&B", "PAB", "GeM", "💰"].map((n, j) => <React.Fragment key={j}>{j > 0 && <span className="text-zinc-300">→</span>}<span className="rounded px-1.5 py-0.5" style={{ background: "#8b5cf624", color: "#6d28d9" }}>{n}</span></React.Fragment>)}
-            </div>
-          ) },
+          { icon: "fa-handshake", title: "Partner", tag: "Connect with trusted NGOs", color: "#f59e0b",
+            body: "PadhaiPal can be distributed through any network including public schools, private schools, mosques, churches or hospitals. The first step is to identify NGOs with workers that have relationships with the people in these networks." },
+          { icon: "fa-seedling", title: "Plant", tag: "NGO workers create initial useage", color: "#10b981",
+            body: "We pay the NGO for two days of their worker's time. They spend the first day being trained on how to communicate PadhaiPal and the second day having meetings with the people they know in these networks." },
+          { icon: "fa-share-nodes", title: "Propagate", tag: "Strong results climb the hierarchy", color: "#3b82f6",
+            body: "Once a few people start using PadhaiPal in a network it gets shared up the hierarchy via reports, down the hierarchy via communication groups and there is horizontal accountability by seeing the progress of peers." },
+          { icon: "fa-building-columns", title: "Procure", tag: "Governments pay after trial", color: "#8b5cf6",
+            body: "PadhaiPal only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government to pay for usage. Thus each dollar donated is used to unlock government dollars into effective literacy." },
         ];
         const last = cards.length - 1, pt = "calc(100% - 15px)";
         const clipFor = (i) => i === 0 ? "polygon(0 0," + pt + " 0,100% 50%," + pt + " 100%,0 100%)"
@@ -1821,105 +1811,125 @@
           : "polygon(0 0," + pt + " 0,100% 50%," + pt + " 100%,0 100%,15px 50%)";
         return (
           <div className="flex flex-col items-start gap-2 lg:flex-row">
-            {cards.map((c, i) => {
-              const isOpen = open === i;
-              return (
-                <div key={c.title} onClick={() => setOpen(isOpen ? null : i)}
-                  className="relative w-full flex-1 cursor-pointer p-5 pl-7 transition hover:-translate-y-0.5"
-                  style={{ clipPath: clipFor(i), background: c.color + "0e" }}>
-                  <span className="pointer-events-none absolute right-3 top-0 text-6xl font-black leading-none" style={{ color: c.color + "1a" }}>{i + 1}</span>
-                  <div className="relative flex items-center gap-2 whitespace-nowrap">
-                    <span className="text-3xl font-black leading-none" style={{ color: c.color }}>{i + 1}</span>
-                    <span className="text-2xl leading-none">{c.icon}</span>
-                    <span className="text-lg font-extrabold text-zinc-900">{c.title}</span>
-                  </div>
-                  <div className="relative mt-2 text-xs font-medium text-zinc-600">{c.tag}</div>
-                  {isOpen && <div className="relative mt-3 border-t border-zinc-200 pt-3">{c.body}</div>}
-                  <div className="relative mt-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: c.color, opacity: 0.6 }}>{isOpen ? "Less ▴" : "More ▾"}</div>
+            {cards.map((c, i) => (
+              <div key={c.title} className="group relative w-full flex-1 cursor-default p-5 pl-7 transition hover:-translate-y-0.5"
+                style={{ clipPath: clipFor(i), background: c.color + "0e" }}>
+                <span className="pointer-events-none absolute right-3 top-0 text-6xl font-black leading-none" style={{ color: c.color + "1a" }}>{i + 1}</span>
+                <div className="relative flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-3xl font-black leading-none" style={{ color: c.color }}>{i + 1}</span>
+                  <span className="text-2xl leading-none" style={{ color: c.color }}><i className={"fa-solid " + c.icon} /></span>
+                  <span className="text-lg font-extrabold text-zinc-900">{c.title}</span>
                 </div>
-              );
-            })}
+                <div className="relative mt-2 text-xs font-medium text-zinc-600">{c.tag}</div>
+                <div className="relative mt-3 hidden border-t border-zinc-200 pt-3 text-xs leading-relaxed text-zinc-600 group-hover:block">{c.body}</div>
+              </div>
+            ))}
           </div>
         );
       }
 
       const maskPhone = (p) => "+91 " + p.slice(3, 5) + "••• ••" + p.slice(-2);   // hide PII on a public page
+      // show only the first letter of the first name … last letter of the last name (PII on a public page)
+      const maskName = (n) => { const p = (n || "").split(" ").filter(Boolean); if (!p.length) return ""; const a = p[0], b = p[p.length - 1]; return a[0] + "•••" + b[b.length - 1]; };
 
-      // Impact hero — cost-per-outcome headline + live counters
-      function DonorHero({ onDonate }) {
-        const stats = [
-          { v: "1.24M", l: "children reached", c: "#bfdbfe" },
-          { v: "9.4M", l: "letters learnt", c: "#bfdbfe" },
-          { v: "340", l: "schools live", c: "#bfdbfe" },
-          { v: "12", l: "govt partnerships", c: "#bfdbfe" },
-        ];
+      // Bank balance over time — line graph, money on y, time on x; interval toggles (default 1 month)
+      function BankBalancePanel() {
+        const [winKey, setWinKey] = useState("1m");   // default interval: one month
+        const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
+        const series = useMemo(() => donorSeries("money", win), [winKey]);
+        const cfg = DONOR_METRICS.find((m) => m.key === "money");
         return (
-          <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-md sm:p-8">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-200">Cost-effectiveness</div>
-            <div className="mt-1 flex flex-wrap items-end gap-x-3">
-              <span className="text-5xl font-black leading-none sm:text-6xl">$34</span>
-              <span className="pb-1 text-lg font-semibold text-blue-100">per child reading at grade level</span>
+          <div className="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-zinc-900">Money in the bank</div>
+              <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Interval
+                <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
+                  {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                </select>
+              </label>
             </div>
-            <div className="mt-2 text-sm text-blue-200">≈ $1 donated → 0.21 income doublings — among the most cost-effective literacy interventions measured.</div>
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {stats.map((s) => (
-                <div key={s.l} className="rounded-xl bg-white/10 p-3">
-                  <div className="text-2xl font-black tabular-nums sm:text-3xl">{s.v}</div>
-                  <div className="text-[11px] font-medium text-blue-100">{s.l}</div>
+            <div className="mb-1 text-2xl font-bold tabular-nums" style={{ color: cfg.color }}>{cfg.fmt(series.vals[series.vals.length - 1])}</div>
+            <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
+          </div>
+        );
+      }
+
+      // Deterministic demo transactions for the "live bank feed" (newest first)
+      function bankTransactions(n) {
+        const INC = ["Donation · Stripe", "Donation · UPI", "DAF grant", "Monthly donor", "Bank transfer"];
+        const OUT = ["Airtime (WhatsApp BSP)", "Cloud hosting", "NGO field worker", "Team salaries", "ASER materials", "Payment fees"];
+        const rows = [];
+        for (let i = 0; i < n; i++) {
+          const h = hashStr("tx:" + i), inc = h % 3 !== 0;
+          const amt = inc ? (50 + (h % 4000)) : -(80 + ((h >> 3) % 6000));
+          const desc = inc ? INC[h % INC.length] : OUT[(h >> 4) % OUT.length];
+          const ts = NOW_MS - i * (6 * 3600e3 + (h % 60) * 60000);   // ~every 6h, descending
+          rows.push({ id: i, desc, amt, ts, inc });
+        }
+        return rows;
+      }
+      // Live bank account view — a scrollable feed of money in / out.
+      //
+      // HOW TO WIRE THIS TO THE REAL BANK ACCOUNT (replace bankTransactions()):
+      //   1. Aggregation: connect the bank via an Open Banking / aggregator API —
+      //      Plaid (US) `/transactions/sync`, or for an Indian current account an
+      //      Account Aggregator (Setu / Finvu) consent + FIP data pull, or the bank's
+      //      own statement API. Store an encrypted access token server-side only.
+      //   2. Backend: a small service polls (or receives Plaid `SYNC_UPDATES_AVAILABLE`
+      //      webhooks) and upserts transactions into our DB (id, ts, amount, memo,
+      //      direction, running balance). Never expose bank credentials to the browser.
+      //   3. Realtime: this component subscribes to GET /api/bank/transactions (SSE or
+      //      WebSocket); on each new row it prepends to the list. Balance = latest row.
+      //   4. Privacy: only public, programme-account transactions are exposed; personal
+      //      donor identities are redacted server-side before they ever reach the client.
+      function BankFeedPanel() {
+        const tx = useMemo(() => bankTransactions(60), []);
+        const fmtDt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+        return (
+          <div className="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-semibold text-zinc-900">Live bank feed
+                <span className="ml-1.5 inline-flex items-center gap-1 align-middle text-[10px] font-semibold text-emerald-600"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />live</span>
+              </div>
+              <span className="text-[10px] text-zinc-400">scroll for all transactions ↓</span>
+            </div>
+            <div className="h-[224px] divide-y divide-zinc-100 overflow-y-auto rounded-lg border border-zinc-100">
+              {tx.map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium text-zinc-800">{r.desc}</div>
+                    <div className="text-[10px] text-zinc-400">{fmtDt(r.ts)}</div>
+                  </div>
+                  <div className={"flex-shrink-0 text-sm font-bold tabular-nums " + (r.inc ? "text-emerald-600" : "text-zinc-500")}>{r.inc ? "+" : "−"}{fmtMoney(Math.abs(r.amt))}</div>
                 </div>
               ))}
             </div>
-            <button onClick={() => onDonate()} className="mt-5 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-blue-700 shadow hover:bg-blue-50">💚 Donate</button>
           </div>
         );
       }
-      // Evidence / proof strip
-      function DonorProof() {
-        return (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="text-3xl font-black text-emerald-700">+0.42σ</div>
-              <div className="mt-1 text-xs font-bold text-emerald-800">reading gain in 6 months</div>
-              <div className="mt-1 text-[11px] text-emerald-700/80">vs. a matched control group, on a digital ASER-equivalent assessment.</div>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Measured, not surveyed</div>
-              <div className="mt-1 text-sm font-bold text-zinc-800">Every interaction is an assessment</div>
-              <div className="mt-1 text-[11px] text-zinc-500">Reading is scored from each child's own audio, so impact is observed continuously — not self-reported.</div>
-              <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">Methodology ↗</a>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">Built on trusted data</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">{["ASER", "RCT-evaluated", "State SCERT", "UDISE+ schools"].map((n) => <span key={n} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600">{n}</span>)}</div>
-              <div className="mt-2 text-[11px] text-zinc-500">Outcomes benchmarked to the government's own literacy yardstick.</div>
-            </div>
-          </div>
-        );
-      }
-      // The ask — runway gap, spend breakdown, earmarking, Donate
-      function DonorAsk({ onDonate }) {
-        const raised = 2.1, target = 6, pct = Math.round((raised / target) * 100);
-        const spend = [["Programme", 78, "#2563eb"], ["Technology", 12, "#7c3aed"], ["Operations", 6, "#10b981"], ["Fundraising", 4, "#f59e0b"]];
+
+      // The ask — live finances (balance + bank feed), donate-by-region map, dynamic Donate CTA
+      function DonorAsk({ onDonate, donateMap, donateTarget }) {
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Help us reach a 12-month runway</div>
-            <div className="mx-auto mt-1 max-w-xl text-center text-xs text-zinc-500">We run a lean, fully-committed budget. Closing this gap keeps every live child learning and ships the next language.</div>
-            <div className="mx-auto mt-4 max-w-xl">
-              <div className="flex justify-between text-xs font-semibold text-zinc-600"><span className="text-emerald-700">${raised}M raised</span><span className="text-zinc-400">${target}M goal</span></div>
-              <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: pct + "%" }} /></div>
+            <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl" style={{ color: "#1d9edf" }}>Help us empower kids</div>
+
+            {/* live finances: balance over time + live bank feed, side by side */}
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <BankBalancePanel />
+              <BankFeedPanel />
             </div>
-            <div className="mx-auto mt-5 max-w-xl">
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Where your money goes</div>
-              <div className="flex h-3 w-full overflow-hidden rounded-full">{spend.map(([n, p, c]) => <div key={n} title={n + " " + p + "%"} style={{ width: p + "%", background: c }} />)}</div>
-              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">{spend.map(([n, p, c]) => <span key={n} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: c }} />{n} {p}%</span>)}</div>
+
+            {/* donate-by-region map (same drill-down as the educator map) */}
+            <div className="mt-6">
+              <div className="mb-2 text-sm font-bold text-zinc-900">Choose where your donation goes</div>
+              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to see it · double-click to drill in</div>
+              {donateMap}
             </div>
-            <div className="mx-auto mt-5 max-w-xl text-center">
-              <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Or earmark a specific language</div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {["Hindi", "Amharic", "Swahili", "Urdu"].map((l) => <button key={l} onClick={() => onDonate(l)} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-semibold text-zinc-700 hover:border-emerald-400 hover:bg-emerald-50">Fund {l}</button>)}
-              </div>
-            </div>
-            <button onClick={() => onDonate()} className="mx-auto mt-6 block w-full max-w-xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now</button>
+
+            {/* dynamic Donate CTA — label tracks the selected region */}
+            <button onClick={() => onDonate(donateTarget && donateTarget !== "most needed" ? donateTarget : null)}
+              className="mx-auto mt-5 block w-full max-w-2xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now to {donateTarget}</button>
             <div className="mt-2 text-center text-[10px] text-zinc-400">Tax-deductible in the US (501c3) &amp; India (80G) · one-time or monthly · DAF &amp; bank transfer available</div>
           </div>
         );
@@ -1951,81 +1961,136 @@
         );
       }
 
-      function DonorDashboard({ t, onDonate, worldGeo }) {
-        const [metric, setMetric] = useState("letters");   // lead with traction, not the bank balance
-        const [winKey, setWinKey] = useState("1m");
+      // brand + sources
+      const PP_LOGO = "https://framerusercontent.com/images/O8OuegVZwL9Qy2rsKnI1plw4b60.png";
+      const WWHGE_PDF = "https://www.wwhge.org/wp-content/uploads/2026/02/WWHGE_Universal-Foundational-Learning-Insight-Note.pdf";
+      const CG_LINK = "https://coefficientgiving.org/research/our-planned-allocation-to-givewells-recommendations-for-the-next-few-years/";
+      const PP_ANALYSIS = "https://www.padhaipal.com";   // TODO: replace with the real analysis link
+
+      // padhAIpal logo + wordmark lockup
+      function ValueHero() {
+        return (
+          <div className="text-center">
+            <img src="./padhaipal-logo.svg" alt="padhAIpal" className="mx-auto w-full max-w-[420px]" />
+          </div>
+        );
+      }
+      // Headline value proposition — its own large section, with interactive inline "cards"
+      function ValueStatement() {
+        const scribble = { fontFamily: "'Caveat', cursive" };
+        // a prettier inline link (no underline), rendered in the hand-scribbled font of its caption
+        const Link = ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="font-bold text-blue-600 no-underline transition-colors hover:text-blue-700">{children}</a>
+        );
+        // small hand-scribbled caption under a word, always one line — hidden until the word is hovered.
+        // top-full + pt-2 (padding, not margin) keeps the caption's box touching the word, so the hover
+        // area is continuous and the link inside stays reachable.
+        const note = "absolute left-1/2 top-full hidden w-max -translate-x-1/2 whitespace-nowrap pt-2 text-center text-2xl font-medium leading-tight text-zinc-500 group-hover:block";
+        return (
+          <div className="mx-auto w-[95%] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+            <p className="pt-8">
+              <span className="group relative inline-block font-extrabold text-blue-700">$200T
+                <span className={note} style={scribble}>actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
+              </span>{" "}of economic value would be{" "}
+              <span className="group relative inline-block font-semibold text-emerald-700">
+                {/* "counterfactually" inserted above, centred on the gap before "unlocked", with a proofreader's caret — on hover.
+                    bottom-full + pb-2 bridges the hover gap so the word above stays reachable. */}
+                <span className="absolute bottom-full left-0 hidden w-max -translate-x-1/2 whitespace-nowrap pb-2 text-2xl font-semibold leading-none text-emerald-600 group-hover:block" style={scribble}>counterfactually</span>
+                <span className="pointer-events-none absolute bottom-full left-0 hidden -translate-x-1/2 text-base leading-none text-emerald-600 group-hover:block">‸</span>
+                unlocked
+              </span>{" "}if every child could read.
+            </p>
+            <p className="relative mt-12 pb-14">
+              PadhaiPal's goal is to{" "}
+              <span className="group relative inline-block font-semibold text-amber-700">cost effectively
+                <span className={note} style={scribble}>achieves Coefficient Giving's funding bar of <Link href={CG_LINK}>$50/DALY</Link></span>
+              </span>{" "}capture{" "}
+              <span className="group relative inline-block font-extrabold text-violet-700">47%
+                {/* hand-drawn arrow curving up to a one-line scribbled note — on hover (pt-1 bridges the hover gap) */}
+                <span className="absolute left-1/2 top-full hidden -translate-x-1/4 items-start gap-1 pt-1 group-hover:flex">
+                  <svg width="56" height="44" viewBox="0 0 56 44" fill="none" className="-mt-2 flex-shrink-0 text-zinc-400">
+                    <path d="M10 8 C 14 30, 28 35, 46 35" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M46 35 l -13 -5 M46 35 l -13 5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="whitespace-nowrap pt-2.5 text-2xl font-medium leading-tight text-zinc-500" style={scribble}>our analysis <Link href={PP_ANALYSIS}>here</Link></span>
+                </span>
+              </span>{" "}of that.
+            </p>
+          </div>
+        );
+      }
+
+      function DonorDashboard({ t, onDonate, worldGeo, donateMap, donateTarget }) {
+        const TRACTION_METRICS = DONOR_METRICS.filter((m) => ["dau", "lessons", "letters"].includes(m.key));
+        const [metric, setMetric] = useState("letters");   // traction default
+        const [winKey, setWinKey] = useState("1w");         // default time scale: one week
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
         const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
+        const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
         return (
-          <div className="flex-1 overflow-y-auto bg-zinc-50">
-            {/* site header — links back to the main marketing site */}
-            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white/95 px-6 py-3 backdrop-blur">
-              <div className="flex items-baseline gap-2">
-                <span className="text-lg font-black text-blue-700">PadhaiPal</span>
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Impact &amp; Transparency</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600 hover:underline">padhaipal.com ↗</a>
-                <button onClick={() => onDonate()} className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">💚 Donate</button>
-              </div>
-            </div>
-            <div className="mx-auto max-w-6xl space-y-6 p-6">
-              {/* 1 · impact hero */}
-              <DonorHero onDonate={onDonate} />
+          <div className="flex-1 overflow-y-auto overflow-x-clip bg-zinc-50">
+            <div className="mx-auto max-w-6xl space-y-12 p-6">
+              {/* 1 · logo + wordmark */}
+              <div className="pt-2"><ValueHero /></div>
 
-              {/* 2 · proof */}
-              <DonorProof />
-
-              {/* 3 · traction */}
-              <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {DONOR_METRICS.map((m) => (
-                      <button key={m.key} onClick={() => setMetric(m.key)}
-                        className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
-                        style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
-                    ))}
-                  </div>
-                  <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
-                    <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
-                      {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
-                    </select>
-                  </label>
+              {/* 2 · headline value proposition — full-width (100vw) bar with a slightly different background */}
+              <div className="py-2">
+                <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-blue-100 bg-blue-50 px-6 py-12">
+                  <ValueStatement />
                 </div>
-                <div className="mb-1 flex items-baseline justify-between">
-                  <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
-                  <span className="text-[10px] text-zinc-400">observed · demo data</span>
-                </div>
-                <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
               </div>
 
-              {/* 4 · real learners (anonymised) */}
+              {/* 3 · what PadhaiPal does */}
               <div>
-                <div className="text-center text-2xl font-bold tracking-tight text-zinc-900">Real learners, live</div>
-                <div className="mb-3 text-center text-xs text-zinc-400">A live window into individual progress — anonymised, phone numbers masked. Click a row to open a learner's record.</div>
-                <StudentDashboard t={t} />
-              </div>
-
-              {/* 5 · how it works */}
-              <div className="pt-2">
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Education Operating System</div>
+                <div className={"mb-6 " + H} style={HC}>What PadhaiPal Does</div>
                 <EOSCards />
               </div>
 
-              {/* 6 · how it scales */}
-              <div className="pt-2">
-                <div className="mb-4 text-center text-2xl font-bold tracking-tight text-zinc-900">Scalable Distribution</div>
+              {/* 4 · theory of change */}
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Theory of Change</div>
                 <DistCards />
               </div>
 
-              {/* 7 · the opportunity */}
+              {/* 5 · traction — one card: toggleable DAU / lessons / letters graph + real learners */}
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Traction</div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <div className="p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {TRACTION_METRICS.map((m) => (
+                          <button key={m.key} onClick={() => setMetric(m.key)}
+                            className={"rounded-full border px-3 py-1 text-xs font-semibold transition " + (metric === m.key ? "border-transparent text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
+                            style={metric === m.key ? { background: m.color } : null}>{m.label}</button>
+                        ))}
+                      </div>
+                      <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500">Time scale
+                        <select value={winKey} onChange={(e) => setWinKey(e.target.value)} className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700">
+                          {TIME_WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="mb-1 flex items-baseline justify-between">
+                      <div className="text-sm font-semibold" style={{ color: cfg.color }}>{cfg.label} <span className="font-normal text-zinc-400">· latest {cfg.fmt(series.vals[series.vals.length - 1])}</span></div>
+                      <span className="text-[10px] text-zinc-400">observed · demo data</span>
+                    </div>
+                    <TimeLineChart vals={series.vals} labels={series.labels} color={cfg.color} fmt={cfg.fmt} />
+                  </div>
+                  <div className="border-t border-zinc-200 p-4">
+                    <StudentDashboard t={t} bare />
+                  </div>
+                </div>
+              </div>
+
+              {/* 6 · the opportunity */}
               <DonorRoadmap worldGeo={worldGeo} />
 
-              {/* 8 · the ask */}
-              <DonorAsk onDonate={onDonate} />
+              {/* 7 · the ask */}
+              <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
 
-              {/* 9 · footer / trust */}
+              {/* 8 · footer / trust */}
               <DonorFooter />
             </div>
           </div>
@@ -2054,6 +2119,7 @@
         const [selHt, setSelHt] = useState(null);
         const [active, setActive] = useState(null);         // { u, title, sub, demo }
         const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; hover stops swapping it
+        const [donateSel, setDonateSel] = useState(null);   // donor map: selected colored area { title, sub, label }
         const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
         const t = useCallback((s) => translate(uiLang, s), [uiLang]);
         const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;   // `role` comes from Root (top-bar toggle)
@@ -2888,10 +2954,162 @@
         // pins it (set active + pinned); double-click or the card's "Drill in →" button drills in.
         const showHover = (payload) => { if (!pinned) setActive(payload); };
 
+        // ---------------------------------------------------------------
+        //  Donor "where your money goes" map — reuses the exact drill-down
+        //  data + handlers as the educator (DGSE) map, but colours ONLY the
+        //  funded path: India ▸ Uttar Pradesh ▸ Lucknow ▸ one block ▸ some
+        //  of its schools. Everything else is greyed and non-interactive.
+        //  Single click = info card; double click = drill into a coloured area.
+        // ---------------------------------------------------------------
+        const DON_GREY = "#d4d4d8";
+        const CG_BAR = 50;          // $/DALY — Coefficient Giving's funding bar (the yellow end of the scale)
+        const CHILD_FRAC = 0.12;    // rough school-age share of a population
+        const DON_BLOCK = 0;        // the one funded block in Lucknow
+        const DON_SCHOOLS = 8;      // first N schools of that block are funded (coloured)
+        const isUP = (n) => /uttar pradesh/i.test(n || "");
+        const isLko = (n) => /lucknow/i.test(n || "");
+        // deterministic, cost-effective $/DALY for a funded area (deeper targeting => cheaper)
+        const cpdOf = (id, bias) => clamp(10 + (hashStr("cpd:" + id) % 30) - bias, 5, CG_BAR);
+        // green (most cost-effective) -> yellow ($50/DALY, the Coefficient Giving bar)
+        const ceColor = (cpd) => d3.interpolateRgb("#15803d", "#eab308")(clamp(cpd / CG_BAR, 0, 1));
+        // selected = a deeper, more saturated version of the area's own cost-effectiveness colour
+        const ceColorSel = (cpd) => { const h = d3.hsl(ceColor(cpd)); h.s = Math.min(1, h.s + 0.35); h.l = Math.max(0, h.l - 0.14); return h + ""; };
+        // build a tail "… - <a2f> - <a1f> - India" for the current breadcrumb
+        const donTail = () => [a2f && a2f.name, a1f && a1f.name, "India"].filter(Boolean).join(" - ");
+        const donateTarget = donateSel ? donateSel.label : "most needed";
+        const donateMap = (() => {
+          // a funded (coloured) area: green→yellow by cost-effectiveness, or brand-blue when selected
+          const areaProps = (id, cpd, payload, drill) => {
+            const sel = donateSel && donateSel.id === id;
+            return {
+              fill: sel ? ceColorSel(cpd) : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
+              style: { cursor: "pointer" },
+              onClick: (e) => { e.stopPropagation(); if (moved.current) return; setDonateSel(payload); },
+              onDoubleClick: drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
+            };
+          };
+          const greyProps = { fill: DON_GREY, stroke: "#ffffff", strokeWidth: 0.8 / tf.k, style: { cursor: "default" } };
+          // spin the globe by dragging — only at the world level (orthographic rotate)
+          const onSpinDown = (e) => { if (!isWorld) return; drag.current = { x: e.clientX, y: e.clientY, rot: globeRot }; moved.current = false; };
+          const onSpinMove = (e) => { if (!drag.current || !isWorld) return; const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y; if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true; const [l0, p0] = drag.current.rot; setGlobeRot([l0 + dx * 0.4, clamp(p0 - dy * 0.4, -89, 89)]); };
+          const onSpinUp = () => { drag.current = null; };
+          const spin = isWorld ? { onMouseDown: onSpinDown, onMouseMove: onSpinMove, onMouseUp: onSpinUp, onMouseLeave: onSpinUp } : {};
+          // popping up a level re-selects the area you were inside (school → block → district → state → India)
+          const donateUpSel = () => {
+            if (level === "schools" && blk) return { id: blk.id, title: blk.name, sub: "Block · BEO", label: blk.name + " - " + donTail(), demo: blk.demo, cpd: cpdOf(blk.id, 22) };
+            if (level === "adm3" && a2f && a1f) return { id: a2f.id, title: a2f.name, sub: "District · BSA", label: a2f.name + " - " + a1f.name + " - India", demo: a2f.demo, cpd: cpdOf(a2f.id, 16) };
+            if (level === "adm2" && a1f) return { id: a1f.id, title: a1f.name, sub: "State · DGSE region", label: a1f.name + " - India", demo: a1f.demo, cpd: cpdOf(a1f.id, 8) };
+            if (level === "adm1" && country) return { id: "don.IND", title: country.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(country.feature, country.iso, country.name, true), cpd: cpdOf("don.IND", 0) };
+            return null;   // world
+          };
+          const donatePopUp = () => { const s = donateUpSel(); popUp(); setDonateSel(s); };
+          return (
+            <div className="overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
+              <div className="relative h-[440px] w-full">
+                {!ready ? (
+                  <div className="flex h-full items-center justify-center text-sm text-zinc-400">Loading world map…</div>
+                ) : (
+                  <svg viewBox={`0 0 ${size.w} ${size.h}`} className="block h-full w-full touch-none select-none"
+                    style={{ cursor: isWorld ? "grab" : "default" }} {...spin}
+                    onClick={() => { if (LEVEL_ORDER.indexOf(level) > 0 && !moved.current) donatePopUp(); }}>
+                    <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={{ transition: drag.current ? "none" : "transform .35s ease" }}>
+                      {projd && projd.globe && <path d={projd.path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1.2 / tf.k} />}
+                      {projd && projd.globe && <path d={projd.path(d3.geoGraticule10())} fill="none" stroke="#93c5fd" strokeWidth={0.5 / tf.k} opacity={0.6} pointerEvents="none" />}
+
+                      {level === "world" && worldPaths && worldPaths.map((p) => {
+                        if (p.iso !== "IND") return <path key={p.i} d={p.d} {...greyProps} />;
+                        const id = "don.IND", cpd = cpdOf(id, 0);
+                        const payload = { id, title: p.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(p.feature, p.iso, p.name, true), cpd };
+                        return <path key={p.i} d={p.d} {...areaProps(id, cpd, payload, () => pickCountry({ iso: p.iso, name: p.name, feature: p.feature, covered: true }))} />;
+                      })}
+                      {level === "adm1" && adm1 && adm1.map((d0) => {
+                        if (!isUP(d0.name)) return <path key={d0.id} d={d0.d} {...greyProps} />;
+                        const cpd = cpdOf(d0.id, 8);
+                        const payload = { id: d0.id, title: d0.name, sub: "State · DGSE region", label: d0.name + " - India", demo: d0.demo, cpd };
+                        return <path key={d0.id} d={d0.d} {...areaProps(d0.id, cpd, payload, () => drillA1(d0.i))} />;
+                      })}
+                      {level === "adm2" && adm2 && adm2.map((d0) => {
+                        if (!isLko(d0.name)) return <path key={d0.id} d={d0.d} {...greyProps} />;
+                        const cpd = cpdOf(d0.id, 16);
+                        const payload = { id: d0.id, title: d0.name, sub: "District · BSA", label: d0.name + " - " + donTail(), demo: d0.demo, cpd };
+                        return <path key={d0.id} d={d0.d} {...areaProps(d0.id, cpd, payload, () => drillA2(d0.j))} />;
+                      })}
+                      {level === "adm3" && blocks && blocks.map((b) => {
+                        if (b.k !== DON_BLOCK) return <path key={b.id} d={b.d} {...greyProps} />;
+                        const cpd = cpdOf(b.id, 22);
+                        const payload = { id: b.id, title: b.name, sub: "Block · BEO", label: b.name + " - " + donTail(), demo: b.demo, cpd };
+                        return <path key={b.id} d={b.d} {...areaProps(b.id, cpd, payload, () => drillBlock(b.k))} />;
+                      })}
+                      {level === "schools" && blk && <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} pointerEvents="none" />}
+                      {level === "schools" && schools && schools.map((sc) => {
+                        if (sc.k >= DON_SCHOOLS) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
+                        const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
+                        const payload = { id: sc.id, title: sc.name, sub: "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
+                        return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : 6) / tf.k}
+                          fill={sel ? ceColorSel(cpd) : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
+                          style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />;
+                      })}
+                    </g>
+                  </svg>
+                )}
+                {busy && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-1.5 text-[12px] font-medium text-white shadow-lg">Loading boundaries…</div>}
+                {isWorld && ready && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-[11px] font-medium text-zinc-600 shadow">drag to spin the globe · double-click India to drill in</div>}
+                {LEVEL_ORDER.indexOf(level) > 0 && (
+                  <button onClick={() => donatePopUp()} className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow hover:bg-zinc-50">↑ Up a level</button>
+                )}
+                {donateSel && (() => {
+                  const d = donateSel.demo, cpd = donateSel.cpd, kids = d ? d.pop * CHILD_FRAC : null;
+                  return (
+                    <div className="absolute right-3 top-3 w-72 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-zinc-900">{donateSel.title}</div>
+                          <div className="text-[11px] font-medium text-zinc-500">{donateSel.sub}</div>
+                        </div>
+                        <button onClick={() => setDonateSel(null)} className="-mt-1 text-zinc-400 hover:text-zinc-700">✕</button>
+                      </div>
+                      {d && (
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                          <div><dt className="text-zinc-400">Population</dt><dd className="font-semibold text-zinc-800">{fmtPop(d.pop)}</dd></div>
+                          <div><dt className="text-zinc-400">School-age kids</dt><dd className="font-semibold text-zinc-800">{fmtPop(kids)}</dd></div>
+                          <div><dt className="text-zinc-400">Area</dt><dd className="font-semibold text-zinc-800">{fmtArea(d.areaKm2)}</dd></div>
+                          <div><dt className="text-zinc-400">Adult literacy</dt><dd className="font-semibold text-zinc-800">{d.lit != null ? Math.round(d.lit * 100) + "%" : "—"}</dd></div>
+                          <div className="col-span-2"><dt className="text-zinc-400">Main languages</dt><dd className="font-semibold text-zinc-800">{(d.langs || []).slice(0, 3).join(", ") || "—"}</dd></div>
+                          <div className="col-span-2"><dt className="text-zinc-400">Speaks a script PadhaiPal can teach</dt><dd className="font-semibold text-zinc-800">{Math.round((d.phon || 0) * 100)}%</dd></div>
+                        </dl>
+                      )}
+                      <div className="mt-2 border-t border-zinc-100 pt-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-400">Cost-effectiveness</span>
+                          <span className="font-bold" style={{ color: ceColor(cpd) }}>${Math.round(cpd)}/DALY</span>
+                        </div>
+                        <div className="relative mt-1 h-2 w-full rounded-full" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }}>
+                          <div className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: clamp(cpd / CG_BAR, 0, 1) * 100 + "%", background: ceColor(cpd) }} />
+                        </div>
+                        <div className="mt-0.5 flex justify-between text-[9px] text-zinc-400"><span>more cost-effective</span><span>$50/DALY bar</span></div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="absolute bottom-3 left-3 rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-1.5 text-[10px] text-zinc-600 shadow">
+                  <div className="mb-1 font-semibold text-zinc-700">Cost-effectiveness ($/DALY)</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400">best</span>
+                    <span className="h-2.5 w-20 rounded-sm" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }} />
+                    <span className="text-[9px] text-zinc-400">$50 bar</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not funded yet</div>
+                </div>
+              </div>
+            </div>
+          );
+        })();
+
         return (
           <div className="relative flex h-full flex-col">
             {role === "transparency" ? (
-              <DonorDashboard t={t} worldGeo={worldGeo} onDonate={(earmark) => setFund({ title: earmark ? "PadhaiPal · " + earmark : "PadhaiPal — global programme", id: "donor", earmark: earmark || null })} />
+              <DonorDashboard t={t} worldGeo={worldGeo} donateMap={donateMap} donateTarget={donateTarget}
+                onDonate={(earmark) => setFund({ title: earmark ? "PadhaiPal · " + earmark : "PadhaiPal — global programme", id: "donor", earmark: earmark || null })} />
             ) : (
             <React.Fragment>
             <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-200 bg-white px-6 py-3">
