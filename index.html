@@ -2223,6 +2223,7 @@
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
+        const donateClick = useRef(null);   // donor map: manual double-click detection (native dblclick is unreliable over the spinnable globe)
         // the world level always renders as a 3D globe (orthographic); deeper levels are flat
         const [globeRot, setGlobeRot] = useState([-79, -22]);   // centre the globe on India (lon 79, lat 22)
         const [chartY, setChartY] = useState("acer");          // y-axis metric for the learning-curve chart
@@ -3080,8 +3081,15 @@
             return {
               fill: sel ? ceColorSel(cpd) : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
               style: { cursor: "pointer" },
-              onClick: (e) => { e.stopPropagation(); if (moved.current) return; setDonateSel(payload); },
-              onDoubleClick: drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
+              // single click selects; a second click on the same area within 400ms drills in
+              // (manual detection — the spinnable globe perturbs the native dblclick event)
+              onClick: (e) => {
+                e.stopPropagation();
+                if (moved.current) return;
+                const now = Date.now(), prev = donateClick.current;
+                if (drill && prev && prev.id === id && now - prev.t < 400) { donateClick.current = null; moved.current = false; drill(); }
+                else { donateClick.current = { id, t: now }; setDonateSel(payload); }
+              },
             };
           };
           const greyProps = { fill: DON_GREY, stroke: "#ffffff", strokeWidth: 0.8 / tf.k, style: { cursor: "default" } };
