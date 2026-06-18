@@ -1799,7 +1799,7 @@
             body: "We pay the NGO for two days of their worker's time. They spend the first day being trained on how to communicate PadhaiPal and the second day having meetings with the people they know in these networks." },
           { icon: "fa-share-nodes", title: "Propagate", tag: "Strong results climb the hierarchy", color: "#3b82f6",
             body: "Once a few people start using PadhaiPal in a network it gets shared up the hierarchy via reports, down the hierarchy via communication groups and there is horizontal accountability by seeing the progress of peers." },
-          { icon: "fa-building-columns", title: "Procure", tag: "Encourage governments to pay after trial period", color: "#8b5cf6",
+          { icon: "fa-building-columns", title: "Procure", tag: "Governments pay after trial", color: "#8b5cf6",
             body: "PadhaiPal only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government to pay for usage. Thus each dollar donated is used to unlock government dollars into effective literacy." },
         ];
         const last = cards.length - 1, pt = "calc(100% - 15px)";
@@ -1826,8 +1826,8 @@
       }
 
       const maskPhone = (p) => "+91 " + p.slice(3, 5) + "••• ••" + p.slice(-2);   // hide PII on a public page
-      // show only the first + last letter of each name part, dots in between (PII on a public page)
-      const maskName = (n) => (n || "").split(" ").filter(Boolean).map((w) => w.length <= 1 ? w : w[0] + "•••" + w[w.length - 1]).join(" ");
+      // show only the first letter of the first name … last letter of the last name (PII on a public page)
+      const maskName = (n) => { const p = (n || "").split(" ").filter(Boolean); if (!p.length) return ""; const a = p[0], b = p[p.length - 1]; return a[0] + "•••" + b[b.length - 1]; };
 
       // Bank balance over time — line graph, money on y, time on x; interval toggles (default 1 month)
       function BankBalancePanel() {
