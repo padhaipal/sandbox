@@ -2967,6 +2967,15 @@
           const onSpinMove = (e) => { if (!drag.current || !isWorld) return; const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y; if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true; const [l0, p0] = drag.current.rot; setGlobeRot([l0 + dx * 0.4, clamp(p0 - dy * 0.4, -89, 89)]); };
           const onSpinUp = () => { drag.current = null; };
           const spin = isWorld ? { onMouseDown: onSpinDown, onMouseMove: onSpinMove, onMouseUp: onSpinUp, onMouseLeave: onSpinUp } : {};
+          // popping up a level re-selects the area you were inside (school → block → district → state → India)
+          const donateUpSel = () => {
+            if (level === "schools" && blk) return { id: blk.id, title: blk.name, sub: "Block · BEO", label: blk.name + " - " + donTail(), demo: blk.demo, cpd: cpdOf(blk.id, 22) };
+            if (level === "adm3" && a2f && a1f) return { id: a2f.id, title: a2f.name, sub: "District · BSA", label: a2f.name + " - " + a1f.name + " - India", demo: a2f.demo, cpd: cpdOf(a2f.id, 16) };
+            if (level === "adm2" && a1f) return { id: a1f.id, title: a1f.name, sub: "State · DGSE region", label: a1f.name + " - India", demo: a1f.demo, cpd: cpdOf(a1f.id, 8) };
+            if (level === "adm1" && country) return { id: "don.IND", title: country.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(country.feature, country.iso, country.name, true), cpd: cpdOf("don.IND", 0) };
+            return null;   // world
+          };
+          const donatePopUp = () => { const s = donateUpSel(); popUp(); setDonateSel(s); };
           return (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
               <div className="relative h-[440px] w-full">
@@ -2975,7 +2984,7 @@
                 ) : (
                   <svg viewBox={`0 0 ${size.w} ${size.h}`} className="block h-full w-full touch-none select-none"
                     style={{ cursor: isWorld ? "grab" : "default" }} {...spin}
-                    onClick={() => { if (LEVEL_ORDER.indexOf(level) > 0 && !moved.current) popUp(); }}>
+                    onClick={() => { if (LEVEL_ORDER.indexOf(level) > 0 && !moved.current) donatePopUp(); }}>
                     <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={{ transition: drag.current ? "none" : "transform .35s ease" }}>
                       {projd && projd.globe && <path d={projd.path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1.2 / tf.k} />}
                       {projd && projd.globe && <path d={projd.path(d3.geoGraticule10())} fill="none" stroke="#93c5fd" strokeWidth={0.5 / tf.k} opacity={0.6} pointerEvents="none" />}
@@ -3019,7 +3028,7 @@
                 {busy && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-1.5 text-[12px] font-medium text-white shadow-lg">Loading boundaries…</div>}
                 {isWorld && ready && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-[11px] font-medium text-zinc-600 shadow">drag to spin the globe · double-click India to drill in</div>}
                 {LEVEL_ORDER.indexOf(level) > 0 && (
-                  <button onClick={() => popUp()} className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow hover:bg-zinc-50">↑ Up a level</button>
+                  <button onClick={() => donatePopUp()} className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow hover:bg-zinc-50">↑ Up a level</button>
                 )}
                 {donateSel && (() => {
                   const d = donateSel.demo, cpd = donateSel.cpd, kids = d ? d.pop * CHILD_FRAC : null;
