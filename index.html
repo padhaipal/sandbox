@@ -2958,7 +2958,7 @@
         //  of its schools. Everything else is greyed and non-interactive.
         //  Single click = info card; double click = drill into a coloured area.
         // ---------------------------------------------------------------
-        const DON_SEL = "#1d9edf", DON_GREY = "#d4d4d8";
+        const DON_GREY = "#d4d4d8";
         const CG_BAR = 50;          // $/DALY — Coefficient Giving's funding bar (the yellow end of the scale)
         const CHILD_FRAC = 0.12;    // rough school-age share of a population
         const DON_BLOCK = 0;        // the one funded block in Lucknow
@@ -2969,6 +2969,8 @@
         const cpdOf = (id, bias) => clamp(10 + (hashStr("cpd:" + id) % 30) - bias, 5, CG_BAR);
         // green (most cost-effective) -> yellow ($50/DALY, the Coefficient Giving bar)
         const ceColor = (cpd) => d3.interpolateRgb("#15803d", "#eab308")(clamp(cpd / CG_BAR, 0, 1));
+        // selected = a deeper, more saturated version of the area's own cost-effectiveness colour
+        const ceColorSel = (cpd) => { const h = d3.hsl(ceColor(cpd)); h.s = Math.min(1, h.s + 0.35); h.l = Math.max(0, h.l - 0.14); return h + ""; };
         // build a tail "… - <a2f> - <a1f> - India" for the current breadcrumb
         const donTail = () => [a2f && a2f.name, a1f && a1f.name, "India"].filter(Boolean).join(" - ");
         const donateTarget = donateSel ? donateSel.label : "most needed";
@@ -2977,7 +2979,7 @@
           const areaProps = (id, cpd, payload, drill) => {
             const sel = donateSel && donateSel.id === id;
             return {
-              fill: sel ? DON_SEL : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
+              fill: sel ? ceColorSel(cpd) : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
               style: { cursor: "pointer" },
               onClick: (e) => { e.stopPropagation(); if (moved.current) return; setDonateSel(payload); },
               onDoubleClick: drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
@@ -3041,7 +3043,7 @@
                         const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
                         const payload = { id: sc.id, title: sc.name, sub: "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
                         return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : 6) / tf.k}
-                          fill={sel ? DON_SEL : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
+                          fill={sel ? ceColorSel(cpd) : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
                           style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />;
                       })}
                     </g>
