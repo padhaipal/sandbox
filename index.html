@@ -1716,6 +1716,92 @@
           </svg>
         );
       }
+      // Completed engineering milestones (date = last significant commit where the work spanned a range)
+      const TECH_DONE = [
+        { date: "2026-03-04", name: "Connect with WhatsApp" },
+        { date: "2026-03-18", name: "Detect individual incorrect letters" },
+        { date: "2026-03-21", name: "Word selection algorithm" },
+        { date: "2026-03-30", name: "Asynchronous pipeline (BullMQ + Redis)" },
+        { date: "2026-03-31", name: "Database schema + auto-migrations" },
+        { date: "2026-04-14", name: "Speech to text" },
+        { date: "2026-04-14", name: "User dashboard" },
+        { date: "2026-04-15", name: "Lesson decision tree" },
+        { date: "2026-04-20", name: "Observability (Grafana + OpenTelemetry)" },
+        { date: "2026-04-22", name: "Teach matras (vowels)" },
+        { date: "2026-04-23", name: "Generate all of the media" },
+        { date: "2026-04-23", name: "Media dashboard" },
+        { date: "2026-04-28", name: "Reminders + report cards" },
+        { date: "2026-04-28", name: "Onboarding + referral" },
+        { date: "2026-04-30", name: "Scoring engine" },
+        { date: "2026-05-29", name: "CI/CD pipeline" },
+        { date: "2026-05-30", name: "Staging environment" },
+      ];
+      const TECH_NEXT = [
+        ["Be auspiced by GDG", "Secure official backing from Google Developer Groups to add credibility and open doors with partners and governments."],
+        ["Complete load tests", "Prove the system holds up under many thousands of concurrent learners on WhatsApp."],
+        ["Teach conjuncts", "Teach Hindi conjunct clusters (saṁyuktākṣar) — joined consonants beyond single letters and matras."],
+        ["Teach sentences", "Move learners on from single words to reading whole sentences."],
+        ["Teach comprehension", "Teach understanding of meaning, not just decoding the words on the screen."],
+        ["Deliver a proxy ASER test", "Administer a digital stand-in for the ASER reading test to benchmark each child's level."],
+        ["Deliver a proxy LaNA test", "Administer a digital proxy of the LaNA assessment for an internationally comparable score."],
+        ["Make a teacher dashboard", "Give teachers their own dashboard to track their students' progress."],
+        ["Conduct A/B tests", "Run controlled experiments to find which lesson variants drive the most learning."],
+        ["Support other languages", "Extend PadhaiPal beyond Hindi to more languages and scripts."],
+      ];
+      // Technical Roadmap — a to-scale timeline of shipped milestones + the ordered backlog (under the impact roadmap)
+      function TechRoadmap() {
+        const t0 = Date.parse("2026-03-01T00:00:00Z"), t1 = Date.parse("2026-06-05T00:00:00Z");
+        const xOf = (d) => ((Date.parse(d + "T00:00:00Z") - t0) / (t1 - t0)) * 100;
+        const fmtD = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+        const months = [["Mar", "2026-03-01"], ["Apr", "2026-04-01"], ["May", "2026-05-01"], ["Jun", "2026-06-01"]];
+        const mayL = xOf("2026-05-01"), mayR = xOf("2026-06-01");
+        return (
+          <div className="p-4">
+            <div className="text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Technical Roadmap</div>
+            <div className="mb-3 text-xs text-zinc-500">Engineering milestones shipped to date. Every line of code is open source: <a href="https://github.com/orgs/padhaipal/repositories" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">github.com/padhaipal ↗</a></div>
+            {/* to-scale timeline (markers land on their real dates) */}
+            <div className="relative mb-2 mt-6 h-28">
+              {/* reduced-capacity shade over May */}
+              <div className="pointer-events-none absolute top-0 bottom-7 rounded" style={{ left: mayL + "%", width: (mayR - mayL) + "%", background: "rgba(239,68,68,0.10)", border: "1px dashed rgba(239,68,68,0.4)" }} />
+              <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-zinc-300" />
+              {months.map(([m, d]) => (
+                <div key={m} className="absolute top-1/2 -translate-y-1/2" style={{ left: xOf(d) + "%" }}>
+                  <div className="absolute -top-2 left-0 h-4 w-px -translate-x-1/2 bg-zinc-300" />
+                  <div className="absolute top-10 left-0 -translate-x-1/2 text-[10px] font-semibold text-zinc-400">{m}</div>
+                </div>
+              ))}
+              {TECH_DONE.map((e, i) => {
+                const up = i % 2 === 0;
+                return (
+                  <div key={e.name} className="group/m absolute top-1/2" style={{ left: xOf(e.date) + "%" }}>
+                    <div className="absolute -translate-x-1/2 bg-zinc-200" style={{ width: 1, height: 16, top: up ? -16 : 0 }} />
+                    <div className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500 ring-2 ring-white" style={{ top: up ? -16 : 16 }} />
+                    <div className="pointer-events-none absolute left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-2 py-1 text-[10px] font-medium text-white shadow-lg group-hover/m:block" style={{ top: up ? -48 : 26 }}>{e.name} · {fmtD(e.date)}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* May note */}
+            <div className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-rose-700">
+              <span className="mt-0.5 h-3 w-3 flex-shrink-0 rounded-sm" style={{ background: "rgba(239,68,68,0.12)", border: "1px dashed rgba(239,68,68,0.6)" }} />
+              <span>Software engineer David Nelson could only work part-time due to lack of funds.</span>
+            </div>
+            {/* ordered backlog — hover for a one-line explanation */}
+            <div className="border-t border-zinc-100 pt-3">
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Up next</div>
+              <ol className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                {TECH_NEXT.map(([task, desc], i) => (
+                  <li key={task} className="group/t relative flex items-start gap-1.5 text-xs leading-snug text-zinc-700">
+                    <span className="font-bold text-zinc-400">{i + 1}.</span>
+                    <span className="hover:text-blue-700">{task}</span>
+                    <span className="pointer-events-none absolute left-5 top-full z-30 hidden w-60 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-normal leading-snug text-zinc-600 shadow-xl group-hover/t:block">{desc}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        );
+      }
       function DonorRoadmap({ worldGeo }) {
         const [idx, setIdx] = useState(0);
         const builtSet = useMemo(() => builtCumulative(idx), [idx]);
@@ -1728,9 +1814,8 @@
           setIdx(Math.max(0, Math.min(N - 1, Math.round(((pct - INSET) / (100 - 2 * INSET)) * (N - 1)))));
         };
         return (
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Roadmap</div>
-            <div className="mb-3 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
+          <div className="p-4">
+            <div className="mb-3 text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Impact Roadmap</div>
             <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
               <span className="text-[10px] text-zinc-400">{idx + 1} / {N}</span>
@@ -1773,11 +1858,11 @@
       // Education Operating System — three expandable cards, each with a small bespoke visual
       function EOSCards() {
         const cards = [
-          { icon: "fa-gauge-high", title: "Measure", tag: "Digital ASER, every week", color: "#6366f1",
-            body: "PadhaiPal conducts a digital version of the internationally recognised ASER test every week for active users to gauge a student's progress." },
           { icon: "fa-book-open-reader", title: "Teach", tag: "WhatsApp voice message lessons every evening", color: "#10b981",
             body: "PadhaiPal tracks the student's performance across every letter to make lessons as efficient as possible." },
-          { icon: "fa-comments", title: "Communicate", tag: "parent, teacher, government official group chats", color: "#0ea5e9",
+          { icon: "fa-gauge-high", title: "Measure", tag: "Digital ASER, every week", color: "#6366f1",
+            body: "PadhaiPal conducts a digital version of the internationally recognised ASER test every week for active users to gauge a student's progress." },
+          { icon: "fa-comments", title: "Communicate", tag: "Connect parents, teachers and officials", color: "#0ea5e9",
             body: "Become the main communication channel between parents, teachers and government officials. Facilitate report sharing up the hierarchy, instructions down the hierarchy and surface peer performance." },
         ];
         return (
@@ -1912,8 +1997,6 @@
       function DonorAsk({ onDonate, donateMap, donateTarget }) {
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl" style={{ color: "#1d9edf" }}>Help us empower kids</div>
-
             {/* live finances: balance over time + live bank feed, side by side */}
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
               <BankBalancePanel />
@@ -1923,7 +2006,7 @@
             {/* donate-by-region map (same drill-down as the educator map) */}
             <div className="mt-6">
               <div className="mb-2 text-sm font-bold text-zinc-900">Choose where your donation goes</div>
-              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to see it · double-click to drill in</div>
+              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to select it · double-click to drill in</div>
               {donateMap}
             </div>
 
@@ -1990,7 +2073,15 @@
           <div className="mx-auto w-[95%] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
             <p className="pt-8">
               <span className="group relative inline-block font-extrabold text-blue-700">$200T
-                <span className={note} style={scribble}>actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
+                <span className={note} style={scribble}>
+                  <span className="block">actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
+                  {/* progressively-fainter list, masked so it looks cut off (i.e. there's more) */}
+                  <span className="mt-1 block text-xl leading-snug" style={{ WebkitMaskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)", maskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)" }}>
+                    <span className="block">that is 100x SpaceX IPO</span>
+                    <span className="block">5x US Debt</span>
+                    <span className="block">half of all household wealth</span>
+                  </span>
+                </span>
               </span>{" "}of economic value would be{" "}
               <span className="group relative inline-block font-semibold text-emerald-700">
                 {/* "counterfactually" inserted above, centred on the gap before "unlocked", with a proofreader's caret — on hover.
@@ -1998,7 +2089,7 @@
                 <span className="absolute bottom-full left-0 hidden w-max -translate-x-1/2 whitespace-nowrap pb-2 text-2xl font-semibold leading-none text-emerald-600 group-hover:block" style={scribble}>counterfactually</span>
                 <span className="pointer-events-none absolute bottom-full left-0 hidden -translate-x-1/2 text-base leading-none text-emerald-600 group-hover:block">‸</span>
                 unlocked
-              </span>{" "}if every child could read.
+              </span>{" "}by 2050 if every child could read.
             </p>
             <p className="relative mt-12 pb-14">
               PadhaiPal's goal is to{" "}
@@ -2007,7 +2098,7 @@
               </span>{" "}capture{" "}
               <span className="group relative inline-block font-extrabold text-violet-700">47%
                 {/* hand-drawn arrow curving up to a one-line scribbled note — on hover (pt-1 bridges the hover gap) */}
-                <span className="absolute left-1/2 top-full hidden -translate-x-1/4 items-start gap-1 pt-1 group-hover:flex">
+                <span className="absolute left-1/2 top-full hidden translate-x-1 items-start gap-1 pt-1 group-hover:flex">
                   <svg width="56" height="44" viewBox="0 0 56 44" fill="none" className="-mt-2 flex-shrink-0 text-zinc-400">
                     <path d="M10 8 C 14 30, 28 35, 46 35" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                     <path d="M46 35 l -13 -5 M46 35 l -13 5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -2039,6 +2130,13 @@
                 <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-blue-100 bg-blue-50 px-6 py-12">
                   <ValueStatement />
                 </div>
+              </div>
+
+              {/* 2b · learners in the field */}
+              <div className="flex items-center justify-center gap-3 sm:gap-5">
+                <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md sm:h-52 sm:w-44" />
+                <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-52 w-72 flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg sm:h-64 sm:w-96" />
+                <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md sm:h-52 sm:w-44" />
               </div>
 
               {/* 3 · what PadhaiPal does */}
@@ -2084,11 +2182,20 @@
                 </div>
               </div>
 
-              {/* 6 · the opportunity */}
-              <DonorRoadmap worldGeo={worldGeo} />
+              {/* 6 · roadmap — impact + technical in one card */}
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Roadmap</div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <DonorRoadmap worldGeo={worldGeo} />
+                  <div className="border-t border-zinc-200"><TechRoadmap /></div>
+                </div>
+              </div>
 
               {/* 7 · the ask */}
-              <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Help us empower kids</div>
+                <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
+              </div>
 
               {/* 8 · footer / trust */}
               <DonorFooter />
@@ -2127,6 +2234,7 @@
         const [tf, setTf] = useState({ k: 1, x: 0, y: 0 });
         const drag = useRef(null);
         const moved = useRef(false);
+        const donateClick = useRef(null);   // donor map: manual double-click detection (native dblclick is unreliable over the spinnable globe)
         // the world level always renders as a 3D globe (orthographic); deeper levels are flat
         const [globeRot, setGlobeRot] = useState([-79, -22]);   // centre the globe on India (lon 79, lat 22)
         const [chartY, setChartY] = useState("acer");          // y-axis metric for the learning-curve chart
@@ -2964,8 +3072,10 @@
         const DON_GREY = "#d4d4d8";
         const CG_BAR = 50;          // $/DALY — Coefficient Giving's funding bar (the yellow end of the scale)
         const CHILD_FRAC = 0.12;    // rough school-age share of a population
-        const DON_BLOCK = 0;        // the one funded block in Lucknow
+        const DON_BLOCK = 0;        // the one funded block in Lucknow (Malihabad)
         const DON_SCHOOLS = 8;      // first N schools of that block are funded (coloured)
+        const DON_TRIAL = 3;        // first N schools are live pilots currently trialing PadhaiPal
+        const TRIAL = "#1d9edf", TRIAL_SEL = "#0b5d8f";   // distinct colour for trialing schools
         const isUP = (n) => /uttar pradesh/i.test(n || "");
         const isLko = (n) => /lucknow/i.test(n || "");
         // deterministic, cost-effective $/DALY for a funded area (deeper targeting => cheaper)
@@ -2984,8 +3094,15 @@
             return {
               fill: sel ? ceColorSel(cpd) : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
               style: { cursor: "pointer" },
-              onClick: (e) => { e.stopPropagation(); if (moved.current) return; setDonateSel(payload); },
-              onDoubleClick: drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
+              // single click selects; a second click on the same area within 400ms drills in
+              // (manual detection — the spinnable globe perturbs the native dblclick event)
+              onClick: (e) => {
+                e.stopPropagation();
+                if (moved.current) return;
+                const now = Date.now(), prev = donateClick.current;
+                if (drill && prev && prev.id === id && now - prev.t < 400) { donateClick.current = null; moved.current = false; drill(); }
+                else { donateClick.current = { id, t: now }; setDonateSel(payload); }
+              },
             };
           };
           const greyProps = { fill: DON_GREY, stroke: "#ffffff", strokeWidth: 0.8 / tf.k, style: { cursor: "default" } };
@@ -3042,12 +3159,19 @@
                       })}
                       {level === "schools" && blk && <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} pointerEvents="none" />}
                       {level === "schools" && schools && schools.map((sc) => {
-                        if (sc.k >= DON_SCHOOLS) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
+                        const trial = sc.k < DON_TRIAL;
+                        if (sc.k >= DON_SCHOOLS && !trial) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
                         const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
-                        const payload = { id: sc.id, title: sc.name, sub: "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
-                        return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : 6) / tf.k}
-                          fill={sel ? ceColorSel(cpd) : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
-                          style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />;
+                        const fill = trial ? (sel ? TRIAL_SEL : TRIAL) : (sel ? ceColorSel(cpd) : ceColor(cpd));
+                        const payload = { id: sc.id, title: sc.name, sub: trial ? "Currently trialing PadhaiPal" : "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
+                        return (
+                          <g key={sc.id}>
+                            {trial && <circle cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 13 : 11) / tf.k} fill={TRIAL} opacity="0.25" pointerEvents="none" />}
+                            <circle cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : trial ? 7.5 : 6) / tf.k}
+                              fill={fill} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
+                              style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />
+                          </g>
+                        );
                       })}
                     </g>
                   </svg>
@@ -3098,6 +3222,7 @@
                     <span className="h-2.5 w-20 rounded-sm" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }} />
                     <span className="text-[9px] text-zinc-400">$50 bar</span>
                   </div>
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-offset-0" style={{ background: TRIAL, boxShadow: "0 0 0 3px " + TRIAL + "40" }} /> Trialing PadhaiPal now</div>
                   <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not funded yet</div>
                 </div>
               </div>
