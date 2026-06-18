@@ -28,6 +28,16 @@
     .glowpulse { animation: glowpulse 1s ease-in-out infinite; }
     @keyframes barglow { 0%,100% { box-shadow: 0 0 4px 1px rgba(37,99,235,.55); } 50% { box-shadow: 0 0 9px 2px rgba(37,99,235,.95); } }
     .bar-sel { animation: barglow 1.2s ease-in-out infinite; }
+    /* EOS card icon animations */
+    @keyframes eosfloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+    .eos-float { animation: eosfloat 3s ease-in-out infinite; }
+    @keyframes eossweep { 0% { transform: rotate(-22deg); } 50% { transform: rotate(22deg); } 100% { transform: rotate(-22deg); } }
+    .group:hover .eos-sweep { animation: eossweep 1.1s ease-in-out infinite; transform-origin: 50% 60%; }
+    @keyframes eosgrow { 0%,100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+    .group:hover .eos-grow { animation: eosgrow 1.2s ease-in-out infinite; }
+    .group:hover .eos-pop { animation: eosgrow 0.9s ease-in-out infinite; }
+    @keyframes typingdot { 0% { opacity: .2; } 20% { opacity: 1; } 100% { opacity: .2; } }
+    .tdot { animation: typingdot 1.2s infinite; }
   </style>
 </head>
 <body>
@@ -51,6 +61,7 @@
       { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" } },
       { code: "ht",           label: "Head Teacher", home: "schools", who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0 } },
       { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
+      { code: "measure",      label: "Measure demo", home: "world",   who: "PadhaiPal",    where: "Global · dummy data", nav: {} },
     ];
     const ROLE_BY = {}; ROLES.forEach((r) => { ROLE_BY[r.code] = r; });
 
@@ -1860,25 +1871,169 @@
       }
 
       // Education Operating System — three expandable cards, each with a small bespoke visual
+      // ---- expanded panel content for each "What PadhaiPal Does" card ----
+      const FlowChip = ({ children, c }) => <span className="rounded-md px-2 py-1 text-[11px] font-semibold" style={{ background: c + "18", color: c }}>{children}</span>;
+
+      function TeachPanel() {
+        const C = "#10b981";
+        return (
+          <div className="grid gap-6 text-left md:grid-cols-2">
+            <div>
+              <h4 className="text-lg font-extrabold text-zinc-900">We teach children to read in a language they already speak</h4>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">Every evening PadhaiPal sends one short WhatsApp voice-message lesson. Because the child already speaks the language, each lesson builds on knowledge they have — they are learning to <span className="font-semibold text-zinc-800">decode</span>, not to learn a new tongue.</p>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-600">Each letter is anchored to a memorable picture (an <span className="font-semibold text-zinc-800">image–letter association</span>), then letters are chained back into whole words the child can read. The lesson loop:</p>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <FlowChip c={C}>word</FlowChip><span className="text-zinc-400">→</span>
+                <FlowChip c={C}>letter</FlowChip><span className="text-zinc-400">→</span>
+                <FlowChip c={C}>image</FlowChip><span className="text-zinc-400">→</span>
+                <FlowChip c={C}>letter / image association</FlowChip><span className="text-zinc-400">→</span>
+                <FlowChip c={C}>word</FlowChip>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> PadhaiPal tracks performance on every individual letter and a decision tree picks the next word to drill the letters a child is weakest on — never wasting a second on letters they've already mastered.</p>
+              <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110" style={{ background: C }}>Try it now <span aria-hidden>→</span></a>
+            </div>
+            <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
+              <i className="fa-solid fa-diagram-project mb-3 text-3xl text-zinc-300" />
+              <div className="text-sm font-semibold text-zinc-500">[ image placeholder ]</div>
+              <div className="mt-2 max-w-xs text-xs leading-relaxed text-zinc-400">Tom to make a flow diagram that explains the lesson progression from word → letter → image → letter/image association → word.</div>
+            </div>
+          </div>
+        );
+      }
+
+      function MeasurePanel() {
+        return (
+          <div className="text-left">
+            <p className="text-sm leading-relaxed text-zinc-600">Every week PadhaiPal runs a digital assessment that places each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score. Results roll up the whole government hierarchy — from one student to the head of education.</p>
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700">
+              <i className="fa-solid fa-triangle-exclamation" /> Dummy data — illustrative only. Drag to spin the globe; double-click to drill from the world all the way down to an individual student.
+            </div>
+            <div className="relative mt-3 h-[68vh] overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
+              <WorldMap role="measure" setRole={() => {}} />
+            </div>
+          </div>
+        );
+      }
+
+      function WhatsAppChat({ onReport }) {
+        const msg = (name, color, text, opts = {}) => (
+          <div className={"max-w-[82%] rounded-lg px-2.5 py-1.5 shadow-sm " + (opts.me ? "ml-auto bg-[#dcf8c6]" : "bg-white")}>
+            {!opts.me && <div className="text-[10px] font-bold" style={{ color }}>{name}</div>}
+            <div className="text-[11px] leading-snug text-zinc-800">{text}</div>
+            <div className="mt-0.5 text-right text-[8px] text-zinc-400">{opts.t || "9:0" + (opts.i || 1) + " PM"}</div>
+          </div>
+        );
+        return (
+          <div className="overflow-hidden rounded-2xl border border-zinc-300 shadow-md">
+            <div className="flex items-center gap-2 bg-[#075e54] px-3 py-2 text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm"><i className="fa-solid fa-people-group" /></span>
+              <div><div className="text-xs font-bold">P.S. Malihabad · Principals &amp; Teachers</div><div className="text-[9px] text-emerald-100">14 members</div></div>
+            </div>
+            <div className="space-y-1.5 bg-[#e5ddd5] p-3">
+              {msg("Head Teacher (Principal)", "#1f7aec", "Good evening all 🙏 This week's PadhaiPal report cards are out.", { i: 1 })}
+              <button onClick={onReport} className="block w-[82%] rounded-lg bg-white px-2.5 py-2 text-left shadow-sm hover:bg-zinc-50">
+                <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded bg-rose-100 text-rose-600"><i className="fa-solid fa-file-pdf" /></span><div><div className="text-[11px] font-semibold text-zinc-800">Class-3 Report Card.pdf</div><div className="text-[9px] text-zinc-400">tap to open</div></div></div>
+              </button>
+              {msg("Sunita (Teacher)", "#d4318c", "Aarav has mastered 6 new letters this week 👏", { i: 2 })}
+              {msg("You", "", "Shabaash! Let's push the bottom 5 students. 📈", { me: true, i: 3 })}
+              {msg("Ramesh (Teacher)", "#0a8f5b", "Ji sir, will send parents a reminder tonight.", { i: 4 })}
+            </div>
+          </div>
+        );
+      }
+
+      function CommunicatePanel({ onReport }) {
+        const Row = ({ icon, color, title, children }) => (
+          <div className="flex gap-3">
+            <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm" style={{ background: color + "1f", color }}><i className={"fa-solid " + icon} /></span>
+            <div><div className="text-sm font-bold text-zinc-900">{title}</div><div className="text-xs leading-relaxed text-zinc-600">{children}</div></div>
+          </div>
+        );
+        return (
+          <div className="grid gap-6 text-left md:grid-cols-2">
+            <WhatsAppChat onReport={onReport} />
+            <div className="space-y-4">
+              <p className="text-sm leading-relaxed text-zinc-600">PadhaiPal becomes the main communication channel between parents, teachers and government officials — moving information in three directions:</p>
+              <Row icon="fa-arrow-up" color="#0ea5e9" title="Up the hierarchy">Weekly report cards flow upward — parent → teacher → head teacher → block → district → state. <button onClick={onReport} className="font-semibold text-blue-600 hover:underline">View a sample report card →</button></Row>
+              <Row icon="fa-arrow-down" color="#10b981" title="Down the hierarchy">Instructions and encouragement flow downward — officials nudge head teachers, who nudge teachers and parents to keep children learning.</Row>
+              <Row icon="fa-arrows-left-right" color="#f59e0b" title="Horizontal accountability">Peers see each other's progress side-by-side, creating friendly accountability across classrooms, schools and blocks.</Row>
+            </div>
+          </div>
+        );
+      }
+
+      function ReportCardModal({ onClose }) {
+        const letters = ["क", "म", "र", "स", "ल", "न", "ा", "ि"];
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between rounded-t-2xl bg-zinc-800 px-4 py-2 text-white">
+                <span className="text-xs font-semibold">Class-3 Report Card.pdf · dummy data</span>
+                <button onClick={onClose} className="text-zinc-300 hover:text-white">✕</button>
+              </div>
+              <div className="p-6">
+                <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
+                  <div><div className="text-lg font-black text-blue-700">padhAIpal</div><div className="text-[10px] text-zinc-400">Weekly Reading Report Card</div></div>
+                  <div className="text-right text-[10px] text-zinc-500">Week 24 · 2026<br />P.S. Malihabad, Lucknow</div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div><div className="text-[10px] uppercase tracking-wide text-zinc-400">Student</div><div className="font-semibold text-zinc-900">Aarav S.</div></div>
+                  <div><div className="text-[10px] uppercase tracking-wide text-zinc-400">Class · Roll</div><div className="font-semibold text-zinc-900">3 · 14</div></div>
+                </div>
+                <div className="mt-4 rounded-xl border border-zinc-200 p-3">
+                  <div className="flex items-center justify-between"><span className="text-xs font-semibold text-zinc-500">ASER reading level</span><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Word → Paragraph</span></div>
+                  <div className="mt-2 flex gap-1">{["Letter", "Word", "Paragraph", "Story"].map((s, i) => <div key={s} className="flex-1 rounded px-1 py-1 text-center text-[9px] font-semibold" style={{ background: i <= 1 ? "#10b981" : "#e4e4e7", color: i <= 1 ? "#fff" : "#71717a" }}>{s}</div>)}</div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  {[["Score", "72"], ["Letters mastered", "21"], ["Active days", "6/7"]].map(([l, v]) => <div key={l} className="rounded-lg bg-zinc-50 p-2"><div className="text-xl font-bold text-zinc-900">{v}</div><div className="text-[9px] text-zinc-500">{l}</div></div>)}
+                </div>
+                <div className="mt-3"><div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-400">Letters mastered this week</div><div className="flex flex-wrap gap-1">{letters.map((l, i) => <span key={i} className="flex h-7 w-7 items-center justify-center rounded bg-blue-50 text-sm font-bold text-blue-700">{l}</span>)}</div></div>
+                <div className="mt-4 text-[9px] text-zinc-400">Illustrative dummy data — not a real student. Figures generated for demonstration only.</div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // What PadhaiPal Does — 3 cards; hovering/clicking opens a full-width panel beneath all three
       function EOSCards() {
         const cards = [
-          { icon: "fa-book-open-reader", title: "Teach", tag: "WhatsApp voice message lessons every evening", color: "#10b981",
-            body: "PadhaiPal tracks the student's performance across every letter to make lessons as efficient as possible." },
-          { icon: "fa-gauge-high", title: "Measure", tag: "Digital ASER, every week", color: "#6366f1",
-            body: "PadhaiPal conducts a digital version of the internationally recognised ASER test every week for active users to gauge a student's progress." },
-          { icon: "fa-comments", title: "Communicate", tag: "Connect parents, teachers and officials", color: "#0ea5e9",
-            body: "Become the main communication channel between parents, teachers and government officials. Facilitate report sharing up the hierarchy, instructions down the hierarchy and surface peer performance." },
+          { key: "Teach", icon: "fa-book-open-reader", anim: "eos-pop", tag: "WhatsApp voice message lessons every evening", color: "#10b981" },
+          { key: "Measure", icon: "fa-gauge-high", anim: "eos-sweep", tag: "Digital ASER & LaNA, every week", color: "#6366f1" },
+          { key: "Communicate", icon: "fa-comments", anim: "eos-grow", tag: "Connect parents, teachers and officials", color: "#0ea5e9" },
         ];
+        const [active, setActive] = useState("Teach");
+        const [hov, setHov] = useState(null);
+        const [report, setReport] = useState(false);
+        const timer = useRef(null);
+        const open = (k) => { clearTimeout(timer.current); setActive(k); };
+        const closeSoon = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setActive(null), 220); };
+        const cur = cards.find((c) => c.key === active);
         return (
-          <div className="flex flex-col items-start gap-3 md:flex-row">
-            {cards.map((c) => (
-              <div key={c.title} className="group w-full flex-1 cursor-default rounded-2xl border bg-white p-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: c.color + "33" }}>
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-3xl" style={{ background: c.color + "1f", color: c.color }}><i className={"fa-solid " + c.icon} /></div>
-                <div className="mt-3 text-lg font-extrabold" style={{ color: c.color }}>{c.title}</div>
-                <div className="mt-1 text-xs font-medium text-zinc-500">{c.tag}</div>
-                <div className="mt-3 hidden border-t border-zinc-100 pt-3 text-left text-xs leading-relaxed text-zinc-600 group-hover:block">{c.body}</div>
+          <div>
+            <div className="flex flex-col gap-3 md:flex-row">
+              {cards.map((c) => {
+                const lit = active === c.key || hov === c.key;
+                return (
+                  <button key={c.key} onMouseEnter={() => { setHov(c.key); open(c.key); }} onMouseLeave={() => { setHov(null); closeSoon(); }} onClick={() => open(c.key)}
+                    className="group w-full flex-1 rounded-2xl border bg-white p-5 text-center transition-all duration-200"
+                    style={{ borderColor: lit ? c.color + "88" : c.color + "33", transform: lit ? "translateY(-4px)" : "none", boxShadow: lit ? "0 16px 36px -12px " + c.color + "88" : "0 1px 2px rgba(0,0,0,.05)" }}>
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-3xl eos-float" style={{ background: c.color + "1f", color: c.color }}><i className={"fa-solid " + c.icon + " " + c.anim} /></div>
+                    <div className="mt-3 text-lg font-extrabold" style={{ color: c.color }}>{c.key}</div>
+                    <div className="mt-1 text-xs font-medium text-zinc-500">{c.tag}</div>
+                    <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: active === c.key ? c.color : "#d4d4d8" }}>{active === c.key ? "▾ showing below" : "hover to expand"}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {cur && (
+              <div onMouseEnter={() => open(cur.key)} onMouseLeave={closeSoon} className="mt-3 rounded-2xl border bg-white p-5 shadow-sm transition" style={{ borderColor: cur.color + "55" }}>
+                {active === "Teach" && <TeachPanel />}
+                {active === "Measure" && <MeasurePanel />}
+                {active === "Communicate" && <CommunicatePanel onReport={() => setReport(true)} />}
               </div>
-            ))}
+            )}
+            {report && <ReportCardModal onClose={() => setReport(false)} />}
           </div>
         );
       }
@@ -3599,7 +3754,7 @@
               Signed in as
               <select value={role} onChange={(e) => setRole(e.target.value)} title="Switch dashboard / signed-in role"
                 className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-semibold text-white hover:bg-zinc-700 focus:outline-none">
-                {ROLES.map((r) => <option key={r.code} value={r.code} className="bg-zinc-800 text-white">{r.label}</option>)}
+                {ROLES.filter((r) => r.code !== "measure").map((r) => <option key={r.code} value={r.code} className="bg-zinc-800 text-white">{r.label}</option>)}
               </select>
             </label>
           </div>
