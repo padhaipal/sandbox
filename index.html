@@ -7,6 +7,9 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> <!-- card icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet"> <!-- hand-scribbled annotations -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/d3@7"></script>                              <!-- global map + school force graph -->
@@ -1974,22 +1977,41 @@
       }
       // Headline value proposition — its own large section, with interactive inline "cards"
       function ValueStatement() {
-        const tip = "absolute left-1/2 top-full z-30 hidden -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-sm font-normal leading-snug shadow-lg group-hover:block";
+        const scribble = { fontFamily: "'Caveat', cursive" };
+        // a prettier inline link, rendered in the hand-scribbled font of its caption
+        const Link = ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="font-bold text-blue-600 decoration-blue-300 decoration-2 underline-offset-2 transition-colors hover:text-blue-700 hover:decoration-blue-500" style={{ textDecorationLine: "underline" }}>{children}</a>
+        );
+        // small hand-scribbled caption placed under a word (not in a card)
+        const note = "absolute left-1/2 top-full mt-1 w-max max-w-[16rem] -translate-x-1/2 text-center text-2xl font-medium leading-tight text-zinc-500";
         return (
           <div className="mx-auto w-[95%] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
-            <p>
-              <span className="group relative inline-block cursor-help rounded-lg bg-blue-50 px-2 font-extrabold text-blue-700">$200T
-                <span className={tip + " w-64"}><a href={WWHGE_PDF} target="_blank" rel="noreferrer" className="pointer-events-auto text-blue-600 underline">actually $196T USD but who's counting</a></span>
+            <p className="pt-12">
+              <span className="relative inline-block">$200T
+                <span className={note} style={scribble}>actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
               </span>{" "}of economic value would be{" "}
-              <span className="group cursor-help rounded-lg bg-emerald-50 px-2 font-semibold text-emerald-700"><span className="hidden group-hover:inline">counterfactually </span>unlocked</span>{" "}
-              if every child could read.
+              <span className="relative inline-block">
+                {/* "counterfactually" inserted above the line with a proofreader's caret */}
+                <span className="absolute bottom-full left-1/2 mb-2 w-max -translate-x-1/2 text-2xl font-semibold leading-none text-emerald-600" style={scribble}>counterfactually</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 text-base leading-none text-emerald-600">‸</span>
+                unlocked
+              </span>{" "}if every child could read.
             </p>
-            <p className="mt-5">
+            <p className="relative mt-20 pb-16">
               PadhaiPal's goal is to{" "}
-              <span className="group relative inline-block cursor-help rounded-lg bg-amber-50 px-2 font-semibold text-amber-700">cost effectively
-                <span className={tip + " w-72"}><a href={CG_LINK} target="_blank" rel="noreferrer" className="pointer-events-auto text-amber-700 underline">achieves Coefficient Giving's funding bar of $50/DALY</a></span>
+              <span className="relative inline-block">cost effectively
+                <span className={note + " max-w-[20rem]"} style={scribble}>achieves Coefficient Giving's funding bar of <Link href={CG_LINK}>$50/DALY</Link></span>
               </span>{" "}capture{" "}
-              <span className="group cursor-help rounded-lg bg-violet-50 px-2 font-extrabold text-violet-700"><span className="group-hover:text-zinc-400 group-hover:line-through">50%</span><span className="hidden group-hover:inline"> 47% <a href={PP_ANALYSIS} target="_blank" rel="noreferrer" className="text-violet-700 underline">and here is our analysis</a></span></span>{" "}of that.
+              <span className="relative inline-block font-extrabold">47%
+                {/* hand-drawn arrow pointing down-right to a scribbled note */}
+                <span className="absolute left-full top-1/2 ml-1 flex items-start gap-1">
+                  <svg width="44" height="38" viewBox="0 0 44 38" fill="none" className="mt-1 flex-shrink-0 text-zinc-400">
+                    <path d="M3 5 C 6 22, 18 31, 36 30" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                    <path d="M36 30 l -10 -1 M36 30 l -4 -9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                  </svg>
+                  <span className="whitespace-nowrap text-2xl font-medium leading-tight text-zinc-500" style={scribble}>our analysis <Link href={PP_ANALYSIS}>here</Link></span>
+                </span>
+              </span>{" "}of that.
             </p>
           </div>
         );
