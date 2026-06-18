@@ -2058,7 +2058,7 @@
       function ValueHero() {
         return (
           <div className="text-center">
-            <img src="./padhaipal-logo.svg" alt="padhAIpal" className="mx-auto w-full max-w-[420px]" />
+            <img src="./padhaipal-logo.svg" alt="padhAIpal" className="mx-auto max-h-[28vh] w-auto max-w-[460px]" />
           </div>
         );
       }
@@ -2095,7 +2095,7 @@
                 unlocked
               </span>{" "}by 2050 if every child could read.
             </p>
-            <p className="relative mt-12 pb-14">
+            <p className="relative mt-6 pb-14">
               PadhaiPal's goal is to{" "}
               <span className="group relative inline-block font-semibold text-amber-700">cost effectively
                 <span className={note} style={scribble}>achieves Coefficient Giving's funding bar of <Link href={CG_LINK}>$50/DALY</Link></span>
@@ -2126,21 +2126,22 @@
         return (
           <div className="flex-1 overflow-y-auto overflow-x-clip bg-zinc-50">
             <div className="mx-auto max-w-6xl space-y-12 p-6">
-              {/* 1 · logo + wordmark */}
-              <div className="pt-2"><ValueHero /></div>
+              {/* hero block — tighter spacing; logo 30vh, value bar 30vh, photos 50vh (bleeding off-screen) */}
+              <div className="space-y-4">
+                {/* 1 · logo + wordmark — 30% window height */}
+                <div className="flex h-[30vh] items-center justify-center"><ValueHero /></div>
 
-              {/* 2 · headline value proposition — full-width (100vw) bar with a slightly different background */}
-              <div className="py-2">
-                <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-blue-100 bg-blue-50 px-6 py-12">
+                {/* 2 · headline value proposition — full-width bar, 30% window height */}
+                <div className="relative left-1/2 flex h-[30vh] w-screen -translate-x-1/2 items-center justify-center border-y border-blue-100 bg-blue-50 px-6">
                   <ValueStatement />
                 </div>
-              </div>
 
-              {/* 2b · learners in the field */}
-              <div className="flex items-center justify-center gap-3 sm:gap-5">
-                <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md sm:h-52 sm:w-44" />
-                <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-52 w-72 flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg sm:h-64 sm:w-96" />
-                <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md sm:h-52 sm:w-44" />
+                {/* 2b · learners in the field — 50% window height, full-bleed, running off the screen edges */}
+                <div className="relative left-1/2 flex w-screen -translate-x-1/2 items-center justify-center gap-3">
+                  <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-[40vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+                  <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-[50vh] w-[46vw] flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg" />
+                  <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-[40vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+                </div>
               </div>
 
               {/* 3 · what PadhaiPal does */}
