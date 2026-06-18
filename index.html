@@ -2937,81 +2937,134 @@
         //  of its schools. Everything else is greyed and non-interactive.
         //  Single click = info card; double click = drill into a coloured area.
         // ---------------------------------------------------------------
-        const DON = "#1d9edf", DON_SEL = "#0b5d8f", DON_GREY = "#d4d4d8";
-        const DON_BLOCK = 0;     // the one funded block in Lucknow
-        const DON_SCHOOLS = 8;   // first N schools of that block are funded (coloured)
+        const DON_SEL = "#1d9edf", DON_GREY = "#d4d4d8";
+        const CG_BAR = 50;          // $/DALY — Coefficient Giving's funding bar (the yellow end of the scale)
+        const CHILD_FRAC = 0.12;    // rough school-age share of a population
+        const DON_BLOCK = 0;        // the one funded block in Lucknow
+        const DON_SCHOOLS = 8;      // first N schools of that block are funded (coloured)
         const isUP = (n) => /uttar pradesh/i.test(n || "");
         const isLko = (n) => /lucknow/i.test(n || "");
-        const donFill = (on, sel) => sel ? DON_SEL : (on ? DON : DON_GREY);
-        const donPick = (label, title, sub) => setDonateSel({ label, title, sub });
+        // deterministic, cost-effective $/DALY for a funded area (deeper targeting => cheaper)
+        const cpdOf = (id, bias) => clamp(10 + (hashStr("cpd:" + id) % 30) - bias, 5, CG_BAR);
+        // green (most cost-effective) -> yellow ($50/DALY, the Coefficient Giving bar)
+        const ceColor = (cpd) => d3.interpolateRgb("#15803d", "#eab308")(clamp(cpd / CG_BAR, 0, 1));
         // build a tail "… - <a2f> - <a1f> - India" for the current breadcrumb
         const donTail = () => [a2f && a2f.name, a1f && a1f.name, "India"].filter(Boolean).join(" - ");
         const donateTarget = donateSel ? donateSel.label : "most needed";
         const donateMap = (() => {
-          const selId = donateSel && donateSel.title;
-          const areaProps = (on, label, title, sub, drill) => ({
-            fill: donFill(on, selId === title), stroke: "#ffffff", strokeWidth: 0.8 / tf.k,
-            style: { cursor: on ? "pointer" : "default" },
-            onClick: on ? (e) => { e.stopPropagation(); donPick(label, title, sub); } : undefined,
-            onDoubleClick: on && drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
-          });
+          // a funded (coloured) area: green→yellow by cost-effectiveness, or brand-blue when selected
+          const areaProps = (id, cpd, payload, drill) => {
+            const sel = donateSel && donateSel.id === id;
+            return {
+              fill: sel ? DON_SEL : ceColor(cpd), stroke: sel ? "#0f172a" : "#ffffff", strokeWidth: (sel ? 1.6 : 0.8) / tf.k,
+              style: { cursor: "pointer" },
+              onClick: (e) => { e.stopPropagation(); if (moved.current) return; setDonateSel(payload); },
+              onDoubleClick: drill ? (e) => { e.stopPropagation(); drill(); } : undefined,
+            };
+          };
+          const greyProps = { fill: DON_GREY, stroke: "#ffffff", strokeWidth: 0.8 / tf.k, style: { cursor: "default" } };
+          // spin the globe by dragging — only at the world level (orthographic rotate)
+          const onSpinDown = (e) => { if (!isWorld) return; drag.current = { x: e.clientX, y: e.clientY, rot: globeRot }; moved.current = false; };
+          const onSpinMove = (e) => { if (!drag.current || !isWorld) return; const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y; if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true; const [l0, p0] = drag.current.rot; setGlobeRot([l0 + dx * 0.4, clamp(p0 - dy * 0.4, -89, 89)]); };
+          const onSpinUp = () => { drag.current = null; };
+          const spin = isWorld ? { onMouseDown: onSpinDown, onMouseMove: onSpinMove, onMouseUp: onSpinUp, onMouseLeave: onSpinUp } : {};
           return (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
               <div className="relative h-[440px] w-full">
                 {!ready ? (
                   <div className="flex h-full items-center justify-center text-sm text-zinc-400">Loading world map…</div>
                 ) : (
-                  <svg viewBox={`0 0 ${size.w} ${size.h}`} className="block h-full w-full select-none"
-                    onClick={() => { if (LEVEL_ORDER.indexOf(level) > 0) { popUp(); } }}>
-                    <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`}>
+                  <svg viewBox={`0 0 ${size.w} ${size.h}`} className="block h-full w-full touch-none select-none"
+                    style={{ cursor: isWorld ? "grab" : "default" }} {...spin}
+                    onClick={() => { if (LEVEL_ORDER.indexOf(level) > 0 && !moved.current) popUp(); }}>
+                    <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`} style={{ transition: drag.current ? "none" : "transform .35s ease" }}>
                       {projd && projd.globe && <path d={projd.path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1.2 / tf.k} />}
                       {projd && projd.globe && <path d={projd.path(d3.geoGraticule10())} fill="none" stroke="#93c5fd" strokeWidth={0.5 / tf.k} opacity={0.6} pointerEvents="none" />}
 
                       {level === "world" && worldPaths && worldPaths.map((p) => {
-                        const on = p.iso === "IND";
-                        return <path key={p.i} d={p.d} {...areaProps(on, "India", "India", "Where PadhaiPal runs today", () => pickCountry({ iso: p.iso, name: p.name, feature: p.feature, covered: true }))} />;
+                        if (p.iso !== "IND") return <path key={p.i} d={p.d} {...greyProps} />;
+                        const id = "don.IND", cpd = cpdOf(id, 0);
+                        const payload = { id, title: p.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(p.feature, p.iso, p.name, true), cpd };
+                        return <path key={p.i} d={p.d} {...areaProps(id, cpd, payload, () => pickCountry({ iso: p.iso, name: p.name, feature: p.feature, covered: true }))} />;
                       })}
                       {level === "adm1" && adm1 && adm1.map((d0) => {
-                        const on = isUP(d0.name);
-                        return <path key={d0.id} d={d0.d} {...areaProps(on, d0.name + " - India", d0.name, "DGSE region", () => drillA1(d0.i))} />;
+                        if (!isUP(d0.name)) return <path key={d0.id} d={d0.d} {...greyProps} />;
+                        const cpd = cpdOf(d0.id, 8);
+                        const payload = { id: d0.id, title: d0.name, sub: "State · DGSE region", label: d0.name + " - India", demo: d0.demo, cpd };
+                        return <path key={d0.id} d={d0.d} {...areaProps(d0.id, cpd, payload, () => drillA1(d0.i))} />;
                       })}
                       {level === "adm2" && adm2 && adm2.map((d0) => {
-                        const on = isLko(d0.name);
-                        return <path key={d0.id} d={d0.d} {...areaProps(on, d0.name + " - " + donTail(), d0.name, "District (BSA)", () => drillA2(d0.j))} />;
+                        if (!isLko(d0.name)) return <path key={d0.id} d={d0.d} {...greyProps} />;
+                        const cpd = cpdOf(d0.id, 16);
+                        const payload = { id: d0.id, title: d0.name, sub: "District · BSA", label: d0.name + " - " + donTail(), demo: d0.demo, cpd };
+                        return <path key={d0.id} d={d0.d} {...areaProps(d0.id, cpd, payload, () => drillA2(d0.j))} />;
                       })}
                       {level === "adm3" && blocks && blocks.map((b) => {
-                        const on = b.k === DON_BLOCK;
-                        return <path key={b.id} d={b.d} {...areaProps(on, b.name + " - " + donTail(), b.name, "Block (BEO)", () => drillBlock(b.k))} />;
+                        if (b.k !== DON_BLOCK) return <path key={b.id} d={b.d} {...greyProps} />;
+                        const cpd = cpdOf(b.id, 22);
+                        const payload = { id: b.id, title: b.name, sub: "Block · BEO", label: b.name + " - " + donTail(), demo: b.demo, cpd };
+                        return <path key={b.id} d={b.d} {...areaProps(b.id, cpd, payload, () => drillBlock(b.k))} />;
                       })}
                       {level === "schools" && blk && <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} pointerEvents="none" />}
                       {level === "schools" && schools && schools.map((sc) => {
-                        const on = sc.k < DON_SCHOOLS;
-                        const sel = selId === sc.name;
+                        if (sc.k >= DON_SCHOOLS) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
+                        const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
+                        const payload = { id: sc.id, title: sc.name, sub: "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
                         return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : 6) / tf.k}
-                          fill={on ? (sel ? DON_SEL : DON) : DON_GREY} stroke="#ffffff" strokeWidth={1.2 / tf.k}
-                          style={{ cursor: on ? "pointer" : "default" }}
-                          onClick={on ? (e) => { e.stopPropagation(); donPick(sc.name + " - " + blk.name + " - " + donTail(), sc.name, "Government school"); } : undefined} />;
+                          fill={sel ? DON_SEL : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
+                          style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />;
                       })}
                     </g>
                   </svg>
                 )}
                 {busy && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-1.5 text-[12px] font-medium text-white shadow-lg">Loading boundaries…</div>}
+                {isWorld && ready && <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-white/85 px-3 py-1 text-[11px] font-medium text-zinc-600 shadow">drag to spin the globe · double-click India to drill in</div>}
                 {LEVEL_ORDER.indexOf(level) > 0 && (
                   <button onClick={() => popUp()} className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow hover:bg-zinc-50">↑ Up a level</button>
                 )}
-                {donateSel && (
-                  <div className="absolute right-3 top-3 w-60 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-sm font-bold text-zinc-900">{donateSel.title}</div>
-                      <button onClick={() => setDonateSel(null)} className="text-zinc-400 hover:text-zinc-700">✕</button>
+                {donateSel && (() => {
+                  const d = donateSel.demo, cpd = donateSel.cpd, kids = d ? d.pop * CHILD_FRAC : null;
+                  return (
+                    <div className="absolute right-3 top-3 w-72 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-zinc-900">{donateSel.title}</div>
+                          <div className="text-[11px] font-medium text-zinc-500">{donateSel.sub}</div>
+                        </div>
+                        <button onClick={() => setDonateSel(null)} className="-mt-1 text-zinc-400 hover:text-zinc-700">✕</button>
+                      </div>
+                      {d && (
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                          <div><dt className="text-zinc-400">Population</dt><dd className="font-semibold text-zinc-800">{fmtPop(d.pop)}</dd></div>
+                          <div><dt className="text-zinc-400">School-age kids</dt><dd className="font-semibold text-zinc-800">{fmtPop(kids)}</dd></div>
+                          <div><dt className="text-zinc-400">Area</dt><dd className="font-semibold text-zinc-800">{fmtArea(d.areaKm2)}</dd></div>
+                          <div><dt className="text-zinc-400">Adult literacy</dt><dd className="font-semibold text-zinc-800">{d.lit != null ? Math.round(d.lit * 100) + "%" : "—"}</dd></div>
+                          <div className="col-span-2"><dt className="text-zinc-400">Main languages</dt><dd className="font-semibold text-zinc-800">{(d.langs || []).slice(0, 3).join(", ") || "—"}</dd></div>
+                          <div className="col-span-2"><dt className="text-zinc-400">Speaks a script PadhaiPal can teach</dt><dd className="font-semibold text-zinc-800">{Math.round((d.phon || 0) * 100)}%</dd></div>
+                        </dl>
+                      )}
+                      <div className="mt-2 border-t border-zinc-100 pt-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-400">Cost-effectiveness</span>
+                          <span className="font-bold" style={{ color: ceColor(cpd) }}>${Math.round(cpd)}/DALY</span>
+                        </div>
+                        <div className="relative mt-1 h-2 w-full rounded-full" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }}>
+                          <div className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: clamp(cpd / CG_BAR, 0, 1) * 100 + "%", background: ceColor(cpd) }} />
+                        </div>
+                        <div className="mt-0.5 flex justify-between text-[9px] text-zinc-400"><span>more cost-effective</span><span>$50/DALY bar</span></div>
+                      </div>
+                      <div className="mt-2 text-[10px] leading-snug text-zinc-500">Double-click to drill in · grey areas aren't funded yet.</div>
                     </div>
-                    <div className="mt-0.5 text-[11px] font-medium" style={{ color: DON }}>{donateSel.sub}</div>
-                    <div className="mt-2 text-[11px] leading-snug text-zinc-500">Double-click a coloured area to drill into the next level. Grey areas aren't funded yet.</div>
+                  );
+                })()}
+                <div className="absolute bottom-3 left-3 rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-1.5 text-[10px] text-zinc-600 shadow">
+                  <div className="mb-1 font-semibold text-zinc-700">Cost-effectiveness ($/DALY)</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400">best</span>
+                    <span className="h-2.5 w-20 rounded-sm" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }} />
+                    <span className="text-[9px] text-zinc-400">$50 bar</span>
                   </div>
-                )}
-                <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-1.5 text-[10px] text-zinc-600 shadow">
-                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: DON }} /> Funded · donate-able
-                  <span className="ml-2 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not yet
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not funded yet</div>
                 </div>
               </div>
             </div>
