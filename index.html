@@ -1750,7 +1750,6 @@
       const TECH_NEXT = [
         ["Be auspiced by GDG", "Secure official backing from Google Developer Groups to add credibility and open doors with partners and governments."],
         ["Complete load tests", "Prove the system holds up under many thousands of concurrent learners on WhatsApp."],
-        ["Teach conjuncts", "Teach Hindi conjunct clusters (saṁyuktākṣar) — joined consonants beyond single letters and matras."],
         ["Teach sentences", "Move learners on from single words to reading whole sentences."],
         ["Teach comprehension", "Teach understanding of meaning, not just decoding the words on the screen."],
         ["Deliver a proxy ASER test", "Administer a digital stand-in for the ASER reading test to benchmark each child's level."],
@@ -1759,6 +1758,9 @@
         ["Conduct A/B tests", "Run controlled experiments to find which lesson variants drive the most learning."],
         ["Support other languages", "Extend PadhaiPal beyond Hindi to more languages and scripts."],
       ];
+      // per-item icon + accent colour for the "Up next" backlog cards
+      const NEXT_ICONS = ["fa-certificate", "fa-gauge-high", "fa-align-left", "fa-brain", "fa-clipboard-check", "fa-globe", "fa-chalkboard-user", "fa-flask-vial", "fa-language"];
+      const NEXT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#0ea5e9", "#ec4899", "#14b8a6", "#6366f1", "#ef4444", "#84cc16"];
       // Technical Roadmap — a to-scale timeline of shipped milestones + the ordered backlog (under the impact roadmap)
       function TechRoadmap() {
         const t0 = Date.parse("2026-03-01T00:00:00Z"), t1 = Date.parse("2026-06-05T00:00:00Z");
@@ -1773,7 +1775,7 @@
             {/* to-scale timeline (markers land on their real dates) */}
             <div className="relative mb-2 mt-6 h-28">
               {/* reduced-capacity shade over May */}
-              <div className="pointer-events-none absolute top-0 bottom-7 rounded" style={{ left: mayL + "%", width: (mayR - mayL) + "%", background: "rgba(239,68,68,0.10)", border: "1px dashed rgba(239,68,68,0.4)" }} />
+              <div className="pointer-events-none absolute top-7 bottom-7 rounded" style={{ left: mayL + "%", width: (mayR - mayL) + "%", background: "rgba(239,68,68,0.10)", border: "1px dashed rgba(239,68,68,0.4)" }} />
               <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-zinc-300" />
               {months.map(([m, d]) => (
                 <div key={m} className="absolute top-1/2 -translate-y-1/2" style={{ left: xOf(d) + "%" }}>
@@ -1799,16 +1801,28 @@
             </div>
             {/* ordered backlog — hover for a one-line explanation */}
             <div className="border-t border-zinc-100 pt-3">
-              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Up next</div>
-              <ol className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-                {TECH_NEXT.map(([task, desc], i) => (
-                  <li key={task} className="group/t relative flex items-start gap-1.5 text-xs leading-snug text-zinc-700">
-                    <span className="font-bold text-zinc-400">{i + 1}.</span>
-                    <span className="hover:text-blue-700">{task}</span>
-                    <span className="pointer-events-none absolute left-5 top-full z-30 hidden w-60 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-normal leading-snug text-zinc-600 shadow-xl group-hover/t:block">{desc}</span>
-                  </li>
-                ))}
-              </ol>
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Up next</div>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {TECH_NEXT.map(([task, desc], i) => {
+                  const c = NEXT_COLORS[i % NEXT_COLORS.length];
+                  return (
+                    <div key={task} className="group/t relative flex items-start gap-2.5 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2.5 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md">
+                      {/* oversized faint watermark number behind the content (same effect as Theory of Change) */}
+                      <span className="pointer-events-none absolute -bottom-5 -right-1 text-7xl font-black leading-none tabular-nums" style={{ color: c + "14" }}>{i + 1}</span>
+                      <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-base transition-transform group-hover/t:scale-110" style={{ background: c + "1a", color: c }}>
+                        <i className={"fa-solid " + NEXT_ICONS[i % NEXT_ICONS.length]} />
+                      </div>
+                      <div className="relative min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-black leading-none tabular-nums" style={{ color: c }}>{i + 1}</span>
+                          <span className="text-base font-semibold text-zinc-800">{task}</span>
+                        </div>
+                        <div className="mt-1 text-[11px] leading-snug text-zinc-500">{desc}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         );
@@ -2056,7 +2070,7 @@
         return (
           <div className="flex flex-col items-start gap-2 lg:flex-row">
             {cards.map((c, i) => (
-              <div key={c.title} className="group relative w-full flex-1 cursor-default p-5 pl-7 transition hover:-translate-y-0.5"
+              <div key={c.title} className="relative w-full flex-1 cursor-default p-5 pl-7"
                 style={{ clipPath: clipFor(i), background: c.color + "0e" }}>
                 <span className="pointer-events-none absolute right-3 top-0 text-6xl font-black leading-none" style={{ color: c.color + "1a" }}>{i + 1}</span>
                 <div className="relative flex items-center gap-2 whitespace-nowrap">
@@ -2065,7 +2079,7 @@
                   <span className="text-lg font-extrabold text-zinc-900">{c.title}</span>
                 </div>
                 <div className="relative mt-2 text-xs font-medium text-zinc-600">{c.tag}</div>
-                <div className="relative mt-3 hidden border-t border-zinc-200 pt-3 text-xs leading-relaxed text-zinc-600 group-hover:block">{c.body}</div>
+                <div className="relative mt-3 border-t border-zinc-200 pt-3 text-xs leading-relaxed text-zinc-600">{c.body}</div>
               </div>
             ))}
           </div>
@@ -2228,34 +2242,82 @@
         // top-full + pt-2 (padding, not margin) keeps the caption's box touching the word, so the hover
         // area is continuous and the link inside stays reachable.
         const note = "absolute left-1/2 top-full hidden w-max -translate-x-1/2 whitespace-nowrap pt-2 text-center text-2xl font-medium leading-tight text-zinc-500 group-hover:block";
+        // Rotating headline: the bracketed parts (subject / verb / percentage) cycle together.
+        const VARIATIONS = [
+          { subject: "$200T of economic value",                       verb: "unlocked", pct: "45%" },
+          { subject: "$21 trillion additional tax revenue",           verb: "unlocked", pct: "46%" },
+          { subject: "46 million more people employed",               verb: "unlocked", pct: "48%" },
+          { subject: "368 million more primary school completions",   verb: "unlocked", pct: "40%" },
+          { subject: "368 million more secondary school starts",      verb: "unlocked", pct: "43%" },
+          { subject: "12 million child deaths",                       verb: "averted",  pct: "42%" },
+          { subject: "12 million child marriages",                    verb: "averted",  pct: "41%" },
+        ];
+        const [vIdx, setVIdx] = useState(0);
+        const [paused, setPaused] = useState(false);          // auto-advance pauses while the user scrubs
+        // Auto-advance, unless the user is dragging the subject card.
+        useEffect(() => {
+          if (paused) return;
+          const t = setTimeout(() => setVIdx((i) => (i + 1) % VARIATIONS.length), 5200);
+          return () => clearTimeout(t);
+        }, [vIdx, paused]);
+        const v = VARIATIONS[vIdx];
+        // Odometer roll: each fragment is keyed so React REMOUNTS it on change, replaying the @keyframes
+        // exactly once — reliable every time. (The earlier transition-toggle never repainted the "from"
+        // frame, so the new text never animated in.) subject + pct are keyed by index (they always change);
+        // the verb is keyed by its text, so it only rolls when "unlocked"/"averted" actually flips.
+        const rollStyle = { display: "inline-block", transformOrigin: "center", animation: "ppRoll 780ms cubic-bezier(.2,.8,.25,1) both" };
+        const stage = { perspective: "520px" };               // 3D depth for the roll
+        // --- drag-to-scrub: ONLY the subject card; dragging vertically steps through the variations ---
+        const drag = useRef(null);
+        const STEP_PY = 46;                                   // vertical pixels per value step
+        const onDragStart = (e) => {
+          if (e.target.closest("a")) return;                  // let the "reference here" link click through
+          e.preventDefault();
+          if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+          drag.current = { y0: e.clientY, idx0: vIdx, last: vIdx };
+          setPaused(true);
+        };
+        const onDragMove = (e) => {
+          const d = drag.current; if (!d) return;
+          const n = VARIATIONS.length;
+          const ni = ((((d.idx0 + Math.round((e.clientY - d.y0) / STEP_PY)) % n) + n) % n);
+          if (ni !== d.last) { d.last = ni; setVIdx(ni); }    // linked verb + pct follow automatically (all derive from vIdx)
+        };
+        const onDragEnd = (e) => {
+          if (!drag.current) return;
+          drag.current = null;
+          if (e.currentTarget.releasePointerCapture) e.currentTarget.releasePointerCapture(e.pointerId);
+          setPaused(false);
+        };
         return (
-          <div className="mx-auto w-[95%] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+          <div className="mx-auto w-[90vw] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+            {/* one-shot odometer keyframe, shared by every rolling fragment */}
+            <style>{"@keyframes ppRoll{from{transform:rotateX(90deg) translateY(.5em);opacity:0}to{transform:rotateX(0) translateY(0);opacity:1}}"}</style>
             <p className="pt-8">
-              <span className="group relative inline-block font-extrabold text-blue-700">$200T
-                <span className={note} style={scribble}>
-                  <span className="block">actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
-                  {/* progressively-fainter list, masked so it looks cut off (i.e. there's more) */}
-                  <span className="mt-1 block text-xl leading-snug" style={{ WebkitMaskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)", maskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)" }}>
-                    <span className="block">that is 100x SpaceX IPO</span>
-                    <span className="block">5x US Debt</span>
-                    <span className="block">half of all household wealth</span>
-                  </span>
-                </span>
-              </span>{" "}of economic value would be{" "}
-              <span className="group relative inline-block font-semibold text-emerald-700">
-                {/* "counterfactually" inserted above, centred on the gap before "unlocked", with a proofreader's caret — on hover.
+              {/* the ONLY draggable fragment — grab and scrub vertically through the variations */}
+              <span
+                onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}
+                title="Drag up or down to explore other ways to measure the opportunity"
+                className="group relative inline-flex select-none cursor-ns-resize items-center align-middle"
+                style={{ ...stage, touchAction: "none" }}>
+                <span key={vIdx} className="font-extrabold text-blue-700" style={rollStyle}>{v.subject}</span>
+                <span className="absolute left-1/2 bottom-full hidden w-max -translate-x-1/2 whitespace-nowrap pb-1 text-center text-2xl font-medium leading-tight text-zinc-500 group-hover:block" style={scribble}>reference <Link href={WWHGE_PDF}>here</Link></span>
+              </span>{" "}would be{" "}
+              <span className="group relative inline-block font-semibold text-emerald-700" style={stage}>
+                {/* "counterfactually" inserted above, centred on the gap before the verb, with a proofreader's caret — on hover.
                     bottom-full + pb-2 bridges the hover gap so the word above stays reachable. */}
                 <span className="absolute bottom-full left-0 hidden w-max -translate-x-1/2 whitespace-nowrap pb-2 text-2xl font-semibold leading-none text-emerald-600 group-hover:block" style={scribble}>counterfactually</span>
                 <span className="pointer-events-none absolute bottom-full left-0 hidden -translate-x-1/2 text-base leading-none text-emerald-600 group-hover:block">‸</span>
-                unlocked
+                <span key={v.verb} style={rollStyle}>{v.verb}</span>
               </span>{" "}by 2050 if every child could read.
             </p>
-            <p className="relative mt-6 pb-14">
+            <p className="relative mt-6 pb-14" style={stage}>
               PadhaiPal's goal is to{" "}
               <span className="group relative inline-block font-semibold text-amber-700">cost effectively
                 <span className={note} style={scribble}>achieves Coefficient Giving's funding bar of <Link href={CG_LINK}>$50/DALY</Link></span>
               </span>{" "}capture{" "}
-              <span className="group relative inline-block font-extrabold text-violet-700">47%
+              <span className="group relative inline-block font-extrabold text-violet-700" style={stage}>
+                <span key={vIdx} style={rollStyle}>{v.pct}</span>
                 {/* hand-drawn arrow curving up to a one-line scribbled note — on hover (pt-1 bridges the hover gap) */}
                 <span className="absolute left-1/2 top-full hidden translate-x-1 items-start gap-1 pt-1 group-hover:flex">
                   <svg width="56" height="44" viewBox="0 0 56 44" fill="none" className="-mt-2 flex-shrink-0 text-zinc-400">
@@ -2278,41 +2340,53 @@
         const cfg = DONOR_METRICS.find((m) => m.key === metric) || DONOR_METRICS[0];
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
         const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
+        const SUBH = "text-center text-2xl font-bold tracking-tight sm:text-3xl";   // subheading (e.g. Theory of Change)
         return (
           <div className="flex-1 overflow-y-auto overflow-x-clip bg-zinc-50">
-            <div className="mx-auto max-w-6xl space-y-12 p-6">
-              {/* hero block — tighter spacing; logo 30vh, value bar 30vh, photos 50vh (bleeding off-screen) */}
-              <div className="space-y-4">
-                {/* 1 · logo + wordmark — 25% window height */}
-                <div className="flex h-[25vh] items-center justify-center"><ValueHero /></div>
+            {/* sections render as full-width bands that alternate light (zinc-50) / coloured (blue-50) */}
 
-                {/* 2 · headline value proposition — full-width bar, 30% window height */}
-                <div className="relative left-1/2 flex h-[30vh] w-screen -translate-x-1/2 items-center justify-center border-y border-blue-100 bg-blue-50 px-6">
-                  <ValueStatement />
-                </div>
+            {/* 1 · logo + wordmark — light */}
+            <section className="bg-zinc-50">
+              <div className="mx-auto flex h-[25vh] max-w-6xl items-center justify-center px-6 pt-8"><ValueHero /></div>
+            </section>
 
-                {/* 2b · learners in the field — 50% window height, full-bleed, running off the screen edges */}
-                <div className="relative left-1/2 flex w-screen -translate-x-1/2 items-center justify-center gap-3">
-                  <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
-                  <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-[40vh] w-[46vw] flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg" />
-                  <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
-                </div>
+            {/* 2 · headline value proposition — coloured */}
+            <section className="bg-blue-50">
+              <div className="mx-auto flex min-h-[30vh] items-center justify-center px-6 py-6"><ValueStatement /></div>
+            </section>
+
+            {/* 2a · primary donate CTA — between the headline and the photos */}
+            <section className="bg-zinc-50 pt-8">
+              <div className="flex justify-center px-6">
+                <button onClick={() => onDonate(null)}
+                  className="rounded-xl bg-emerald-600 px-10 py-4 text-lg font-bold text-white shadow-sm transition hover:bg-emerald-700">💚 Donate now</button>
               </div>
+            </section>
 
-              {/* 3 · what PadhaiPal does */}
-              <div>
+            {/* 2b · learners in the field — light, full-bleed (running off the screen edges) */}
+            <section className="bg-zinc-50 py-10">
+              <div className="flex items-center justify-center gap-3">
+                <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+                <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-[40vh] w-[46vw] flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg" />
+                <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+              </div>
+            </section>
+
+            {/* 3 · what PadhaiPal does + theory of change — light; whole section wrapped in one card */}
+            <section className="bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>What PadhaiPal Does</div>
-                <EOSCards />
+                <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+                  <EOSCards />
+                  <div className={"mb-5 mt-10 " + SUBH} style={HC}>Theory of Change</div>
+                  <DistCards />
+                </div>
               </div>
+            </section>
 
-              {/* 4 · theory of change */}
-              <div>
-                <div className={"mb-6 " + H} style={HC}>Theory of Change</div>
-                <DistCards />
-              </div>
-
-              {/* 5 · traction — one card: toggleable DAU / lessons / letters graph + real learners */}
-              <div>
+            {/* 4 · traction — coloured. one card: toggleable DAU / lessons / letters graph + real learners */}
+            <section className="bg-blue-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Traction</div>
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                   <div className="p-4">
@@ -2341,25 +2415,31 @@
                   </div>
                 </div>
               </div>
+            </section>
 
-              {/* 6 · roadmap — impact + technical in one card */}
-              <div>
+            {/* 5 · roadmap — light. impact + technical in one card */}
+            <section className="bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Roadmap</div>
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                   <DonorRoadmap worldGeo={worldGeo} />
                   <div className="border-t border-zinc-200"><TechRoadmap /></div>
                 </div>
               </div>
+            </section>
 
-              {/* 7 · the ask */}
-              <div>
+            {/* 6 · the ask — coloured */}
+            <section className="bg-blue-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Help us empower kids</div>
                 <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
               </div>
+            </section>
 
-              {/* 8 · footer / trust */}
-              <DonorFooter />
-            </div>
+            {/* 7 · footer / trust — light */}
+            <section className="bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6"><DonorFooter /></div>
+            </section>
           </div>
         );
       }
