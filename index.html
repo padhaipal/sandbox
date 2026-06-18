@@ -3076,8 +3076,10 @@
         const DON_GREY = "#d4d4d8";
         const CG_BAR = 50;          // $/DALY — Coefficient Giving's funding bar (the yellow end of the scale)
         const CHILD_FRAC = 0.12;    // rough school-age share of a population
-        const DON_BLOCK = 0;        // the one funded block in Lucknow
+        const DON_BLOCK = 0;        // the one funded block in Lucknow (Malihabad)
         const DON_SCHOOLS = 8;      // first N schools of that block are funded (coloured)
+        const DON_TRIAL = 3;        // first N schools are live pilots currently trialing PadhaiPal
+        const TRIAL = "#1d9edf", TRIAL_SEL = "#0b5d8f";   // distinct colour for trialing schools
         const isUP = (n) => /uttar pradesh/i.test(n || "");
         const isLko = (n) => /lucknow/i.test(n || "");
         // deterministic, cost-effective $/DALY for a funded area (deeper targeting => cheaper)
@@ -3161,12 +3163,19 @@
                       })}
                       {level === "schools" && blk && <path d={blk.d} fill="#ffffff" fillOpacity="0.5" stroke="#0f172a" strokeWidth={1.4 / tf.k} pointerEvents="none" />}
                       {level === "schools" && schools && schools.map((sc) => {
-                        if (sc.k >= DON_SCHOOLS) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
+                        const trial = sc.k < DON_TRIAL;
+                        if (sc.k >= DON_SCHOOLS && !trial) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
                         const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
-                        const payload = { id: sc.id, title: sc.name, sub: "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
-                        return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : 6) / tf.k}
-                          fill={sel ? ceColorSel(cpd) : ceColor(cpd)} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
-                          style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />;
+                        const fill = trial ? (sel ? TRIAL_SEL : TRIAL) : (sel ? ceColorSel(cpd) : ceColor(cpd));
+                        const payload = { id: sc.id, title: sc.name, sub: trial ? "Currently trialing PadhaiPal" : "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
+                        return (
+                          <g key={sc.id}>
+                            {trial && <circle cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 13 : 11) / tf.k} fill={TRIAL} opacity="0.25" pointerEvents="none" />}
+                            <circle cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 9 : trial ? 7.5 : 6) / tf.k}
+                              fill={fill} stroke={sel ? "#0f172a" : "#ffffff"} strokeWidth={(sel ? 1.8 : 1.2) / tf.k}
+                              style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setDonateSel(payload); }} />
+                          </g>
+                        );
                       })}
                     </g>
                   </svg>
@@ -3217,6 +3226,7 @@
                     <span className="h-2.5 w-20 rounded-sm" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }} />
                     <span className="text-[9px] text-zinc-400">$50 bar</span>
                   </div>
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-offset-0" style={{ background: TRIAL, boxShadow: "0 0 0 3px " + TRIAL + "40" }} /> Trialing PadhaiPal now</div>
                   <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not funded yet</div>
                 </div>
               </div>
