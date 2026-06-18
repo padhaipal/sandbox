@@ -1997,8 +1997,6 @@
       function DonorAsk({ onDonate, donateMap, donateTarget }) {
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl" style={{ color: "#1d9edf" }}>Help us empower kids</div>
-
             {/* live finances: balance over time + live bank feed, side by side */}
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
               <BankBalancePanel />
@@ -2008,7 +2006,7 @@
             {/* donate-by-region map (same drill-down as the educator map) */}
             <div className="mt-6">
               <div className="mb-2 text-sm font-bold text-zinc-900">Choose where your donation goes</div>
-              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to see it · double-click to drill in</div>
+              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to select it · double-click to drill in</div>
               {donateMap}
             </div>
 
@@ -2194,7 +2192,10 @@
               </div>
 
               {/* 7 · the ask */}
-              <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Help us empower kids</div>
+                <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
+              </div>
 
               {/* 8 · footer / trust */}
               <DonorFooter />
