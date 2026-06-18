@@ -1813,9 +1813,13 @@
           const pct = ((clientX - r.left) / r.width) * 100;
           setIdx(Math.max(0, Math.min(N - 1, Math.round(((pct - INSET) / (100 - 2 * INSET)) * (N - 1)))));
         };
+        // share of the $200T opportunity captured at this stop: 0% at "Current" → 47% at full rollout, linear in between
+        const trimPct = (x) => { const r = Math.round(x * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); };
+        const cap200 = N > 1 ? (47 * idx) / (N - 1) : 0;
         return (
           <div className="p-4">
-            <div className="mb-3 text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Impact Roadmap</div>
+            <div className="mb-2 text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Impact Roadmap</div>
+            <div className="mb-3 text-sm text-zinc-600">Economic value captured: <span className="text-base font-extrabold text-zinc-900">{trimPct(cap200)}% of $200T</span> <span className="text-zinc-400">≈ ${trimPct(cap200 * 2)}T</span></div>
             <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
               <span className="text-[10px] text-zinc-400">{idx + 1} / {N}</span>
