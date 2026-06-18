@@ -1756,8 +1756,8 @@
         const months = [["Mar", "2026-03-01"], ["Apr", "2026-04-01"], ["May", "2026-05-01"], ["Jun", "2026-06-01"]];
         const mayL = xOf("2026-05-01"), mayR = xOf("2026-06-01");
         return (
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Technical Roadmap</div>
+          <div className="p-4">
+            <div className="text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Technical Roadmap</div>
             <div className="mb-3 text-xs text-zinc-500">Engineering milestones shipped to date — hover a point for detail. Every line of code is open source: <a href="https://github.com/orgs/padhaipal/repositories" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">github.com/padhaipal ↗</a></div>
             {/* to-scale timeline (markers land on their real dates) */}
             <div className="relative mb-2 mt-6 h-28">
@@ -1814,8 +1814,8 @@
           setIdx(Math.max(0, Math.min(N - 1, Math.round(((pct - INSET) / (100 - 2 * INSET)) * (N - 1)))));
         };
         return (
-          <div className="relative z-20 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Roadmap</div>
+          <div className="p-4">
+            <div className="text-xl font-extrabold tracking-tight" style={{ color: "#1d9edf" }}>Impact Roadmap</div>
             <div className="mb-3 text-xs text-zinc-500">Drag to see coverage and cost-effectiveness as PadhaiPal builds each language — cheapest impact first.</div>
             <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
@@ -2185,9 +2185,14 @@
                 </div>
               </div>
 
-              {/* 6 · the opportunity (impact roadmap) + technical roadmap beneath it */}
-              <DonorRoadmap worldGeo={worldGeo} />
-              <TechRoadmap />
+              {/* 6 · roadmap — impact + technical in one card */}
+              <div>
+                <div className={"mb-6 " + H} style={HC}>Roadmap</div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <DonorRoadmap worldGeo={worldGeo} />
+                  <div className="border-t border-zinc-200"><TechRoadmap /></div>
+                </div>
+              </div>
 
               {/* 7 · the ask */}
               <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
