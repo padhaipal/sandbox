@@ -2086,7 +2086,15 @@
           <div className="mx-auto w-[95%] max-w-none text-center text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
             <p className="pt-8">
               <span className="group relative inline-block font-extrabold text-blue-700">$200T
-                <span className={note} style={scribble}>actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
+                <span className={note} style={scribble}>
+                  <span className="block">actually $196T USD, <Link href={WWHGE_PDF}>reference here</Link></span>
+                  {/* progressively-fainter list, masked so it looks cut off (i.e. there's more) */}
+                  <span className="mt-1 block text-xl leading-snug" style={{ WebkitMaskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)", maskImage: "linear-gradient(to bottom, #000 30%, transparent 100%)" }}>
+                    <span className="block">that is 100x SpaceX IPO</span>
+                    <span className="block">5x US Debt</span>
+                    <span className="block">half of all household wealth</span>
+                  </span>
+                </span>
               </span>{" "}of economic value would be{" "}
               <span className="group relative inline-block font-semibold text-emerald-700">
                 {/* "counterfactually" inserted above, centred on the gap before "unlocked", with a proofreader's caret — on hover.
@@ -2094,7 +2102,7 @@
                 <span className="absolute bottom-full left-0 hidden w-max -translate-x-1/2 whitespace-nowrap pb-2 text-2xl font-semibold leading-none text-emerald-600 group-hover:block" style={scribble}>counterfactually</span>
                 <span className="pointer-events-none absolute bottom-full left-0 hidden -translate-x-1/2 text-base leading-none text-emerald-600 group-hover:block">‸</span>
                 unlocked
-              </span>{" "}if every child could read.
+              </span>{" "}by 2050 if every child could read.
             </p>
             <p className="relative mt-12 pb-14">
               PadhaiPal's goal is to{" "}
@@ -2135,6 +2143,13 @@
                 <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-blue-100 bg-blue-50 px-6 py-12">
                   <ValueStatement />
                 </div>
+              </div>
+
+              {/* 2b · learners in the field */}
+              <div className="flex items-center justify-center gap-3 sm:gap-5">
+                <img src="./photos/learner-1.jpg" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl object-cover shadow-md sm:h-52 sm:w-44" />
+                <img src="./photos/learner-2.jpg" alt="Children learning together with PadhaiPal" className="h-52 w-72 flex-shrink-0 rounded-3xl object-cover shadow-lg sm:h-64 sm:w-96" />
+                <img src="./photos/learner-3.jpg" alt="A learner using PadhaiPal" className="h-40 w-32 flex-shrink-0 rounded-2xl object-cover shadow-md sm:h-52 sm:w-44" />
               </div>
 
               {/* 3 · what PadhaiPal does */}
