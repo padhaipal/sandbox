@@ -1748,10 +1748,10 @@
         { date: "2026-05-30", name: "Staging environment" },
       ];
       const TECH_NEXT = [
-        ["Be auspiced by GDG", "Secure official backing from Google Developer Groups to add credibility and open doors with partners and governments."],
+        ["Be auspiced by GDG", "Secure official backing from Global Development Group to add credibility and open doors with partners and governments."],
         ["Complete load tests", "Prove the system holds up under many thousands of concurrent learners on WhatsApp."],
         ["Teach sentences", "Move learners on from single words to reading whole sentences."],
-        ["Teach comprehension", "Teach understanding of meaning, not just decoding the words on the screen."],
+        ["Teach comprehension", "Build understanding, not just decoding the words on the screen."],
         ["Deliver a proxy ASER test", "Administer a digital stand-in for the ASER reading test to benchmark each child's level."],
         ["Deliver a proxy LaNA test", "Administer a digital proxy of the LaNA assessment for an internationally comparable score."],
         ["Make a teacher dashboard", "Give teachers their own dashboard to track their students' progress."],
@@ -1894,7 +1894,7 @@
           <div className="grid gap-6 text-left md:grid-cols-2">
             <div>
               <h4 className="text-lg font-extrabold text-zinc-900">We teach children to read in a language they already speak</h4>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600">Every evening PadhaiPal sends one short WhatsApp voice-message lesson. Because the child already speaks the language, each lesson builds on knowledge they have — they are learning to <span className="font-semibold text-zinc-800">decode</span>, not to learn a new tongue.</p>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">PadhaiPal is a personalised reading tutor, available for the child to have their lesson whenever and wherever convenient. Because the child already speaks the language, each lesson builds on knowledge they have — they are learning to <span className="font-semibold text-zinc-800">decode</span>, not to learn a new tongue.</p>
               <p className="mt-3 text-sm leading-relaxed text-zinc-600">Each letter is anchored to a memorable picture (an <span className="font-semibold text-zinc-800">image–letter association</span>), then letters are chained back into whole words the child can read. The lesson loop:</p>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <FlowChip c={C}>word</FlowChip><span className="text-zinc-400">→</span>
@@ -1903,7 +1903,7 @@
                 <FlowChip c={C}>letter / image association</FlowChip><span className="text-zinc-400">→</span>
                 <FlowChip c={C}>word</FlowChip>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> PadhaiPal tracks performance on every individual letter and a decision tree picks the next word to drill the letters a child is weakest on — never wasting a second on letters they've already mastered.</p>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> PadhaiPal tracks performance on every individual letter and a decision tree picks the next word to maximise practice where the child needs it most.</p>
               <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110" style={{ background: C }}>Try it now <span aria-hidden>→</span></a>
             </div>
             <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
@@ -1918,7 +1918,7 @@
       function MeasurePanel() {
         return (
           <div className="text-left">
-            <p className="text-sm leading-relaxed text-zinc-600">Every week PadhaiPal runs a digital assessment that places each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score. Results roll up the whole government hierarchy — from one student to the head of education.</p>
+            <p className="text-sm leading-relaxed text-zinc-600">PadhaiPal runs regular digital assessments that place each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score.</p>
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700">
               <i className="fa-solid fa-triangle-exclamation" /> Dummy data — illustrative only. Drag to spin the globe; double-click to drill from the world all the way down to an individual student.
             </div>
@@ -1967,7 +1967,7 @@
           <div className="grid gap-6 text-left md:grid-cols-2">
             <WhatsAppChat onReport={onReport} />
             <div className="space-y-4">
-              <p className="text-sm leading-relaxed text-zinc-600">PadhaiPal becomes the main communication channel between parents, teachers and government officials — moving information in three directions:</p>
+              <p className="text-sm leading-relaxed text-zinc-600">Results are shared transparently with governments and donors. Information flows in three directions:</p>
               <Row icon="fa-arrow-up" color="#0ea5e9" title="Up the hierarchy">Weekly report cards flow upward — parent → teacher → head teacher → block → district → state. <button onClick={onReport} className="font-semibold text-blue-600 hover:underline">View a sample report card →</button></Row>
               <Row icon="fa-arrow-down" color="#10b981" title="Down the hierarchy">Instructions and encouragement flow downward — officials nudge head teachers, who nudge teachers and parents to keep children learning.</Row>
               <Row icon="fa-arrows-left-right" color="#f59e0b" title="Horizontal accountability">Peers see each other's progress side-by-side, creating friendly accountability across classrooms, schools and blocks.</Row>
@@ -2017,11 +2017,13 @@
           { key: "Communicate", icon: "fa-comments", anim: "eos-grow", tag: "Connect parents, teachers and officials", color: "#0ea5e9" },
         ];
         const [active, setActive] = useState("Teach");
+        const [pinned, setPinned] = useState(null);   // clicking a card pins it open; hover only previews
         const [hov, setHov] = useState(null);
         const [report, setReport] = useState(false);
         const timer = useRef(null);
         const open = (k) => { clearTimeout(timer.current); setActive(k); };
-        const closeSoon = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setActive(null), 220); };
+        const closeSoon = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setActive(pinned), 220); };   // revert to pinned card (or close if none)
+        const pinCard = (k) => { clearTimeout(timer.current); setPinned((p) => (p === k ? null : k)); setActive(k); };        // click toggles the pin
         const cur = cards.find((c) => c.key === active);
         return (
           <div>
@@ -2029,13 +2031,13 @@
               {cards.map((c) => {
                 const lit = active === c.key || hov === c.key;
                 return (
-                  <button key={c.key} onMouseEnter={() => { setHov(c.key); open(c.key); }} onMouseLeave={() => { setHov(null); closeSoon(); }} onClick={() => open(c.key)}
+                  <button key={c.key} onMouseEnter={() => { setHov(c.key); open(c.key); }} onMouseLeave={() => { setHov(null); closeSoon(); }} onClick={() => pinCard(c.key)}
                     className="group w-full flex-1 rounded-2xl border bg-white p-5 text-center transition-all duration-200"
-                    style={{ borderColor: lit ? c.color + "88" : c.color + "33", transform: lit ? "translateY(-4px)" : "none", boxShadow: lit ? "0 16px 36px -12px " + c.color + "88" : "0 1px 2px rgba(0,0,0,.05)" }}>
+                    style={{ borderColor: lit ? c.color + "88" : c.color + "33", transform: lit ? "translateY(-4px)" : "none", boxShadow: pinned === c.key ? "0 0 0 2px " + c.color + ", 0 16px 36px -12px " + c.color + "88" : lit ? "0 16px 36px -12px " + c.color + "88" : "0 1px 2px rgba(0,0,0,.05)" }}>
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-3xl eos-float" style={{ background: c.color + "1f", color: c.color }}><i className={"fa-solid " + c.icon + " " + c.anim} /></div>
                     <div className="mt-3 text-lg font-extrabold" style={{ color: c.color }}>{c.key}</div>
                     <div className="mt-1 text-xs font-medium text-zinc-500">{c.tag}</div>
-                    <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: active === c.key ? c.color : "#d4d4d8" }}>{active === c.key ? "▾ showing below" : "hover to expand"}</div>
+                    <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: active === c.key ? c.color : "#d4d4d8" }}>{pinned === c.key ? "📌 pinned — click to unpin" : active === c.key ? "▾ showing below" : "hover · click to pin"}</div>
                   </button>
                 );
               })}
@@ -2054,14 +2056,14 @@
       // Scalable Distribution — four subtly chevron-shaped cards; detail appears on hover
       function DistCards() {
         const cards = [
-          { icon: "fa-handshake", title: "Partner", tag: "Connect with trusted NGOs", color: "#f59e0b",
-            body: "PadhaiPal can be distributed through any network including public schools, private schools, mosques, churches or hospitals. The first step is to identify NGOs with workers that have relationships with the people in these networks." },
-          { icon: "fa-seedling", title: "Plant", tag: "NGO workers create initial useage", color: "#10b981",
-            body: "We pay the NGO for two days of their worker's time. They spend the first day being trained on how to communicate PadhaiPal and the second day having meetings with the people they know in these networks." },
-          { icon: "fa-share-nodes", title: "Propagate", tag: "Strong results climb the hierarchy", color: "#3b82f6",
+          { icon: "fa-handshake", title: "Partner", tag: "Connect with trusted organisations", color: "#f59e0b",
+            body: "PadhaiPal can be distributed through any network including public or private schools, community groups, religious organisations or governments." },
+          { icon: "fa-seedling", title: "Plant", tag: "Seed initial usage", color: "#10b981",
+            body: "Our team trains a few key changemakers within that organisation on how to communicate and demonstrate PadhaiPal." },
+          { icon: "fa-share-nodes", title: "Propagate", tag: "Strong results spread", color: "#3b82f6",
             body: "Once a few people start using PadhaiPal in a network it gets shared up the hierarchy via reports, down the hierarchy via communication groups and there is horizontal accountability by seeing the progress of peers." },
-          { icon: "fa-building-columns", title: "Procure", tag: "Governments pay after trial", color: "#8b5cf6",
-            body: "PadhaiPal only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government to pay for usage. Thus each dollar donated is used to unlock government dollars into effective literacy." },
+          { icon: "fa-building-columns", title: "Procure", tag: "Governments or large institutions pay after trial", color: "#8b5cf6",
+            body: "PadhaiPal only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government or their institution to pay for usage. Each dollar donated is used to leverage more resources." },
         ];
         const last = cards.length - 1, pt = "calc(100% - 15px)";
         const clipFor = (i) => i === 0 ? "polygon(0 0," + pt + " 0,100% 50%," + pt + " 100%,0 100%)"
@@ -2195,7 +2197,7 @@
         const cols = [
           { h: "PadhaiPal", links: [["About", "https://www.padhaipal.com"], ["How it works", "https://www.padhaipal.com"], ["Contact", "https://www.padhaipal.com"]] },
           { h: "Trust", links: [["Annual report", "https://www.padhaipal.com"], ["Financials", "https://www.padhaipal.com"], ["Governance", "https://www.padhaipal.com"]] },
-          { h: "Safety", links: [["Child safeguarding", "https://www.padhaipal.com"], ["Data &amp; privacy", "https://www.padhaipal.com"]] },
+          { h: "Safety", links: [["Child safeguarding", "https://www.padhaipal.com"], ["Data & privacy", "https://www.padhaipal.com"]] },
         ];
         return (
           <div className="mt-2 rounded-2xl border border-zinc-200 bg-white p-6">
@@ -2224,13 +2226,6 @@
       const PP_ANALYSIS = "https://www.padhaipal.com";   // TODO: replace with the real analysis link
 
       // padhAIpal logo + wordmark lockup
-      function ValueHero() {
-        return (
-          <div className="text-center">
-            <img src="./padhaipal-logo.svg" alt="padhAIpal" className="mx-auto h-[20vh] w-auto max-w-[90vw]" />
-          </div>
-        );
-      }
       // Headline value proposition — its own large section, with interactive inline "cards"
       function ValueStatement() {
         const scribble = { fontFamily: "'Caveat', cursive" };
@@ -2342,28 +2337,38 @@
         const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
         const SUBH = "text-center text-2xl font-bold tracking-tight sm:text-3xl";   // subheading (e.g. Theory of Change)
         return (
-          <div className="flex-1 overflow-y-auto overflow-x-clip bg-zinc-50">
+          <div className="flex-1 scroll-smooth overflow-y-auto overflow-x-clip bg-zinc-50">
+            {/* sticky top bar — logo + nav upper-left, GitHub + Donate now upper-right */}
+            <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
+              <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
+                <div className="flex items-center gap-8">
+                  <a href="#top" className="shrink-0"><img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto sm:h-12" /></a>
+                  <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
+                    <a href="#what-does" className="transition-colors hover:text-blue-600">What we do</a>
+                    <a href="#traction" className="transition-colors hover:text-blue-600">Traction</a>
+                    <a href="#roadmap" className="transition-colors hover:text-blue-600">Roadmap</a>
+                    <a href="#support" className="transition-colors hover:text-blue-600">Support</a>
+                  </nav>
+                </div>
+                <div className="flex items-center gap-4">
+                  <a href="https://github.com/orgs/padhaipal/repositories" target="_blank" rel="noreferrer" title="Source on GitHub"
+                    className="hidden text-xl text-zinc-500 transition-colors hover:text-zinc-900 sm:block"><i className="fa-brands fa-github" /></a>
+                  <button onClick={() => onDonate(null)}
+                    className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:text-base">💚 Donate now</button>
+                </div>
+              </div>
+            </header>
+
+            <div id="top" />
+
             {/* sections render as full-width bands that alternate light (zinc-50) / coloured (blue-50) */}
 
-            {/* 1 · logo + wordmark — light */}
-            <section className="bg-zinc-50">
-              <div className="mx-auto flex h-[25vh] max-w-6xl items-center justify-center px-6 pt-8"><ValueHero /></div>
-            </section>
-
-            {/* 2 · headline value proposition — coloured */}
+            {/* 1 · headline value proposition — coloured. first centred element */}
             <section className="bg-blue-50">
               <div className="mx-auto flex min-h-[30vh] items-center justify-center px-6 py-6"><ValueStatement /></div>
             </section>
 
-            {/* 2a · primary donate CTA — between the headline and the photos */}
-            <section className="bg-zinc-50 pt-8">
-              <div className="flex justify-center px-6">
-                <button onClick={() => onDonate(null)}
-                  className="rounded-xl bg-emerald-600 px-10 py-4 text-lg font-bold text-white shadow-sm transition hover:bg-emerald-700">💚 Donate now</button>
-              </div>
-            </section>
-
-            {/* 2b · learners in the field — light, full-bleed (running off the screen edges) */}
+            {/* 2 · learners in the field — light, full-bleed (running off the screen edges) */}
             <section className="bg-zinc-50 py-10">
               <div className="flex items-center justify-center gap-3">
                 <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
@@ -2373,9 +2378,21 @@
             </section>
 
             {/* 3 · what PadhaiPal does + theory of change — light; whole section wrapped in one card */}
-            <section className="bg-zinc-50 py-10">
+            <section id="what-does" className="scroll-mt-20 bg-zinc-50 py-10">
               <div className="mx-auto max-w-6xl px-6">
-                <div className={"mb-6 " + H} style={HC}>What PadhaiPal Does</div>
+                <div className={"mb-6 " + H} style={HC}>What{" "}
+                  <span className="group relative inline-block cursor-help underline decoration-dotted decoration-2 underline-offset-4">PadhaiPal
+                    {/* pronunciation + name breakdown on hover (pt-3 bridges the hover gap) */}
+                    <span className="pointer-events-none absolute left-1/2 top-full z-30 hidden w-72 -translate-x-1/2 pt-3 group-hover:block">
+                      <span className="block rounded-xl border border-zinc-200 bg-white p-4 text-left text-sm font-normal leading-relaxed text-zinc-600 shadow-xl">
+                        <span className="block text-base font-extrabold text-zinc-900">PadhaiPal</span>
+                        <span className="mt-0.5 block text-zinc-400">say it <span className="font-semibold text-zinc-700">pad · high · pal</span></span>
+                        <span className="mt-2 block"><span className="font-bold text-zinc-800">Padhai</span> is Hindi for “education” — from <span className="font-bold text-zinc-800">padh</span>, “to read”.</span>
+                        <span className="mt-1.5 block"><span className="font-bold text-zinc-800">AI</span> is the artificial intelligence behind every lesson.</span>
+                        <span className="mt-1.5 block"><span className="font-bold text-zinc-800">PAL</span> is Personalised Adaptive Learning — and, fittingly, a friend who helps every child learn to read.</span>
+                      </span>
+                    </span>
+                  </span>{" "}Does</div>
                 <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
                   <EOSCards />
                   <div className={"mb-5 mt-10 " + SUBH} style={HC}>Theory of Change</div>
@@ -2385,7 +2402,7 @@
             </section>
 
             {/* 4 · traction — coloured. one card: toggleable DAU / lessons / letters graph + real learners */}
-            <section className="bg-blue-50 py-10">
+            <section id="traction" className="scroll-mt-20 bg-blue-50 py-10">
               <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Traction</div>
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -2418,7 +2435,7 @@
             </section>
 
             {/* 5 · roadmap — light. impact + technical in one card */}
-            <section className="bg-zinc-50 py-10">
+            <section id="roadmap" className="scroll-mt-20 bg-zinc-50 py-10">
               <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Roadmap</div>
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -2429,7 +2446,7 @@
             </section>
 
             {/* 6 · the ask — coloured */}
-            <section className="bg-blue-50 py-10">
+            <section id="support" className="scroll-mt-20 bg-blue-50 py-10">
               <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>Help us empower kids</div>
                 <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} />
