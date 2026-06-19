@@ -531,35 +531,64 @@
       };
       const isPhonetic = (l) => Math.max(phonScore(l), LANG_SCRIPT_MAX[l] ?? 0) >= PHON_MIN;
       // Per-country language mix as population shares (0–1). Demo estimates.
+      // Language-of-instruction shares per country (ISO3). Identities + shares from the
+      // "Country Data" language-of-instruction matrix; these drive globe coverage colouring.
+      // Countries absent from the matrix (USA, France, UK, Spain, Japan, …) keep prior values.
       const COUNTRY_LANGS = {
+        // --- not in the instruction matrix: kept as-is so they don't regress to grey ---
         USA:[["English",.78],["Spanish",.13],["Other",.09]],
-        IND:[["Hindi",.44],["Bengali",.08],["Marathi",.07],["Telugu",.07],["Tamil",.06],["Gujarati",.045],["Urdu",.04],["Kannada",.035],["Odia",.03],["Malayalam",.03],["Punjabi",.03],["Other",.07]],
-        CHN:[["Mandarin",1]], BRA:[["Portuguese",1]], FRA:[["French",1]], DEU:[["German",1]], GBR:[["English",1]],
-        NGA:[["Hausa",.29],["Yoruba",.20],["Igbo",.15],["English",.12],["Fulfulde",.04],["Other",.20]],
-        PAK:[["Punjabi",.39],["Pashto",.15],["Sindhi",.14],["Saraiki",.11],["Urdu",.08],["Balochi",.04],["Other",.09]],
-        IDN:[["Javanese",.40],["Indonesian",.22],["Sundanese",.15],["Madurese",.05],["Other",.18]],
-        MEX:[["Spanish",.94],["Nahuatl",.02],["Other",.04]], JPN:[["Japanese",1]], RUS:[["Russian",1]],
-        BGD:[["Bengali",1]], ETH:[["Oromo",.34],["Amharic",.29],["Somali",.06],["Tigrinya",.06],["Sidama",.04],["Other",.21]],
-        PHL:[["Filipino",.30],["Cebuano",.23],["Ilocano",.09],["Hiligaynon",.08],["English",.05],["Other",.25]], EGY:[["Arabic",1]],
-        VNM:[["Vietnamese",1]], COD:[["Lingala",.30],["Swahili",.22],["Kikongo",.15],["Tshiluba",.15],["French",.08],["Other",.10]],
-        TUR:[["Turkish",.85],["Kurdish",.15]], IRN:[["Persian",.54],["Azerbaijani",.16],["Kurdish",.10],["Other",.20]],
-        THA:[["Thai",1]], ZAF:[["Zulu",.23],["Xhosa",.16],["Afrikaans",.135],["Northern Sotho",.09],["Tswana",.08],["Sotho",.08],["English",.085],["Tsonga",.045],["Other",.095]],
-        TZA:[["Swahili",.9],["English",.1]], KEN:[["Swahili",.55],["Kikuyu",.12],["Luhya",.08],["Luo",.08],["Kalenjin",.07],["English",.10]],
-        ESP:[["Spanish",.74],["Catalan",.15],["Galician",.08],["Basque",.03]], COL:[["Spanish",1]], ARG:[["Spanish",1]],
-        DZA:[["Arabic",.72],["Berber",.28]], CAN:[["English",.57],["French",.21],["Other",.22]],
-        UGA:[["Luganda",.18],["Swahili",.12],["English",.10],["Runyankole",.10],["Soga",.08],["Acholi",.05],["Other",.37]],
-        IRQ:[["Arabic",.78],["Kurdish",.22]], MAR:[["Arabic",.66],["Berber",.34]], AFG:[["Dari",.48],["Pashto",.42],["Uzbek",.07],["Other",.03]],
-        SAU:[["Arabic",1]], UKR:[["Ukrainian",.68],["Russian",.30],["Other",.02]], AUS:[["English",1]],
-        NPL:[["Nepali",.48],["Maithili",.12],["Bhojpuri",.07],["Hindi",.10],["Other",.23]],
-        FJI:[["Fijian",.54],["Hindi",.37],["English",.09]],
-        MUS:[["Creole",.80],["Bhojpuri",.10],["Hindi",.05],["French",.05]],
-        ARE:[["Arabic",.40],["Hindi",.25],["English",.17],["Urdu",.10],["Malayalam",.08]],
-        GHA:[["Akan",.45],["Ewe",.13],["Ga",.08],["Dagbani",.05],["English",.10],["Other",.19]], LKA:[["Sinhala",.75],["Tamil",.25]],
-        MMR:[["Burmese",.68],["Shan",.09],["Karen",.07],["Other",.16]], MOZ:[["Makhuwa",.26],["Portuguese",.16],["Tsonga",.11],["Sena",.10],["Lomwe",.07],["Other",.30]],
-        ITA:[["Italian",1]], POL:[["Polish",1]], KOR:[["Korean",1]],
+        FRA:[["French",1]], GBR:[["English",1]], JPN:[["Japanese",1]], RUS:[["Russian",1]],
+        ESP:[["Spanish",.74],["Catalan",.15],["Galician",.08],["Basque",.03]],
+        CAN:[["English",.57],["French",.21],["Other",.22]], AUS:[["English",1]], ITA:[["Italian",1]],
+        POL:[["Polish",1]], KOR:[["Korean",1]], AFG:[["Dari",.48],["Pashto",.42],["Uzbek",.07],["Other",.03]],
+        UKR:[["Ukrainian",.68],["Russian",.30],["Other",.02]], FJI:[["Fijian",.54],["Hindi",.37],["English",.09]],
         CHE:[["German",.62],["French",.23],["Italian",.08],["Romansh",.01],["English",.06]],
-        BEL:[["Dutch",.59],["French",.4],["German",.01]], MYS:[["Malay",.60],["Mandarin",.20],["Tamil",.07],["English",.08],["Other",.05]],
-        PER:[["Spanish",.83],["Quechua",.13],["Aymara",.02],["Other",.02]],
+        BEL:[["Dutch",.59],["French",.4],["German",.01]],
+        // --- from the instruction matrix ---
+        ALB:[["Albanian",.97],["Greek",.03]], DZA:[["Arabic",.97],["Amazigh",.03]], AGO:[["Portuguese",1]],
+        ARG:[["Spanish",1]], ARM:[["Armenian",.97],["Russian",.03]], AUT:[["German",1]], AZE:[["Azerbaijani",.9],["Russian",.1]],
+        BHR:[["Arabic",1]], BGD:[["Bengali",.95],["English",.05]], BLZ:[["English",1]], BEN:[["French",1]],
+        BWA:[["English",.5],["Tswana",.5]], BRA:[["Portuguese",1]], BGR:[["Bulgarian",1]], BFA:[["French",1]],
+        BDI:[["Kirundi",.8],["French",.2]], KHM:[["Khmer",1]], CMR:[["French",.7],["English",.3]], TCD:[["French",.65],["Arabic",.35]],
+        CHL:[["Spanish",1]], CHN:[["Mandarin",.92],["English",.08]], COL:[["Spanish",1]], COM:[["French",.55],["Arabic",.45]],
+        COG:[["French",1]], CRI:[["Spanish",1]], CIV:[["French",1]], CYP:[["Greek",.8],["English",.2]], CZE:[["Czech",1]],
+        DOM:[["Spanish",1]], COD:[["French",.6],["Lingala",.13],["Swahili",.13],["Kikongo",.07],["Tshiluba",.07]],
+        ECU:[["Spanish",.95],["Quechua",.05]], EGY:[["Arabic",.95],["English",.05]], SLV:[["Spanish",1]],
+        SWZ:[["English",.5],["Swazi",.5]], ETH:[["Oromo",.34],["Amharic",.3],["English",.16],["Tigrinya",.06],["Sidamo",.06],["Somali",.04],["Wolaytta",.04]],
+        GAB:[["French",1]], GMB:[["English",1]], GEO:[["Georgian",.9],["Armenian",.05],["Azerbaijani",.05]], DEU:[["German",1]],
+        GHA:[["English",.55],["Akan",.25],["Ewe",.06],["Dagbani",.05],["Hausa",.05],["Ga",.04]],
+        GTM:[["Spanish",.8],["K'iche'",.07],["Mam",.06],["Kaqchikel",.04],["Q'eqchi'",.03]], GIN:[["French",1]], GUY:[["English",1]],
+        HTI:[["French",.5],["Haitian Creole",.5]], HND:[["Spanish",1]],
+        IND:[["Hindi",.44],["Bengali",.08],["Marathi",.07],["Telugu",.07],["Tamil",.06],["Gujarati",.045],["Urdu",.04],["Kannada",.035],["Odia",.03],["Malayalam",.03],["Punjabi",.03],["Other",.07]],
+        IDN:[["Indonesian",.95],["Javanese",.03],["Sundanese",.02]], IRN:[["Persian",.9],["Azerbaijani",.05],["Kurdish",.03],["Arabic",.02]],
+        IRQ:[["Arabic",.8],["Kurdish",.2]], ISR:[["Hebrew",.8],["Arabic",.2]], JAM:[["English",1]], JOR:[["Arabic",.95],["English",.05]],
+        KAZ:[["Kazakh",.65],["Russian",.35]], KEN:[["English",.55],["Swahili",.25],["Kikuyu",.05],["Kalenjin",.04],["Luhya",.04],["Luo",.04],["Kamba",.03]],
+        KWT:[["Arabic",1]], KGZ:[["Kyrgyz",.7],["Russian",.25],["Uzbek",.05]], LAO:[["Lao",1]], LSO:[["English",.5],["Sesotho",.5]],
+        LBR:[["English",1]], MDG:[["Malagasy",.85],["French",.15]], MWI:[["Chichewa",.65],["English",.35]],
+        MYS:[["Malay",.75],["English",.18],["Tamil",.07]], MLI:[["French",.8],["Bambara",.2]], MLT:[["Maltese",.7],["English",.3]],
+        MRT:[["Arabic",.85],["French",.15]], MUS:[["English",.6],["French",.4]],
+        MEX:[["Spanish",.93],["Nahuatl",.02],["Maya",.02],["Zapotec",.02],["Mixtec",.01]], MDA:[["Romanian",.8],["Russian",.2]],
+        MNG:[["Mongolian",1]], MNE:[["Montenegrin",.9],["Albanian",.1]], MAR:[["Arabic",.85],["Amazigh",.15]],
+        MOZ:[["Portuguese",.85],["Makhuwa",.06],["Sena",.05],["Tsonga",.04]], MMR:[["Burmese",.9],["Shan",.04],["Karen",.03]],
+        NAM:[["English",.5],["Oshiwambo",.25],["Afrikaans",.1],["Herero",.05],["Nama",.05],["Kavango",.05]],
+        NPL:[["Nepali",.9],["Maithili",.04],["Bhojpuri",.03],["Tharu",.03]], NZL:[["English",.95],["Maori",.05]],
+        NIC:[["Spanish",.95],["Miskito",.03],["English",.02]], NER:[["Hausa",.85],["Zarma",.1],["French",.05]],
+        NGA:[["English",.85],["Hausa",.06],["Yoruba",.05],["Igbo",.04]], MKD:[["Macedonian",.8],["Albanian",.2]], OMN:[["Arabic",1]],
+        PAK:[["Urdu",.65],["English",.15],["Pashto",.1],["Sindhi",.05],["Punjabi",.03],["Balochi",.02]], PAN:[["Spanish",1]],
+        PNG:[["English",.7],["Tok Pisin",.2],["Hiri Motu",.1]], PRY:[["Spanish",.55],["Guarani",.45]],
+        PER:[["Spanish",.9],["Quechua",.08],["Aymara",.02]],
+        PHL:[["Filipino",.45],["English",.25],["Cebuano",.12],["Hiligaynon",.06],["Ilocano",.06],["Bikol",.06]],
+        QAT:[["Arabic",.8],["English",.2]], ROU:[["Romanian",.92],["Hungarian",.08]], RWA:[["Kinyarwanda",.75],["English",.25]],
+        SAU:[["Arabic",.95],["English",.05]], SEN:[["French",.85],["Wolof",.15]], SLE:[["English",.8],["Krio",.1],["Mende",.05],["Temne",.05]],
+        SVK:[["Slovak",.92],["Hungarian",.08]], SLB:[["English",.75],["Pijin",.25]],
+        ZAF:[["English",.45],["Zulu",.13],["Afrikaans",.1],["Xhosa",.1],["Sepedi",.06],["Setswana",.05],["Sesotho",.05],["Tsonga",.03],["Swazi",.03]],
+        LKA:[["Sinhala",.75],["Tamil",.25]], SDN:[["Arabic",.9],["English",.1]], TJK:[["Tajik",.85],["Russian",.08],["Uzbek",.07]],
+        TZA:[["Swahili",.9],["English",.1]], THA:[["Thai",.98],["Malay",.02]], TLS:[["Tetum",.55],["Portuguese",.45]], TGO:[["French",1]],
+        TTO:[["English",1]], TUN:[["Arabic",.9],["French",.1]], TUR:[["Turkish",.95],["Kurdish",.05]],
+        UGA:[["English",.55],["Luganda",.1],["Runyankole",.08],["Acholi",.06],["Ateso",.06],["Luo",.05],["Lango",.05],["Lugbara",.05]],
+        ARE:[["Arabic",.7],["English",.3]], URY:[["Spanish",1]], UZB:[["Uzbek",.8],["Russian",.1],["Karakalpak",.05],["Tajik",.05]],
+        VUT:[["English",.55],["French",.45]], VNM:[["Vietnamese",.98]], ZMB:[["English",.55],["Bemba",.15],["Nyanja",.12],["Tonga",.06],["Lozi",.06],["Kaonde",.03],["Lunda",.03]],
+        ZWE:[["English",.6],["Shona",.28],["Ndebele",.12]],
       };
       // Real-ish national populations (demo; round UN-era figures).
       const COUNTRY_POP = {
@@ -1593,18 +1622,28 @@
         { lang: "Portuguese", h: 0.063, w: 158.0 }, { lang: "Spanish", h: 0.058, w: 381.2 },
       ];
       // each slider stop unlocks language(s); the built set is cumulative up to the stop
+      // Supply-curve groups in BUILD ORDER. ce = income-doublings per donated dollar (bar height);
+      // children = millions of kids reached by that writing-system engine (bar width / x-axis).
+      const LANG_GROUPS = [
+        { key: "devanagari", short: "Devanagari", name: "Devanagari + Indic abugida (schwa-deletion engine)", ce: 0.281, children: 141.6,
+          langs: ["Hindi", "Bengali", "Marathi", "Gujarati", "Odia", "Punjabi", "Assamese", "Nepali", "Maithili", "Santali", "Manipuri", "Dogri", "Kokborok", "Konkani", "Bhojpuri", "Tharu", "Garo", "Nagamese"] },
+        { key: "latin-transparent", short: "Latin · transparent", name: "Latin — transparent core (phonemic engine)", ce: 0.285, children: 119.8,
+          langs: ["Spanish", "Indonesian", "Portuguese", "Malay", "Uzbek", "Romanian", "Azerbaijani", "Javanese", "Sundanese", "Czech", "Slovak", "Tok Pisin", "Quechua", "Wolof", "Kaqchikel", "Hiri Motu", "Kichwa", "Hungarian", "Khasi", "Karakalpak", "Aymara", "Tetum", "Albanian", "Krio", "Pijin", "Maori"] },
+        { key: "perso-arabic", short: "Perso-Arabic", name: "Perso-Arabic abjad (unmarked-vowel engine)", ce: 0.190, children: 103.9,
+          langs: ["Arabic", "Urdu", "Persian", "Kurdish", "Sindhi", "Uyghur", "Pashto", "Hebrew", "Balochi", "Kashmiri"] },
+        { key: "deep-latin", short: "English / French", name: "English & French (deep Latin — own engine)", ce: 0.134, children: 118.0,
+          langs: ["English", "French"] },
+        { key: "latin-other", short: "Latin · other branches", name: "Latin — length, tonal & deep/etymological branches", ce: 0.287, children: 89.5,
+          langs: ["Filipino", "Swahili", "Turkish", "Oromo", "Cebuano", "Ilocano", "Hiligaynon", "Bikol", "Malagasy", "Amazigh", "Maya", "K'iche'", "Q'eqchi'", "Mam", "Miskito", "Zulu", "Vietnamese", "Hausa", "Xhosa", "Akan", "Yoruba", "Sepedi", "Igbo", "Sesotho", "Setswana", "Kinyarwanda", "Somali", "Lingala", "Tsonga", "Swazi", "Chichewa", "Luganda", "Shona", "Zapotec", "Mixtec", "Bemba", "Tshiluba", "Kikongo", "Ewe", "Kikuyu", "Bambara", "Nyanja", "Dagbani", "Luhya", "Luo", "Kalenjin", "Runyankole", "Ga", "Kamba", "Tswana", "Ndebele", "Acholi", "Ateso", "Lango", "Lugbara", "Lozi", "Tonga", "Kirundi", "Makhuwa", "Mizo", "Oshiwambo", "Sena", "Kaonde", "Lunda", "Zarma", "Sotho", "Mende", "Temne", "Herero", "Kavango", "Nama", "Nyishi", "German", "Afrikaans", "Guarani", "Nahuatl", "Haitian Creole", "Maltese"] },
+        { key: "abugida-noschwa", short: "Dravidian / Ethiopic", name: "Abugida — no schwa deletion (Dravidian, Sinhala, Ethiopic)", ce: 0.284, children: 37.5,
+          langs: ["Telugu", "Tamil", "Kannada", "Amharic", "Malayalam", "Tigrinya", "Sidamo", "Wolaytta", "Sinhala"] },
+        { key: "other-scripts", short: "Other scripts", name: "Other scripts — SE-Asian abugidas + Cyrillic & small scripts", ce: 0.230, children: 32.8,
+          langs: ["Thai", "Burmese", "Khmer", "Tibetan", "Lao", "Karen", "Shan", "Bhutia", "Lepcha", "Mongolian", "Korean", "Bulgarian", "Kyrgyz", "Russian", "Armenian", "Macedonian", "Tajik", "Georgian", "Kazakh", "Tay", "Montenegrin", "Greek"] },
+      ];
+      // slider stops: today's reach (Hindi) then one tick per group, in build order
       const ROADMAP_STOPS = [
-        { label: "Current", langs: ["Hindi"] },
-        { label: "100% Hindi", langs: ["Hindi"] },
-        { label: "100% Amharic", langs: ["Amharic"] },
-        { label: "100% Swahili", langs: ["Swahili"] },
-        { label: "100% Urdu", langs: ["Urdu"] },
-        { label: "100% Telugu / Marathi / Tamil / Bengali", langs: ["Telugu", "Marathi", "Tamil", "Bengali"] },
-        { label: "100% Vietnamese", langs: ["Vietnamese"] },
-        { label: "100% Filipino", langs: ["Filipino", "Tagalog"] },
-        { label: "100% Arabic / Farsi", langs: ["Arabic", "Persian", "Farsi"] },
-        { label: "100% Indonesian", langs: ["Indonesian", "Bahasa Indonesia"] },
-        { label: "100% Portuguese / Spanish", langs: ["Portuguese", "Spanish"] },
+        { label: "Current", short: "Current", langs: ["Hindi"] },
+        ...LANG_GROUPS.map((g) => ({ label: g.name, short: g.short, langs: g.langs })),
       ];
       const LANG_EFF = (() => { const m = {}; for (const r of COST_TABLE) for (const p of r.lang.split("/")) m[p.trim()] = r.h; m["Indonesian"] = m["Bahasa Indonesia"]; return m; })();
       const builtCumulative = (idx) => { const s = new Set(); for (let i = 0; i <= idx; i++) for (const l of ROADMAP_STOPS[i].langs) s.add(l); return s; };
@@ -1618,17 +1657,6 @@
       const BLUE_HUE = 217;
       const blueByLight = (share) => "hsl(" + BLUE_HUE + ", 85%, " + Math.round(90 - clamp(share, 0, 1) * 42) + "%)";
       const BLUE_FULL = "hsl(" + BLUE_HUE + ", 85%, 48%)";
-      const findCostRow = (l) => COST_TABLE.find((r) => r.lang.split("/").some((p) => p.trim() === l)) || (l === "Indonesian" ? COST_TABLE.find((r) => r.lang === "Bahasa Indonesia") : null);
-      // cost-curve bars in roadmap build order (Hindi first, then Amharic, …), deduped by cost-table row
-      const ROADMAP_BARS = (() => {
-        const seenRow = new Set(), out = [];
-        for (const stop of ROADMAP_STOPS) for (const l of stop.langs) {
-          const row = findCostRow(l); if (!row || seenRow.has(row.lang)) continue;
-          seenRow.add(row.lang); out.push({ label: row.lang, h: row.h, w: row.w });
-        }
-        return out;
-      })();
-      const ROADMAP_MAX_H = Math.max.apply(null, ROADMAP_BARS.map((b) => b.h));
 
       function RoadmapGlobe({ worldGeo, builtSet, reach }) {
         const W = 360, H = 300, R0 = (Math.min(W, H) - 16) / 2;   // base globe radius
@@ -1677,52 +1705,54 @@
           </div>
         );
       }
-      function CostCurve({ builtSet }) {
+      function CostCurve({ groupsBuilt }) {
         const W = 520, H = 330, pl = 58, pr = 14, pt = 66, pb = 56;
         const iw = W - pl - pr, ih = H - pt - pb, axisY = pt + ih;
-        const sig1 = (v) => (v ? String(parseFloat(Number(v).toPrecision(1))) : "0");   // one significant figure
-        // only built languages, in roadmap build order (Hindi → Amharic → …); not-yet-built are hidden
-        const shown = ROADMAP_BARS.filter((b) => langBuilt(b.label, builtSet));
-        const totalW = shown.reduce((s, b) => s + b.w, 0) || 1;
-        const yOf = (v) => axisY - (v / ROADMAP_MAX_H) * ih;
-        // x axis: evenly spaced, round $B ticks at their true positions (no rounding-collisions)
-        const maxB = totalW / 1000;
+        // groups build left→right in build order; only built ones are drawn, but the x-axis spans the
+        // full programme so the curve "fills in" as the slider advances (no rescaling).
+        const shown = LANG_GROUPS.slice(0, Math.max(1, groupsBuilt || 0));   // always show the first (Devanagari) bar, incl. "Current"
+        const totalAll = LANG_GROUPS.reduce((s, g) => s + g.children, 0) || 1;  // total kids reachable (M)
+        const maxCE = Math.max.apply(null, LANG_GROUPS.map((g) => g.ce));
+        const yMax = Math.ceil(maxCE * 10) / 10;                                // round up to nearest 0.1
+        const yOf = (v) => axisY - (v / yMax) * ih;
         const niceStep = (r) => { const p = Math.pow(10, Math.floor(Math.log10(r))); const n = r / p; return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p; };
-        const xStep = niceStep(maxB / 4);
-        const xTicks = []; for (let v = 0; v <= maxB + 1e-9; v += xStep) xTicks.push(Math.round(v / xStep) * xStep);
+        const xStep = niceStep(totalAll / 5);
+        const xTicks = []; for (let v = 0; v <= totalAll + 1e-9; v += xStep) xTicks.push(Math.round(v));
+        const yTicks = []; for (let v = 0; v <= yMax + 1e-9; v += 0.1) yTicks.push(Math.round(v * 10) / 10);
         let x = pl;
-        const bars = shown.map((b) => {
-          const bw = (b.w / totalW) * iw, bh = (b.h / ROADMAP_MAX_H) * ih, x0 = x, cx = x0 + bw / 2, top = axisY - bh; x += bw;
+        const bars = shown.map((g) => {
+          const bw = (g.children / totalAll) * iw, bh = (g.ce / yMax) * ih, x0 = x, cx = x0 + bw / 2, top = axisY - bh; x += bw;
           return (
-            <g key={b.label}>
-              <rect x={x0} y={top} width={Math.max(0.6, bw)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
-              {/* label sits vertically *above* the bar */}
-              {bw > 7 ? <text x={cx} y={top - 4} transform={"rotate(-90," + cx + "," + (top - 4) + ")"} textAnchor="start" fontSize="10" fontWeight="600" fill="#334155">{b.label.split("/")[0]}</text> : null}
+            <g key={g.key}>
+              <title>{g.name + " — " + g.ce.toFixed(3) + " doublings/$ · " + g.children + "M children"}</title>
+              <rect x={x0} y={top} width={Math.max(0.6, bw - 0.8)} height={bh} fill={BLUE_FULL} stroke="#ffffff" strokeWidth={0.7} />
+              {/* short engine name, set vertically above the bar (only where it fits) */}
+              {bw > 22 ? <text x={cx} y={top - 4} transform={"rotate(-90," + cx + "," + (top - 4) + ")"} textAnchor="start" fontSize="9.5" fontWeight="600" fill="#334155">{g.short}</text> : null}
             </g>
           );
         });
         return (
           <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto" }}>
-            {[0, 0.1, 0.2, 0.3, 0.4, 0.5].map((v, i) => (
+            {yTicks.map((v, i) => (
               <g key={i}>
                 <line x1={pl} y1={yOf(v)} x2={W - pr} y2={yOf(v)} stroke="#eef2f7" />
                 <line x1={pl - 5} y1={yOf(v)} x2={pl} y2={yOf(v)} stroke="#94a3b8" strokeWidth={1.2} />
-                <text x={pl - 9} y={yOf(v) + 4} textAnchor="end" fontSize="12" className="fill-zinc-500">{sig1(v)}</text>
+                <text x={pl - 9} y={yOf(v) + 4} textAnchor="end" fontSize="12" className="fill-zinc-500">{v}</text>
               </g>
             ))}
             {bars}
-            {/* x axis: cumulative PadhaiPal spend ($B) — round ticks at their true positions */}
+            {/* x axis: cumulative children reached (millions) */}
             <line x1={pl} y1={axisY} x2={W - pr} y2={axisY} stroke="#94a3b8" strokeWidth={1.2} />
             {xTicks.map((v, i) => {
-              const xx = pl + (maxB ? v / maxB : 0) * iw;
+              const xx = pl + v / totalAll * iw;
               return (
                 <g key={i}>
                   <line x1={xx} y1={axisY} x2={xx} y2={axisY + 5} stroke="#94a3b8" strokeWidth={1.2} />
-                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{parseFloat(v.toFixed(2))}</text>
+                  <text x={xx} y={axisY + 19} textAnchor="middle" fontSize="12" className="fill-zinc-500">{v}</text>
                 </g>
               );
             })}
-            <text x={pl + iw / 2} y={H - 6} textAnchor="middle" fontSize="12" className="fill-zinc-600">PadhaiPal Spend ($B)</text>
+            <text x={pl + iw / 2} y={H - 6} textAnchor="middle" fontSize="12" className="fill-zinc-600">Children reached (millions)</text>
             <text transform={"translate(15," + (pt + ih / 2) + ") rotate(-90)"} textAnchor="middle" fontSize="12" className="fill-zinc-600">Income doublings per donated dollar</text>
           </svg>
         );
@@ -1849,6 +1879,8 @@
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-bold text-emerald-700">{ROADMAP_STOPS[idx].label}</span>
               <span className="text-[10px] text-zinc-400">{idx + 1} / {N}</span>
             </div>
+            {/* languages covered by the most-recently-built group */}
+            <div className="mb-2 text-[11px] leading-snug text-zinc-500">{LANG_GROUPS[Math.max(0, idx - 1)].langs.join(", ")}</div>
             {/* custom inset slider: green tail before the first dot, not-full after the last */}
             <div ref={trackRef} className="relative h-6 cursor-pointer touch-none select-none"
               onPointerDown={(e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); setFromX(e.clientX); }}
@@ -1866,7 +1898,7 @@
               {ROADMAP_STOPS.map((s, i) => (
                 <button key={i} onClick={() => setIdx(i)} title={s.label}
                   className={"absolute top-0 w-16 -translate-x-1/2 text-center text-[8px] leading-tight " + (i === idx ? "font-bold text-emerald-600" : "text-zinc-400 hover:text-zinc-600")}
-                  style={{ left: posOf(i) + "%" }}>{s.label}</button>
+                  style={{ left: posOf(i) + "%" }}>{s.short}</button>
               ))}
             </div>
             <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
@@ -1876,10 +1908,10 @@
               </div>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">PadhaiPal Supply Curve</div>
-                <CostCurve builtSet={builtSet} />
+                <CostCurve groupsBuilt={idx} />
               </div>
             </div>
-            <div className="mt-2 text-[10px] text-zinc-400">Height = modelled income-doublings per donated dollar (cost-efficiency); width = deployable market. Estimates blend our measured per-letter cost with published returns-to-literacy. <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Methodology ↗</a></div>
+            <div className="mt-2 text-[10px] text-zinc-400">Height = modelled income-doublings per donated dollar (cost-efficiency); width = deployable market. <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Methodology ↗</a></div>
           </div>
         );
       }
@@ -2239,13 +2271,13 @@
         const note = "absolute left-1/2 top-full hidden w-max -translate-x-1/2 whitespace-nowrap pt-2 text-center text-2xl font-medium leading-tight text-zinc-500 group-hover:block";
         // Rotating headline: the bracketed parts (subject / verb / percentage) cycle together.
         const VARIATIONS = [
-          { subject: "$200T of economic value",                       verb: "unlocked", pct: "45%" },
+          { subject: "$200T of economic value",                       verb: "unlocked", pct: "47%" },
           { subject: "$21 trillion additional tax revenue",           verb: "unlocked", pct: "46%" },
-          { subject: "46 million more people employed",               verb: "unlocked", pct: "48%" },
-          { subject: "368 million more primary school completions",   verb: "unlocked", pct: "40%" },
-          { subject: "368 million more secondary school starts",      verb: "unlocked", pct: "43%" },
-          { subject: "12 million child deaths",                       verb: "averted",  pct: "42%" },
-          { subject: "12 million child marriages",                    verb: "averted",  pct: "41%" },
+          { subject: "46 million more people employed",               verb: "unlocked", pct: "51%" },
+          { subject: "368 million more primary school completions",   verb: "unlocked", pct: "49%" },
+          { subject: "368 million more secondary school starts",      verb: "unlocked", pct: "50%" },
+          { subject: "12 million child deaths",                       verb: "averted",  pct: "47%" },
+          { subject: "12 million child marriages",                    verb: "averted",  pct: "49%" },
         ];
         const [vIdx, setVIdx] = useState(0);
         const [paused, setPaused] = useState(false);          // auto-advance pauses while the user scrubs
@@ -2383,13 +2415,17 @@
                 <div className={"mb-6 " + H} style={HC}>What{" "}
                   <span className="group relative inline-block cursor-help underline decoration-dotted decoration-2 underline-offset-4">PadhaiPal
                     {/* pronunciation + name breakdown on hover (pt-3 bridges the hover gap) */}
-                    <span className="pointer-events-none absolute left-1/2 top-full z-30 hidden w-72 -translate-x-1/2 pt-3 group-hover:block">
-                      <span className="block rounded-xl border border-zinc-200 bg-white p-4 text-left text-sm font-normal leading-relaxed text-zinc-600 shadow-xl">
-                        <span className="block text-base font-extrabold text-zinc-900">PadhaiPal</span>
-                        <span className="mt-0.5 block text-zinc-400">say it <span className="font-semibold text-zinc-700">pad · high · pal</span></span>
-                        <span className="mt-2 block"><span className="font-bold text-zinc-800">Padhai</span> is Hindi for “education” — from <span className="font-bold text-zinc-800">padh</span>, “to read”.</span>
-                        <span className="mt-1.5 block"><span className="font-bold text-zinc-800">AI</span> is the artificial intelligence behind every lesson.</span>
-                        <span className="mt-1.5 block"><span className="font-bold text-zinc-800">PAL</span> is Personalised Adaptive Learning — and, fittingly, a friend who helps every child learn to read.</span>
+                    <span className="pointer-events-none absolute left-1/2 top-full z-30 hidden w-[28rem] max-w-[90vw] -translate-x-1/2 pt-3 group-hover:block">
+                      <span className="block rounded-lg border border-zinc-300 bg-white p-5 text-left font-serif text-[15px] font-normal leading-relaxed text-zinc-700 shadow-xl">
+                        <span className="flex flex-wrap items-baseline gap-x-2 border-b border-zinc-200 pb-2">
+                          <span className="text-xl font-bold text-zinc-900">Padhai·Pal</span>
+                          <span className="text-zinc-400">\ pad·high·pal \</span>
+                          <span className="italic text-zinc-500">noun</span>
+                        </span>
+                        <span className="mt-2 block"><span className="font-semibold text-zinc-400">1.</span> An AI tutor that teaches kids to read in their own language with evening WhatsApp voice message lessons.</span>
+                        <span className="mt-2 block text-[13px] leading-relaxed text-zinc-500">
+                          <span className="italic">Origin:</span> Hindi <span className="font-semibold not-italic text-zinc-700">padhai</span> “education,” from <span className="font-semibold text-zinc-700">padh</span> “to read,” + <span className="font-semibold text-zinc-700">AI</span> (artificial intelligence) + <span className="font-semibold text-zinc-700">PAL</span>, Personalised Adaptive Learning — also “friend.”
+                        </span>
                       </span>
                     </span>
                   </span>{" "}Does</div>
