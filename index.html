@@ -2279,7 +2279,8 @@
       }
 
       // The ask — live finances (balance + bank feed), donate-by-region map, dynamic Donate CTA
-      function DonorAsk({ onDonate, donateMap, donateTarget }) {
+      function DonorAsk({ onDonate, donateMap, donateTarget, showStopRecurring }) {
+        const [recurStopped, setRecurStopped] = useState(false);
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
             {/* live finances: balance over time + live bank feed, side by side */}
@@ -2298,6 +2299,12 @@
             {/* dynamic Donate CTA — label tracks the selected region */}
             <button onClick={() => onDonate(donateTarget && donateTarget !== "most needed" ? donateTarget : null)}
               className="mx-auto mt-5 block w-full max-w-2xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now to {donateTarget}</button>
+            {showStopRecurring && (
+              recurStopped
+                ? <div className="mx-auto mt-2 block w-full max-w-2xl rounded-xl border border-emerald-200 bg-emerald-50 py-2.5 text-center text-sm font-semibold text-emerald-700">✓ Recurring payments stopped</div>
+                : <button onClick={() => setRecurStopped(true)}
+                    className="mx-auto mt-2 block w-full max-w-2xl rounded-xl border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-50">Stop recurring payments</button>
+            )}
             <div className="mt-2 text-center text-[10px] text-zinc-400">Tax-deductible in the US (501c3) &amp; India (80G) · one-time or monthly · DAF &amp; bank transfer available</div>
           </div>
         );
@@ -2437,8 +2444,376 @@
         );
       }
 
+      // Donor log in / sign up — standard auth UX in the transparency-view style. Dummy demo:
+      // fields are pre-filled and the submit button signs you in regardless of what's entered.
+      function AuthModal({ onClose, onAuthed }) {
+        const [mode, setMode] = useState("login");          // "login" | "signup"
+        const [name, setName] = useState("Alex Donor");
+        const [email, setEmail] = useState("donor@example.com");
+        const [password, setPassword] = useState("donor1234");
+        const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm focus:border-[#1d9edf] focus:outline-none focus:ring-2 focus:ring-[#1d9edf]/20";
+        const submit = (e) => { e.preventDefault(); onAuthed(email); };   // dummy: any values → same page
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
+              <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
+              <div className="flex flex-col items-center text-center">
+                <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto" />
+                <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">{mode === "login" ? "Log in to your donor account" : "Create your donor account"}</h2>
+                <p className="mt-1 text-sm text-zinc-500">{mode === "login" ? "Welcome back — track the impact of your giving." : "Sign up to track the impact of your giving."}</p>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 text-sm font-semibold">
+                {[["login", "Log in"], ["signup", "Sign up"]].map(([k, l]) => (
+                  <button key={k} onClick={() => setMode(k)}
+                    className={"rounded-md py-1.5 transition " + (mode === k ? "bg-white text-[#1d9edf] shadow-sm" : "text-zinc-500 hover:text-zinc-700")}>{l}</button>
+                ))}
+              </div>
+              <form onSubmit={submit} className="mt-5 space-y-3.5">
+                {mode === "signup" && (
+                  <label className="block">
+                    <span className="mb-1 block text-[12px] font-semibold text-zinc-600">Full name</span>
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={inputCls} />
+                  </label>
+                )}
+                <label className="block">
+                  <span className="mb-1 block text-[12px] font-semibold text-zinc-600">Email address</span>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[12px] font-semibold text-zinc-600">Password</span>
+                  <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete={mode === "login" ? "current-password" : "new-password"} className={inputCls} />
+                </label>
+                {mode === "login" && (
+                  <div className="text-right"><button type="button" className="text-[12px] font-semibold text-[#1d9edf] hover:underline">Forgot password?</button></div>
+                )}
+                <button type="submit" className="w-full rounded-lg bg-[#1d9edf] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1789c4]">
+                  {mode === "login" ? "Log in" : "Create account"}
+                </button>
+              </form>
+              <p className="mt-4 text-center text-[12px] text-zinc-500">
+                {mode === "login" ? "New to PadhaiPal? " : "Already have an account? "}
+                <button onClick={() => setMode(mode === "login" ? "signup" : "login")} className="font-semibold text-[#1d9edf] hover:underline">{mode === "login" ? "Sign up" : "Log in"}</button>
+              </p>
+              <p className="mt-3 text-center text-[10px] text-zinc-400">Demo — any email &amp; password will sign you in.</p>
+            </div>
+          </div>
+        );
+      }
+
+      // Logged-in donor "thank you" headline — mirrors the transparency ValueStatement: the
+      // bracketed clauses auto-cycle with the odometer roll. Numbers are illustrative dummies.
+      function DonorThankYou({ amount }) {
+        const ENABLED = [
+          "2,400 lessons to be delivered.",
+          "18,000 letters learnt.",
+          "120 children taught.",
+          "8 full-literacy equivalents*.",
+        ];
+        const BY_2050 = [
+          "generate $42,000 in additional GDP",
+          "generate $9,500 in taxable income",
+          "avert 6 child marriages",
+          "prevent 4 child deaths",
+          "create 3 jobs",
+        ];
+        const [iA, setIA] = useState(0);
+        const [iB, setIB] = useState(0);
+        const [paused, setPaused] = useState(false);
+        useEffect(() => {
+          if (paused) return;
+          const id = setTimeout(() => { setIA((x) => x + 1); setIB((x) => x + 1); }, 3200);
+          return () => clearTimeout(id);
+        }, [iA, iB, paused]);
+        // drag-to-scrub: each coloured phrase scrubs ONLY itself (its own index + a shared drag ref)
+        const drag = useRef(null);
+        const STEP_PY = 46;                                    // vertical pixels per step
+        const dragHandlers = (idx, setIdx) => ({
+          onPointerDown: (e) => { e.preventDefault(); if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId); drag.current = { y0: e.clientY, idx0: idx, last: idx, setIdx }; setPaused(true); },
+          onPointerMove: (e) => { const d = drag.current; if (!d) return; const ni = d.idx0 + Math.round((e.clientY - d.y0) / STEP_PY); if (ni !== d.last) { d.last = ni; d.setIdx(ni); } },
+          onPointerUp: (e) => { if (!drag.current) return; drag.current = null; if (e.currentTarget.releasePointerCapture) e.currentTarget.releasePointerCapture(e.pointerId); setPaused(false); },
+          onPointerCancel: () => { if (!drag.current) return; drag.current = null; setPaused(false); },
+        });
+        const roll = { display: "inline-block", transformOrigin: "center", animation: "ppRoll 780ms cubic-bezier(.2,.8,.25,1) both" };
+        const mod = (n, m) => ((n % m) + m) % m;               // safe modulo — the drag index can go negative
+        const a = ENABLED[mod(iA, ENABLED.length)], b = BY_2050[mod(iB, BY_2050.length)];
+        // shared look for the draggable colour spans; the outer span stays mounted (keeps pointer
+        // capture) while the inner, keyed span remounts to replay the odometer roll.
+        const grab = {
+          title: "Drag up or down to explore other impacts",
+          className: "group relative inline-flex select-none cursor-ns-resize items-center align-middle",
+          style: { perspective: "520px", touchAction: "none" },
+        };
+        return (
+          <div className="mx-auto w-[90vw] max-w-4xl text-center">
+            <style>{"@keyframes ppRoll{from{transform:rotateX(90deg) translateY(.5em);opacity:0}to{transform:rotateX(0) translateY(0);opacity:1}}"}</style>
+            <p className="text-5xl font-extrabold leading-[1.05] tracking-tight text-zinc-900 sm:text-7xl">
+              Thank you for your<br />
+              <span className="text-emerald-600">${amount.toLocaleString()}</span><br />
+              donation.
+            </p>
+            <p className="mt-10 text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+              You've enabled{" "}
+              <span {...grab} {...dragHandlers(iA, setIA)}><span key={"a" + iA} className="font-extrabold text-blue-700" style={roll}>{a}</span></span>
+            </p>
+            <p className="mt-4 text-3xl font-semibold leading-snug text-zinc-800 sm:text-4xl">
+              By 2050, your gift will{" "}
+              <span {...grab} {...dragHandlers(iB, setIB)}><span key={"b" + iB} className="font-extrabold text-violet-700" style={roll}>{b}</span></span>
+            </p>
+            <p className="mt-8 text-xs text-zinc-400">* A full-literacy equivalent is equal to teaching a completely illiterate child to the level they can achieve a 400 score on the internationally recognized LaNA test.</p>
+          </div>
+        );
+      }
+
+      // Dummy tax receipt shown by the donor account header's "Generate receipt" button.
+      function ReceiptModal({ account, amount, onClose }) {
+        const ROW = "flex justify-between gap-4 border-b border-zinc-100 py-2 text-sm";
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
+              <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
+              <div className="flex flex-col items-center text-center">
+                <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-10 w-auto" />
+                <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">Donation receipt</h2>
+                <p className="mt-1 text-sm text-zinc-500">For tax purposes · keep for your records</p>
+              </div>
+              <div className="mt-5">
+                <div className={ROW}><span className="text-zinc-500">Receipt no.</span><span className="font-mono font-semibold text-zinc-800">PP-2026-04821</span></div>
+                <div className={ROW}><span className="text-zinc-500">Date</span><span className="font-semibold text-zinc-800">23 Jun 2026</span></div>
+                <div className={ROW}><span className="text-zinc-500">Donor</span><span className="max-w-[60%] truncate font-semibold text-zinc-800" title={account}>{account}</span></div>
+                <div className={ROW}><span className="text-zinc-500">Organization</span><span className="font-semibold text-zinc-800">PadhaiPal Foundation</span></div>
+                <div className={ROW}><span className="text-zinc-500">Tax status</span><span className="font-semibold text-zinc-800">501(c)(3) · 80G</span></div>
+                <div className="flex justify-between gap-4 py-3 text-base"><span className="font-semibold text-zinc-600">Amount</span><span className="text-lg font-extrabold text-emerald-600">${amount.toLocaleString()}</span></div>
+              </div>
+              <button onClick={() => { try { window.print(); } catch (e) {} }}
+                className="mt-2 w-full rounded-lg bg-[#1d9edf] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1789c4]">Download / print PDF</button>
+              <p className="mt-3 text-center text-[10px] text-zinc-400">Demo receipt — illustrative figures, not a valid tax document.</p>
+            </div>
+          </div>
+        );
+      }
+
+      // Zoomable globe for a sponsored child's school: starts zoomed onto the school (red pin,
+      // home country highlighted); drag to rotate, scroll / ± to zoom out to the whole globe.
+      function ChildGlobe({ worldGeo, lon, lat, place, scale = 1 }) {
+        const W = Math.round(360 * scale), H = Math.round(300 * scale), R0 = (Math.min(W, H) - 16) / 2;
+        const [rot, setRot] = useState([-lon, -lat]);   // orthographic.rotate centres on the school
+        const [zoom, setZoom] = useState(5);            // start zoomed in on the school
+        const drag = useRef(null);
+        const ref = useRef(null);
+        const proj = useMemo(() => {
+          if (!worldGeo || worldGeo === "error") return null;
+          return d3.geoOrthographic().rotate(rot).clipAngle(90).scale(R0 * zoom).translate([W / 2, H / 2]);
+        }, [worldGeo, rot, zoom, R0]);
+        const path = useMemo(() => (proj ? d3.geoPath(proj) : null), [proj]);
+        const homeFeature = useMemo(() => {
+          if (!worldGeo || worldGeo === "error") return null;
+          return worldGeo.features.find((f) => d3.geoContains(f, [lon, lat])) || null;
+        }, [worldGeo, lon, lat]);
+        useEffect(() => {
+          const el = ref.current; if (!el) return;
+          const onWheel = (e) => { e.preventDefault(); setZoom((z) => clamp(z * (e.deltaY < 0 ? 1.18 : 1 / 1.18), 1, 14)); };
+          el.addEventListener("wheel", onWheel, { passive: false });
+          return () => el.removeEventListener("wheel", onWheel);
+        }, []);
+        if (!proj) return <div ref={ref} className="flex items-center justify-center rounded-lg bg-blue-50 text-[10px] text-zinc-400" style={{ width: W, height: H }}>Loading…</div>;
+        const onDown = (e) => { drag.current = { x: e.clientX, y: e.clientY, rot }; e.currentTarget.setPointerCapture(e.pointerId); };
+        const onMove = (e) => { if (!drag.current) return; const k = 0.35 / zoom; setRot([drag.current.rot[0] + (e.clientX - drag.current.x) * k, clamp(drag.current.rot[1] - (e.clientY - drag.current.y) * k, -89, 89)]); };
+        const onUp = () => { drag.current = null; };
+        const marker = proj([lon, lat]);
+        const onNearSide = d3.geoDistance([lon, lat], [-rot[0], -rot[1]]) < Math.PI / 2;
+        return (
+          <div ref={ref} className="relative" style={{ width: W }}>
+            <svg viewBox={"0 0 " + W + " " + H} style={{ width: "100%", height: "auto", touchAction: "none", cursor: drag.current ? "grabbing" : "grab" }} className="rounded-lg"
+              onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+              <path d={path({ type: "Sphere" })} fill="#dbeafe" stroke="#93c5fd" strokeWidth={1} />
+              <path d={path(d3.geoGraticule10())} fill="none" stroke="#bfdbfe" strokeWidth={0.5} opacity={0.6} />
+              {worldGeo.features.map((f, i) => {
+                if (f.properties.ADMIN === "Antarctica") return null;
+                const d = path(f); if (!d) return null;
+                const here = f === homeFeature;
+                return <path key={i} d={d} fill={here ? "#fcd34d" : "#e5e7eb"} fillOpacity={here ? 0.95 : 0.6} stroke="#ffffff" strokeWidth={0.3} />;
+              })}
+              {onNearSide && marker && (
+                <g transform={"translate(" + marker[0] + "," + marker[1] + ")"} pointerEvents="none">
+                  <circle r={8} fill="#ef4444" fillOpacity={0.22} />
+                  <circle r={3.6} fill="#ef4444" stroke="#ffffff" strokeWidth={1.3} />
+                </g>
+              )}
+            </svg>
+            {scale >= 0.5 && (
+              <React.Fragment>
+                <div className="absolute right-1.5 top-1.5 flex flex-col overflow-hidden rounded-md border border-zinc-300 bg-white/90 shadow-sm">
+                  <button onClick={() => setZoom((z) => clamp(z * 1.4, 1, 14))} title="Zoom in" className="flex h-6 w-6 items-center justify-center text-sm font-semibold text-zinc-600 hover:bg-zinc-100">+</button>
+                  <div className="h-px bg-zinc-200" />
+                  <button onClick={() => setZoom((z) => clamp(z / 1.4, 1, 14))} title="Zoom out" className="flex h-6 w-6 items-center justify-center text-sm font-semibold text-zinc-600 hover:bg-zinc-100">−</button>
+                </div>
+                <button onClick={() => { setRot([-lon, -lat]); setZoom(5); }} title="Recentre on the school"
+                  className="absolute left-1.5 top-1.5 rounded-md border border-zinc-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 shadow-sm hover:bg-zinc-100">⌖</button>
+              </React.Fragment>
+            )}
+            {scale >= 1 && <div className="pointer-events-none absolute bottom-1 left-2 right-2 truncate text-[8px] text-zinc-400">{place} · drag to rotate · scroll / ± to zoom out to the globe</div>}
+          </div>
+        );
+      }
+
+      // The donor's sponsored children (dummy). Letters/activity reuse the donorStudent generator;
+      // each child has a school location (lon/lat) and the chat thread that "Start a chat" opens.
+      const SPONSORED = [
+        { name: "Aarav", school: "PS Nabipanah · Malihabad, UP", lon: 80.71, lat: 26.92, chat: "Aarav" },
+        { name: "Priya", school: "GPS Rasoolpur · Lucknow, UP", lon: 80.95, lat: 26.85, chat: "Meena Kumari" },
+        { name: "Rohan", school: "PS Kakori · Lucknow, UP", lon: 80.78, lat: 26.83, chat: "PadhaiPal Sponsorship" },
+        { name: "Anjali", school: "UPS Bijnor · Lucknow, UP", lon: 80.85, lat: 26.74, chat: "PadhaiPal Sponsorship" },
+        { name: "Vikram", school: "PS Mohanlalganj · Lucknow, UP", lon: 80.98, lat: 26.66, chat: "PadhaiPal Sponsorship" },
+        { name: "Meera", school: "PS Itaunja · Lucknow, UP", lon: 80.92, lat: 27.07, chat: "PadhaiPal Sponsorship" },
+        { name: "Karan", school: "PS Gosainganj · Lucknow, UP", lon: 81.07, lat: 26.74, chat: "PadhaiPal Sponsorship" },
+        { name: "Sita", school: "PS Chinhat · Lucknow, UP", lon: 81.03, lat: 26.88, chat: "PadhaiPal Sponsorship" },
+      ].map((c, i) => { const s = donorStudent(i); return { ...c, id: "spons." + i, first: c.name, letters: s.letters, activity: s.activity, score: s.score }; });
+
+      // "Your Impact" table for the logged-in donor — their sponsored children. Expanding a row
+      // reveals a zoomable globe of the child's school plus a "Start a chat" button.
+      function SponsoredImpact({ t, worldGeo, onStartChat }) {
+        const TOTAL = SPONSORED.length;
+        const [visible, setVisible] = useState(5);
+        const [open, setOpen] = useState(null);
+        const rows = SPONSORED.slice(0, visible);
+        return (
+          <div className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Letters Learnt</th>
+                    <th className="px-4 py-3 font-medium">Activity (7d)</th>
+                    <th className="px-4 py-3 font-medium">Location</th>
+                    <th className="px-4 py-3 font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => (
+                    <React.Fragment key={c.id}>
+                      <tr onClick={() => setOpen(open === c.id ? null : c.id)} className="cursor-pointer border-b border-zinc-100 align-middle hover:bg-zinc-50">
+                        <td className="px-4 py-2.5">
+                          <div className="font-medium text-zinc-900">{c.name}<span className="ml-1 text-zinc-300">{open === c.id ? "▾" : "▸"}</span></div>
+                          <div className="text-[11px] text-zinc-400">{c.school}</div>
+                        </td>
+                        <td className="px-4 py-2.5">{c.letters.length ? <span className="text-zinc-700">{c.letters.join(" ")}</span> : <span className="italic text-zinc-400">none</span>}</td>
+                        <td className="px-4 py-2.5"><ActivityBars activity={c.activity} /></td>
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <ChildGlobe worldGeo={worldGeo} lon={c.lon} lat={c.lat} place={c.school} scale={0.125} />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <button onClick={(e) => { e.stopPropagation(); onStartChat(c); }}
+                            className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700">💬 Start a chat</button>
+                        </td>
+                      </tr>
+                      {open === c.id && (
+                        <tr className="border-b border-zinc-100 bg-zinc-50">
+                          <td colSpan={5} className="px-4 pb-4 pt-1">
+                            <StudentCard u={{ id: c.id, name: c.name, score: c.score }} t={t} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
+              <span className="text-xs text-zinc-400">Showing {Math.min(visible, TOTAL)} of {TOTAL} learners · click a row to expand</span>
+              {visible < TOTAL
+                ? <button onClick={() => setVisible((v) => Math.min(TOTAL, v + 5))} className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-200">Load more</button>
+                : <span className="text-xs text-zinc-400">All learners loaded</span>}
+            </div>
+          </div>
+        );
+      }
+
+      // Logged-in donor view — reached after the AuthModal sign-in. "Log out" returns to the
+      // public transparency view (by clearing the signed-in email in DonorDashboard).
+      function DonorAccountPage({ t, account, onLogout, onDonate, worldGeo, donateMap, donateTarget }) {
+        const DONATION = 250;
+        const [showReceipt, setShowReceipt] = useState(false);
+        const [chatDraft, setChatDraft] = useState(null);   // { chat, text, nonce } — prefilled message for Messages
+        const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
+        const NAV = [["#donor-top", "Top"], ["#your-impact", "Your Impact"], ["#messages", "Messages"], ["#empower", "Empower"]];
+        // "Start a chat" from a sponsored child → open their thread with a prefilled message and scroll to Messages.
+        const startChat = (c) => {
+          setChatDraft((d) => ({ chat: c.chat || c.name, text: "Hi " + c.first + "! 🎉 I'm so proud of how much you're reading. Keep it up — I'm cheering you on! 💚", nonce: (d ? d.nonce : 0) + 1 }));
+          const el = document.getElementById("messages");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        };
+        return (
+          <div className="flex-1 scroll-smooth overflow-y-auto overflow-x-clip bg-zinc-50">
+            {/* header — logo (no link) + nav, with Donate / receipt / log out on the right */}
+            <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
+              <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
+                <div className="flex items-center gap-8">
+                  <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto shrink-0 sm:h-12" />
+                  <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
+                    {NAV.map(([href, label]) => <a key={href} href={href} className="transition-colors hover:text-blue-600">{label}</a>)}
+                  </nav>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => onDonate(null)}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">💚 Donate</button>
+                  <button onClick={() => setShowReceipt(true)}
+                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100">Generate receipt</button>
+                  <button onClick={onLogout}
+                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100">Log out</button>
+                </div>
+              </div>
+            </header>
+
+            <div id="donor-top" />
+
+            {/* 1 · thank-you headline — coloured band, same layout as the transparency hero */}
+            <section className="bg-blue-50">
+              <div className="mx-auto flex min-h-[42vh] items-center justify-center px-6 py-12"><DonorThankYou amount={DONATION} /></div>
+            </section>
+
+            {/* 2 · Your Impact — the learners table from the transparency Traction section */}
+            <section id="your-impact" className="scroll-mt-20 bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
+                <div className={"mb-6 " + H} style={HC}>Your Impact</div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <SponsoredImpact t={t} worldGeo={worldGeo} onStartChat={startChat} />
+                </div>
+              </div>
+            </section>
+
+            {/* 3 · Messages — the Conversations panel from the BEO Messaging section */}
+            <section id="messages" className="scroll-mt-20 bg-blue-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
+                <div className={"mb-6 " + H} style={HC}>Messages</div>
+                <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
+                  <Conversations t={t} chats={DONOR_CHATS} draft={chatDraft} editable />
+                </div>
+              </div>
+            </section>
+
+            {/* 4 · Please Empower More Kids — the transparency "Help us empower kids" ask + stop-recurring */}
+            <section id="empower" className="scroll-mt-20 bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6">
+                <div className={"mb-6 " + H} style={HC}>Please Empower More Kids</div>
+                <DonorAsk onDonate={onDonate} donateMap={donateMap} donateTarget={donateTarget} showStopRecurring />
+              </div>
+            </section>
+
+            {/* 5 · footer */}
+            <section className="bg-zinc-50 py-10">
+              <div className="mx-auto max-w-6xl px-6"><DonorFooter t={t} /></div>
+            </section>
+
+            {showReceipt && <ReceiptModal account={account} amount={DONATION} onClose={() => setShowReceipt(false)} />}
+          </div>
+        );
+      }
+
       function DonorDashboard({ t, onDonate, worldGeo, donateMap, donateTarget }) {
         const TRACTION_METRICS = DONOR_METRICS.filter((m) => ["dau", "lessons", "letters"].includes(m.key));
+        const [showAuth, setShowAuth] = useState(false);    // login / sign-up modal open
+        const [account, setAccount] = useState(null);       // signed-in donor email (dummy), or null
         const [metric, setMetric] = useState("letters");   // traction default
         const [winKey, setWinKey] = useState("1w");         // default time scale: one week
         const win = TIME_WINDOWS.find((w) => w.key === winKey) || TIME_WINDOWS[2];
@@ -2446,6 +2821,9 @@
         const series = useMemo(() => donorSeries(metric, win), [metric, winKey]);
         const H = "text-center text-3xl font-extrabold tracking-tight sm:text-4xl", HC = { color: "#1d9edf" };
         const SUBH = "text-center text-2xl font-bold tracking-tight sm:text-3xl";   // subheading (e.g. Theory of Change)
+        // once signed in, swap the public marketing page for the logged-in donor account view;
+        // "Log out" clears the email and drops back here (the transparency view).
+        if (account) return <DonorAccountPage t={t} account={account} onLogout={() => setAccount(null)} onDonate={onDonate} worldGeo={worldGeo} donateMap={donateMap} donateTarget={donateTarget} />;
         return (
           <div className="flex-1 scroll-smooth overflow-y-auto overflow-x-clip bg-zinc-50">
             {/* sticky top bar — logo + nav upper-left, GitHub + Donate now upper-right */}
@@ -2463,6 +2841,19 @@
                 <div className="flex items-center gap-4">
                   <a href="https://github.com/orgs/padhaipal/repositories" target="_blank" rel="noreferrer" title="Source on GitHub"
                     className="hidden text-xl text-zinc-500 transition-colors hover:text-zinc-900 sm:block"><i className="fa-brands fa-github" /></a>
+                  {account ? (
+                    <div className="flex items-center gap-2">
+                      <span className="hidden items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700 sm:flex" title={account}>
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1d9edf] text-[10px] font-bold text-white">{account[0].toUpperCase()}</span>
+                        <span className="max-w-[160px] truncate">{account}</span>
+                      </span>
+                      <button onClick={() => setAccount(null)}
+                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100">Log out</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowAuth(true)}
+                      className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 sm:text-base">Log in / Sign up</button>
+                  )}
                   <button onClick={() => onDonate(null)}
                     className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:text-base">💚 Donate now</button>
                 </div>
@@ -2571,6 +2962,8 @@
             <section className="bg-zinc-50 py-10">
               <div className="mx-auto max-w-6xl px-6"><DonorFooter /></div>
             </section>
+
+            {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuthed={(email) => { setAccount(email); setShowAuth(false); }} />}
           </div>
         );
       }
@@ -2819,6 +3212,32 @@
             { mine: true, text: "Wonderful! Keep the streak going.", time: "Mon" },
           ] },
       ];
+      // Donor ↔ sponsored family chats — shown in the logged-in donor "Messages" section.
+      const DONOR_CHATS = [
+        { name: "Aarav", sub: "Your sponsored child · Grade 2", group: false, color: "#16a34a", time: "09:24",
+          msgs: [
+            { from: "Aarav", text: "Hello didi/bhaiya! 🎉 I learnt 5 new letters today.", time: "09:18" },
+            { mine: true, text: "Amazing work, Aarav! 👏 Which one is your favourite?", time: "09:21" },
+            { from: "Aarav", text: "‘म’ for माँ 😊 I can read a whole story now!", time: "09:24" },
+          ] },
+        { name: "Sunita Devi", sub: "Parent · Aarav's mother", group: false, color: "#dc2626", time: "Yesterday",
+          msgs: [
+            { from: "Sunita Devi", text: "Namaste 🙏 Thank you for sponsoring Aarav. He reads to his little sister every evening now.", time: "Yesterday" },
+            { mine: true, text: "That means the world to me 🙏 I'm so proud of him.", time: "Yesterday" },
+            { from: "Sunita Devi", text: "He drew you a picture today ❤️ I'll send a photo.", time: "Yesterday" },
+          ] },
+        { name: "PadhaiPal Sponsorship", sub: "Your coordinator · updates", group: true, color: "#0891b2", time: "Mon",
+          msgs: [
+            { from: "PadhaiPal", color: "#0891b2", text: "Aarav's monthly progress report is ready — oral reading up 18% 📈", time: "Mon" },
+            { from: "Coordinator", color: "#7c3aed", text: "He's on track to reach grade level by December.", time: "Mon" },
+            { mine: true, text: "Wonderful news — thank you for the update! 💚", time: "Mon" },
+          ] },
+        { name: "Meena Kumari", sub: "Parent · Priya's mother", group: false, color: "#d97706", time: "2d",
+          msgs: [
+            { from: "Meena Kumari", text: "Priya sang the alphabet song today 🎵 We recorded a voice note for you!", time: "2d" },
+            { mine: true, text: "I'd love to hear it 😍 Thank you for sharing.", time: "2d" },
+          ] },
+      ];
       function ConvAvatar({ chat, sm }) {
         const s = sm ? "h-9 w-9 text-[12px]" : "h-9 w-9 text-[12px]";
         const initials = chat.group ? null : chat.name.split(" ").map((w) => w[0]).slice(0, 2).join("");
@@ -2828,15 +3247,31 @@
           </span>
         );
       }
-      function Conversations({ t = (s) => s }) {
+      function Conversations({ t = (s) => s, chats = CONV_CHATS, draft = null, editable = false }) {
         const [sel, setSel] = useState(0);
-        const chat = CONV_CHATS[sel];
+        const [input, setInput] = useState("");
+        const [extra, setExtra] = useState({});            // { [chatIndex]: [appended msg, …] }
+        // a prefilled draft (from "Start a chat") opens its thread and fills the composer
+        useEffect(() => {
+          if (!draft) return;
+          const idx = chats.findIndex((c) => c.name === draft.chat);
+          if (idx >= 0) setSel(idx);
+          setInput(draft.text || "");
+        }, [draft && draft.nonce]);
+        const chat = chats[sel];
+        const msgs = chat.msgs.concat(extra[sel] || []);
+        const send = () => {
+          const text = input.trim(); if (!text) return;
+          setExtra((m) => ({ ...m, [sel]: [...(m[sel] || []), { mine: true, text, time: "now" }] }));
+          setInput("");
+        };
         return (
           <div className="flex h-[440px] overflow-hidden rounded-xl border border-zinc-200">
             {/* chat list */}
             <div className="hidden w-64 flex-shrink-0 overflow-y-auto border-r border-zinc-200 bg-white sm:block">
-              {CONV_CHATS.map((c, i) => {
-                const last = c.msgs[c.msgs.length - 1];
+              {chats.map((c, i) => {
+                const ex = extra[i] || [];
+                const last = ex.length ? ex[ex.length - 1] : c.msgs[c.msgs.length - 1];
                 return (
                   <button key={c.name} onClick={() => setSel(i)} className={"flex w-full items-center gap-2.5 border-b border-zinc-100 px-3 py-2.5 text-left hover:bg-zinc-50 " + (i === sel ? "bg-emerald-50" : "")}>
                     <ConvAvatar chat={c} />
@@ -2855,7 +3290,7 @@
                 <div className="min-w-0"><div className="truncate text-sm font-semibold">{chat.name}</div><div className="truncate text-[10px] opacity-90">{chat.sub}</div></div>
               </div>
               <div className="flex-1 space-y-1.5 overflow-y-auto px-3 py-3" style={{ background: "#efeae2" }}>
-                {chat.msgs.map((m, i) => (
+                {msgs.map((m, i) => (
                   <div key={i} className={"flex " + (m.mine ? "justify-end" : "justify-start")}>
                     <div className={"max-w-[80%] rounded-lg px-2.5 py-1.5 text-[12px] shadow-sm " + (m.mine ? "bg-[#d9fdd3]" : "bg-white")}>
                       {chat.group && !m.mine && <div className="text-[10px] font-bold" style={{ color: m.color || "#16a34a" }}>{m.from}</div>}
@@ -2866,8 +3301,19 @@
                 ))}
               </div>
               <div className="flex items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-3 py-2">
-                <input disabled placeholder={t("Type a message")} className="flex-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[12px] text-zinc-500" />
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"><i className="fa-solid fa-paper-plane text-[12px]" /></span>
+                {editable ? (
+                  <React.Fragment>
+                    <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
+                      placeholder={t("Type a message")} className="flex-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[12px] text-zinc-800 focus:border-emerald-500 focus:outline-none" />
+                    <button onClick={send} disabled={!input.trim()} title="Send"
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:opacity-40"><i className="fa-solid fa-paper-plane text-[12px]" /></button>
+                  </React.Fragment>
+                ) : (
+                  <React.Fragment>
+                    <input disabled placeholder={t("Type a message")} className="flex-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[12px] text-zinc-500" />
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"><i className="fa-solid fa-paper-plane text-[12px]" /></span>
+                  </React.Fragment>
+                )}
               </div>
             </div>
           </div>
@@ -4800,7 +5246,7 @@
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      const [role, setRole] = useState("beo");   // signed-in role (lifted so the toggle lives in the top bar)
+      const [role, setRole] = useState("transparency");   // signed-in role (lifted so the toggle lives in the top bar)
       return (
         <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
