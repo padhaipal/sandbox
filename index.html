@@ -251,15 +251,12 @@
       }
       const toPath = (poly) => "M" + poly.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z";
 
-      // dark grey for the non-phonetic pie segment + no-data areas (contrasts the slate border)
+      // dark grey for no-data / non-phonetic (beyond-method) areas (contrasts the slate border)
       const NONPHON = "#3f3f46";
-      // PadhaiPal coverage (demo: randomized). Each node ~50% chance of being registered;
-      // light grey = the coverage gap (3rd pie segment + whole-area shade when unregistered).
+      // light grey = an area with no PadhaiPal node (shown as a flat grey fill).
       const UNCOVERED = "#a1a1aa";
-      const registered = (id) => (hashStr("reg:" + id) % 2) === 0;          // ~50% of nodes in network
+      const registered = (id) => (hashStr("reg:" + id) % 10) >= 3;          // ~70% of nodes in network (30% grey = no node)
       const coverShare = (id) => (hashStr("cov:" + id) % 1000) / 1000;      // covered fraction of the phonetic share
-      // an area is "dimmed" (grey tint + invite +) when unregistered AND >5% phonetic
-      const isDimmed = (id, frac) => !registered(id) && frac > 0.05;
       // Roadmap: ordered list of 10 languages PadhaiPal could build (all phonetic / buildable).
       const ROADMAP_LANGS = ["Hindi", "Spanish", "Bengali", "Indonesian", "Swahili", "Telugu", "Marathi", "Tamil", "Vietnamese", "Turkish"];
       const IMPACT_METRICS = [
@@ -269,85 +266,19 @@
         { id: "cost_daly", label: "$ / DALY", group: "cost" },
         { id: "cost_life", label: "$ / life saved", group: "cost" },
       ];
-      // --- phonetic pie: fill each area with a 2-segment pie (colored=phonetic share,
-      //     non-phonetic=dark grey) centered at its centroid, radius > the polygon so the
-      //     border clips the circle perimeter. bbox is [a,b,c,d] (flat) or [[x0,y0],[x1,y1]]. ---
-      function cornerRadius(c, bbox) {
-        if (!c || !bbox) return 0;
-        const x0 = Array.isArray(bbox[0]) ? bbox[0][0] : bbox[0], y0 = Array.isArray(bbox[0]) ? bbox[0][1] : bbox[1];
-        const x1 = Array.isArray(bbox[0]) ? bbox[1][0] : bbox[2], y1 = Array.isArray(bbox[0]) ? bbox[1][1] : bbox[3];
-        let m = 0;
-        for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) { const d = Math.hypot(x - c[0], y - c[1]); if (d > m) m = d; }
-        return m * 1.06;
-      }
+      // SVG path for a pie wedge from angle a0→a1 (used by the MiniPie language breakdown).
       const wedgePath = (cx, cy, r, a0, a1) => {
         const large = (a1 - a0) > Math.PI ? 1 : 0;
         const x0 = (cx + r * Math.cos(a0)).toFixed(1), y0 = (cy + r * Math.sin(a0)).toFixed(1);
         const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy + r * Math.sin(a1)).toFixed(1);
         return `M${cx.toFixed(1)},${cy.toFixed(1)}L${x0},${y0}A${r.toFixed(1)},${r.toFixed(1)} 0 ${large} 1 ${x1},${y1}Z`;
       };
-      // clipped pie group (no border / interactions — those stay on the area path).
-      // 3 segments by teachability: taught today (colored) | buildable later (grey) | never (dark).
-      function pieEls(key, d, c, R, phon, perf, teach) {
-        if (!c || !d || !(R > 0)) return null;
-        const cid = "pie-" + String(key).replace(/[^\w-]/g, "_");
-        const color = scoreColor(perf), cx = c[0], cy = c[1];
-        const f = phon < 0 ? 0 : phon > 1 ? 1 : phon;            // phonetic share (teachable today + later)
-        const t = teach == null ? 0 : teach < 0 ? 0 : teach > f ? f : teach;  // taught today (<= phonetic)
-        const segs = [
-          { f: t, fill: color },               // languages we teach today (Hindi)
-          { f: f - t, fill: UNCOVERED },        // languages we can build next (phonetic)
-          { f: 1 - f, fill: NONPHON },          // languages beyond the method
-        ].filter((s) => s.f > 0.0005);
-        let wedges;
-        if (segs.length <= 1) wedges = <circle cx={cx} cy={cy} r={R} fill={(segs[0] || { fill: NONPHON }).fill} />;
-        else {
-          let a = -Math.PI / 2;
-          wedges = segs.map((s, i) => { const a1 = a + 2 * Math.PI * s.f, p = wedgePath(cx, cy, R, a, a1); a = a1; return <path key={i} d={p} fill={s.fill} />; });
-        }
-        return (
-          <React.Fragment>
-            <defs><clipPath id={cid}><path d={d} /></clipPath></defs>
-            <g clipPath={`url(#${cid})`} pointerEvents="none">{wedges}</g>
-          </React.Fragment>
-        );
-      }
-      // pie for an area; if the node is NOT in the PadhaiPal network, lay a translucent
-      // grey filter over it so the underlying pie still shows through.
-      function areaPie(clipKey, nodeId, d, c, R, frac, perf, teach) {
-        const pie = pieEls(clipKey, d, c, R, frac, perf, teach);
-        if (!isDimmed(nodeId, frac)) return pie;
-        return (
-          <React.Fragment>
-            {pie}
-            <path d={d} fill={UNCOVERED} fillOpacity={0.62} pointerEvents="none" />
-          </React.Fragment>
-        );
-      }
-      // District (block) pie — a simpler two-slice view of just the children PadhaiPal *could*
-      // teach (a built language): the share currently on PadhaiPal (coloured by avg score) vs the
-      // share it could teach but isn't reaching yet (grey). No "beyond method" / "roadmap" / dim.
-      function coverPie(clipKey, nodeId, d, c, R, perf) {
-        if (!c || !d || !(R > 0)) return null;
-        const cid = "cpie-" + String(clipKey).replace(/[^\w-]/g, "_");
-        const cx = c[0], cy = c[1];
-        const using = registered(nodeId) ? coverShare(nodeId) : 0;   // fraction of could-teach kids on PadhaiPal
-        const segs = [
-          { f: using, fill: scoreColor(perf) },    // PadhaiPal teaches them today
-          { f: 1 - using, fill: UNCOVERED },        // could teach but not using it yet (grey)
-        ].filter((s) => s.f > 0.0005);
-        let wedges;
-        if (segs.length <= 1) wedges = <circle cx={cx} cy={cy} r={R} fill={(segs[0] || { fill: UNCOVERED }).fill} />;
-        else {
-          let a = -Math.PI / 2;
-          wedges = segs.map((s, i) => { const a1 = a + 2 * Math.PI * s.f, p = wedgePath(cx, cy, R, a, a1); a = a1; return <path key={i} d={p} fill={s.fill} />; });
-        }
-        return (
-          <React.Fragment>
-            <defs><clipPath id={cid}><path d={d} /></clipPath></defs>
-            <g clipPath={`url(#${cid})`} pointerEvents="none">{wedges}</g>
-          </React.Fragment>
-        );
+      // Solid area fill (replaces the segmented pies): grey when the area has no PadhaiPal
+      // node, otherwise a single colour encoding the area's avg oral-literacy NIPUN proxy.
+      // No border / interactions — those stay on the area path drawn on top.
+      function areaFill(d, nodeId, perf) {
+        if (!d) return null;
+        return <path d={d} fill={registered(nodeId) ? scoreColor(perf) : UNCOVERED} fillOpacity={1} pointerEvents="none" />;
       }
       // "+" invite button at an area's centroid (greyscale, no border, constant screen size).
       // Hover shows a tooltip explaining the area has no user yet. geo = country/region/district/block.
@@ -2977,8 +2908,9 @@
         const [composeDraft, setComposeDraft] = useState({ text: "", n: 0 });   // injected message draft for the compose panel
         const [minHtTchr, setMinHtTchr] = useState(MIN_HT_TCHR);    // slider: min head-teacher→teacher link length (px)
         const [minTchrStd, setMinTchrStd] = useState(MIN_TCHR_STD); // slider: min teacher→student link length (px)
-        const [active, setActive] = useState(null);         // { u, title, sub, demo }
-        const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; hover stops swapping it
+        const [active, setActive] = useState(null);         // { u, title, sub, demo } — what the detail panel shows (hover preview or pinned)
+        const [pinned, setPinned] = useState(false);        // click-to-pin: card persists; leaving an area reverts to it
+        const [pinnedItem, setPinnedItem] = useState(null); // the pinned payload, so a hover preview can revert back to it on mouse-leave
         const [donateSel, setDonateSel] = useState(null);   // donor map: selected colored area { title, sub, label }
         const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
         const t = useCallback((s) => translate(uiLang, s), [uiLang]);
@@ -3450,7 +3382,7 @@
         // on sign-in (role change), hard-reset the map nav; the auto-nav effect then drives to the home
         useEffect(() => {
           setLevel("world"); setCountry(null); setAdm1FC(null); setAdm2FC(null); setAdm3FC(null);
-          setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null); setPinned(false);
+          setA1Idx(null); setA2Idx(null); setA3Idx(null); setSelHt(null); setActive(null); setPinned(false); setPinnedItem(null);
           setTf({ k: 1, x: 0, y: 0 });
         }, [role]);
 
@@ -3522,16 +3454,16 @@
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
         // empty-space click: if a card is pinned, first click just unpins; otherwise go up a level
-        const onBgClick = useCallback(() => { if (moved.current) return; if (pinned) { setPinned(false); return; } if (LEVEL_ORDER.indexOf(level) > capIdx) popUp(); }, [popUp, level, pinned, capIdx]);
+        const onBgClick = useCallback(() => { if (moved.current) return; if (pinned) { setPinned(false); setPinnedItem(null); setActive(null); return; } if (LEVEL_ORDER.indexOf(level) > capIdx) popUp(); }, [popUp, level, pinned, capIdx]);
         // Esc unpins the area card
         useEffect(() => {
           if (!pinned) return;
-          const onKey = (e) => { if (e.key === "Escape") setPinned(false); };
+          const onKey = (e) => { if (e.key === "Escape") { setPinned(false); setPinnedItem(null); setActive(null); } };
           window.addEventListener("keydown", onKey);
           return () => window.removeEventListener("keydown", onKey);
         }, [pinned]);
         // any drill (level change) clears the pin so the next level's card is hover-driven again
-        useEffect(() => { setPinned(false); }, [level]);
+        useEffect(() => { setPinned(false); setPinnedItem(null); }, [level]);
         const zoomBy = useCallback((factor) => {
           setTf((t) => { const k = clamp(t.k * factor, ZMIN, ZMAX); const s = k / t.k; const cx = size.w / 2, cy = size.h / 2; return { k, x: cx - (cx - t.x) * s, y: cy - (cy - t.y) * s }; });
         }, [size]);
@@ -3832,7 +3764,7 @@
                     {pinned
                       ? <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600">📌 Pinned</span>
                       : <span className="text-[10px] text-zinc-400">Click the area to pin</span>}
-                    {pinned && <button onClick={() => { setPinned(false); setActive(null); }} title="Unpin (Esc)"
+                    {pinned && <button onClick={() => { setPinned(false); setPinnedItem(null); setActive(null); }} title="Unpin (Esc)"
                       className="ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600">✕</button>}
                   </div>
                   <div className="flex items-center gap-3">
@@ -4092,9 +4024,18 @@
                 <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-[11px] text-zinc-400">{t("Hover a region on the map to see its details.")}</div>
         );
 
-        // click-to-pin: hover previews the card (unless one is pinned); a single click on an area
-        // pins it (set active + pinned); double-click or the card's "Drill in →" button drills in.
-        const showHover = (payload) => { if (!pinned) setActive(payload); };
+        // Hover previews any area in the detail panel (even when one is pinned); leaving an area
+        // (cursor to empty space) reverts the panel to the pinned/selected area, or clears it if none.
+        // A single click pins an area; double-click or the card's "Drill in →" button drills in.
+        const showHover = (payload) => setActive(payload);
+        const clearHover = () => { if (pinned) setActive(pinnedItem); };   // revert to the pinned area; if none pinned, keep the last preview
+        const pinItem = (payload) => { setActive(payload); setPinnedItem(payload); setPinned(true); };
+        // In report mode the left "Area" aside is hidden and the visible detail is the report's
+        // RepMeta section, driven by repHover/repSel (like the school dots). So a map-area hover/click
+        // must feed those too; the aside handlers above stay for the non-report roles (e.g. "measure").
+        const areaEnter = (payload, id) => { showHover(payload); setRepHover(id); };
+        const areaLeave = (id) => { clearHover(); setRepHover((h) => (h === id ? null : h)); };
+        const areaClick = (payload, id) => { if (isReport) selectSchool({ id }); else pinItem(payload); };
 
         // ---------------------------------------------------------------
         //  Donor "where your money goes" map — reuses the exact drill-down
@@ -4379,32 +4320,34 @@
 
                     {/* WORLD: every country */}
                     {level === "world" && worldPaths && worldPaths.map((p) => {
-                      const on = active && p.u && active.u.id === p.u.id;
+                      const id = p.u && p.u.id;
+                      const on = (active && p.u && active.u.id === id) || repHover === id || repSel === id;
                       const payload = p.u ? { u: p.u, title: p.name, sub: p.covered ? "National Director · " + p.u.name : "No district (ADM2) data", demo: demoFor(p.feature, p.iso, p.name, true), greyed: !p.covered, iso: p.iso, drill: p.covered ? () => pickCountry(p) : null } : null;
-                      const hov = () => payload && showHover(payload);
-                      const pin = (e) => { e.stopPropagation(); if (payload) { setActive(payload); setPinned(true); } };
+                      const hov = () => payload && areaEnter(payload, id);
+                      const leave = () => payload && areaLeave(id);
+                      const pin = (e) => { e.stopPropagation(); if (payload) areaClick(payload, id); };
                       const onDbl = (e) => { e.stopPropagation(); pickCountry(p); };
                       if (roadmapOpen) {
                         // flat-colour analytics mode: single fill encoding the selected metric, no pies / no plus buttons
                         return (
                           <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={flatColorFor(p)} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: p.covered ? "pointer" : "default" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
+                            style={{ cursor: p.covered ? "pointer" : "default" }} onMouseEnter={hov} onMouseLeave={leave} onClick={pin} onDoubleClick={onDbl} />
                         );
                       }
                       if (!p.covered) {
                         return (
                           <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={NONPHON} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: "pointer" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
+                            style={{ cursor: "pointer" }} onMouseEnter={hov} onMouseLeave={leave} onClick={pin} onDoubleClick={onDbl} />
                         );
                       }
                       return (
                         <g key={p.i}>
-                          {areaPie(p.iso || p.i, p.u.id, p.d, p.c, cornerRadius(p.c, p.bbox), p.phon, p.u.perf, teachBuilt(p.pairs))}
+                          {areaFill(p.d, p.u.id, p.u.perf)}
                           <path d={p.d} data-iso={p.iso || ""} data-name={p.name} fill="none" pointerEvents="all"
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
-                            style={{ cursor: "pointer" }} onMouseEnter={hov} onClick={pin} onDoubleClick={onDbl} />
+                            style={{ cursor: "pointer" }} onMouseEnter={hov} onMouseLeave={leave} onClick={pin} onDoubleClick={onDbl} />
                           {isMine("world", { iso: p.iso, name: p.name }) && <path d={p.d} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} pointerEvents="none" />}
                         </g>
                       );
@@ -4413,12 +4356,13 @@
                     {/* ADM1 */}
                     {level === "adm1" && adm1 && adm1.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
+                        {areaFill(d0.d, d0.id, d0.u.perf)}
                         <path d={d0.d} fill="none" pointerEvents="all"
-                          stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                          stroke={(active && active.u.id === d0.id) || repHover === d0.id || repSel === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={((active && active.u.id === d0.id) || repHover === d0.id || repSel === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => showHover({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) })}
-                          onClick={(e) => { e.stopPropagation(); setActive({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) }); setPinned(true); }}
+                          onMouseEnter={() => areaEnter({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) }, d0.id)}
+                          onMouseLeave={() => areaLeave(d0.id)}
+                          onClick={(e) => { e.stopPropagation(); areaClick({ u: d0.u, title: d0.name, sub: "DGSE · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA1(d0.i) }, d0.id); }}
                           onDoubleClick={(e) => { e.stopPropagation(); drillA1(d0.i); }} />
                         {isMine("adm1", { name: d0.name, index: d0.i }) && <path d={d0.d} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} pointerEvents="none" />}
                       </g>
@@ -4427,12 +4371,13 @@
                     {/* ADM2 */}
                     {level === "adm2" && adm2 && adm2.map((d0) => (
                       <g key={d0.id}>
-                        {areaPie(d0.id, d0.id, d0.d, d0.c, cornerRadius(d0.c, d0.bbox), d0.demo.phon, d0.u.perf, teachBuilt(d0.demo.pairs))}
+                        {areaFill(d0.d, d0.id, d0.u.perf)}
                         <path d={d0.d} fill="none" pointerEvents="all"
-                          stroke={active && active.u.id === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === d0.id ? 1.6 : 0.6) / tf.k}
+                          stroke={(active && active.u.id === d0.id) || repHover === d0.id || repSel === d0.id ? "#0f172a" : "#ffffff"} strokeWidth={((active && active.u.id === d0.id) || repHover === d0.id || repSel === d0.id ? 1.6 : 0.6) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => showHover({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) })}
-                          onClick={(e) => { e.stopPropagation(); setActive({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) }); setPinned(true); }}
+                          onMouseEnter={() => areaEnter({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) }, d0.id)}
+                          onMouseLeave={() => areaLeave(d0.id)}
+                          onClick={(e) => { e.stopPropagation(); areaClick({ u: d0.u, title: d0.name, sub: "BSA · " + d0.u.name, demo: d0.demo, iso: country.iso, drill: () => drillA2(d0.j) }, d0.id); }}
                           onDoubleClick={(e) => { e.stopPropagation(); drillA2(d0.j); }} />
                         {isMine("adm2", { name: d0.name, index: d0.j }) && <path d={d0.d} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} pointerEvents="none" />}
                       </g>
@@ -4441,25 +4386,26 @@
                     {/* ADM3 / blocks */}
                     {level === "adm3" && blocks && blocks.map((b) => (
                       <g key={b.id}>
-                        {coverPie(b.id, b.id, b.d, b.seed, cornerRadius(b.seed, b.bbox), b.u.perf)}
+                        {areaFill(b.d, b.id, b.u.perf)}
                         <path d={b.d} fill="none" pointerEvents="all"
-                          stroke={active && active.u.id === b.id ? "#0f172a" : "#ffffff"} strokeWidth={(active && active.u.id === b.id ? 2 : 1) / tf.k}
+                          stroke={(active && active.u.id === b.id) || repHover === b.id || repSel === b.id ? "#0f172a" : "#ffffff"} strokeWidth={((active && active.u.id === b.id) || repHover === b.id || repSel === b.id ? 2 : 1) / tf.k}
                           style={{ cursor: "pointer" }}
-                          onMouseEnter={() => showHover({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) })}
-                          onClick={(e) => { e.stopPropagation(); setActive({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) }); setPinned(true); }}
+                          onMouseEnter={() => areaEnter({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) }, b.id)}
+                          onMouseLeave={() => areaLeave(b.id)}
+                          onClick={(e) => { e.stopPropagation(); areaClick({ u: b.u, title: b.name + (a2f ? " · " + a2f.name : ""), sub: "BEO · " + b.u.name, demo: b.demo, iso: country.iso, drill: () => drillBlock(b.k) }, b.id); }}
                           onDoubleClick={(e) => { e.stopPropagation(); drillBlock(b.k); }} />
                         {isMine("adm3", { name: b.name, index: b.k }) && <path d={b.d} fill="none" stroke="#2563eb" strokeWidth={3 / tf.k} pointerEvents="none" />}
                       </g>
                     ))}
 
                     {/* invite "+" buttons — rendered last so they sit above every area fill */}
-                    {level === "world" && !roadmapOpen && worldPaths && worldPaths.map((p) => (p.covered && isDimmed(p.u.id, p.phon)
+                    {level === "world" && !roadmapOpen && worldPaths && worldPaths.map((p) => (p.covered && !registered(p.u.id)
                       ? <PlusButton key={"plus" + p.i} c={p.c} k={tf.k} geo="country" pending={pendingInvites.get(p.u.id)} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
-                    {level === "adm1" && adm1 && adm1.map((d0) => (isDimmed(d0.id, d0.demo.phon)
+                    {level === "adm1" && adm1 && adm1.map((d0) => (!registered(d0.id)
                       ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
-                    {level === "adm2" && adm2 && adm2.map((d0) => (isDimmed(d0.id, d0.demo.phon)
+                    {level === "adm2" && adm2 && adm2.map((d0) => (!registered(d0.id)
                       ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
-                    {level === "adm3" && blocks && blocks.map((b) => (isDimmed(b.id, b.demo.phon)
+                    {level === "adm3" && blocks && blocks.map((b) => (!registered(b.id)
                       ? <PlusButton key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" pending={pendingInvites.get(b.id)} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
 
                     {/* schools */}
@@ -4525,8 +4471,9 @@
                           return (
                             <foreignObject key={n.id} x={n.x - W / 2} y={n.y - faceR - ring} width={W} height={faceR * 2 + 44} style={{ overflow: "visible", pointerEvents: "none" }}>
                               <div style={{ width: W, opacity: shown ? 1 : 0, transform: shown ? "scale(1)" : "scale(.7)", transformOrigin: "center top", transition: "opacity .4s ease, transform .4s ease" }} className="flex flex-col items-center"
-                                onMouseEnter={() => { if (shown && !pinned) setActive({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
-                                onClick={(e) => { e.stopPropagation(); if (shown) { setActive({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); setPinned(true); } }}>
+                                onMouseEnter={() => { if (shown) showHover({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
+                                onMouseLeave={clearHover}
+                                onClick={(e) => { e.stopPropagation(); if (shown) pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}>
                                 <img src={n.u.face} alt="" loading="lazy" className="relative rounded-full object-cover brightness-110"
                                   style={{ width: faceR * 2, height: faceR * 2, zIndex: 2, boxShadow: "0 0 0 " + ring + "px " + col, outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: pe }} />
                                 {/* picture circle overlaps the label box — pull the box up under the face */}
@@ -4652,44 +4599,38 @@
                 <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
                   {level === "adm3" ? (
                     <React.Fragment>
-                      <div className="mb-1.5 font-semibold text-zinc-900">Each block is a pie of the children PadhaiPal could teach</div>
+                      <div className="mb-1.5 font-semibold text-zinc-900">Each block is coloured by its avg NIPUN proxy</div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                          <span>On PadhaiPal today <span className="text-zinc-400">(colour = avg score)</span></span>
+                          <span>On PadhaiPal <span className="text-zinc-400">(colour = avg score)</span></span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                          <span>Not on PadhaiPal yet</span>
+                          <span>No PadhaiPal node yet</span>
                         </div>
                       </div>
                     </React.Fragment>
                   ) : (
                     <React.Fragment>
-                      <div className="mb-1.5 font-semibold text-zinc-900">Each area is a pie of its population</div>
+                      <div className="mb-1.5 font-semibold text-zinc-900">Each area is coloured by its avg NIPUN proxy</div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                          <span>Speaks a language we've built <span className="text-zinc-400">(colour = avg score)</span></span>
+                          <span>On PadhaiPal <span className="text-zinc-400">(colour = avg score)</span></span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                          <span>Speaks a language on our roadmap</span>
+                          <span>No PadhaiPal node yet</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
                           <span>Speaks a language beyond our method (or no data)</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="relative h-3 w-5 flex-shrink-0 overflow-hidden rounded-sm" style={{ background: "#22c55e" }}>
-                            <span className="absolute inset-0" style={{ background: UNCOVERED, opacity: 0.62 }} />
-                          </span>
-                          <span>Dimmed = node not registered in PadhaiPal</span>
-                        </div>
                       </div>
                     </React.Fragment>
                   )}
-                  <div className="mt-1.5 text-[9px] text-zinc-400">Border clips each pie · demo data</div>
+                  <div className="mt-1.5 text-[9px] text-zinc-400">demo data</div>
                 </div>
                 )}
               </div>
