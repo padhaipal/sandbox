@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PadhaiPal — Educator Network (global map)</title>
+  <title>Lifteracy — Educator Network (global map)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> <!-- card icons -->
@@ -64,7 +64,7 @@
       { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" }, mine: { adm3: "malihabad" } },
       { code: "ht",           label: "Head Teacher", home: "school",  who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 }, mine: { school: 0 } },
       { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
-      { code: "measure",      label: "Measure demo", home: "world",   who: "PadhaiPal",    where: "Global · dummy data", nav: {} },
+      { code: "measure",      label: "Measure demo", home: "world",   who: "Lifteracy",    where: "Global · dummy data", nav: {} },
     ];
     const ROLE_BY = {}; ROLES.forEach((r) => { ROLE_BY[r.code] = r; });
 
@@ -100,7 +100,7 @@
           "Population": "जनसंख्या", "Adult literacy": "वयस्क साक्षरता",
           "Teaching / building": "पढ़ा रहे / बना रहे", "On the roadmap": "रोडमैप पर",
           "Beyond our method": "हमारी पद्धति से परे", "Reach": "पहुँच",
-          "PadhaiPal coverage": "पधाईपाल कवरेज", "Fund this location": "इस स्थान को वित्त दें",
+          "Lifteracy coverage": "लिफ्टरेसी कवरेज", "Fund this location": "इस स्थान को वित्त दें",
           "Letters learnt": "सीखे गए अक्षर", "Yesterday": "कल", "Week": "सप्ताह", "Month": "महीना", "Year": "वर्ष",
           "Templates": "टेम्पलेट", "Message": "संदेश", "Find recipients": "प्राप्तकर्ता खोजें", "Send list": "भेजने की सूची",
           "Search name…": "नाम खोजें…", "Location…": "स्थान…", "Any level": "कोई भी स्तर",
@@ -116,7 +116,7 @@
           "Show 10 more": "10 और दिखाएँ", "left": "शेष", "All audio shown": "सारा ऑडियो दिखाया गया", "demo data": "डेमो डेटा",
           // --- block report ---
           "India": "भारत", "Uttar Pradesh": "उत्तर प्रदेश", "Lucknow": "लखनऊ", "Malihabad": "मलिहाबाद",
-          "average oral-literacy NIPUN proxy": "औसत मौखिक-साक्षरता निपुण प्रॉक्सी", "using PadhaiPal": "पधाईपाल उपयोग कर रहे", "Detail": "विवरण", "Performance": "प्रदर्शन",
+          "average oral-literacy NIPUN proxy": "औसत मौखिक-साक्षरता निपुण प्रॉक्सी", "using Lifteracy": "लिफ्टरेसी उपयोग कर रहे", "Detail": "विवरण", "Performance": "प्रदर्शन",
           "Loading your dashboard…": "आपका डैशबोर्ड लोड हो रहा है…", "Spotlight": "स्पॉटलाइट",
           "countries": "देश", "regions": "क्षेत्र", "districts": "ज़िले", "blocks": "ब्लॉक", "schools": "विद्यालय", "class members": "कक्षा सदस्य",
           "Country": "देश", "Region": "क्षेत्र", "District": "ज़िला", "Block": "ब्लॉक", "School": "विद्यालय", "Class member": "कक्षा सदस्य",
@@ -125,17 +125,17 @@
           "Messaging": "संदेश", "Generate report": "रिपोर्ट बनाएँ",
           "block oral-literacy NIPUN proxy avg": "ब्लॉक मौखिक-साक्षरता निपुण प्रॉक्सी औसत",
           "avg oral literacy NIPUN proxy gain last week": "पिछले सप्ताह औसत मौखिक साक्षरता निपुण प्रॉक्सी वृद्धि",
-          "schools using PadhaiPal": "पधाईपाल उपयोग करने वाले विद्यालय",
-          "Latest NIPUN proxy": "नवीनतम निपुण प्रॉक्सी", "Not using PadhaiPal": "पधाईपाल उपयोग नहीं",
+          "schools using Lifteracy": "लिफ्टरेसी उपयोग करने वाले विद्यालय",
+          "Latest NIPUN proxy": "नवीनतम निपुण प्रॉक्सी", "Not using Lifteracy": "लिफ्टरेसी उपयोग नहीं",
           "School Detail": "विद्यालय विवरण", "Head Teacher": "प्रधानाध्यापक",
           "Latest oral-literacy NIPUN proxy": "नवीनतम मौखिक-साक्षरता निपुण प्रॉक्सी", "Change last week": "पिछले सप्ताह बदलाव",
-          "On PadhaiPal · since": "पधाईपाल पर · से", "Yes": "हाँ", "No": "नहीं",
+          "On Lifteracy · since": "लिफ्टरेसी पर · से", "Yes": "हाँ", "No": "नहीं",
           "Weekly trend": "साप्ताहिक रुझान", "Latest score — all schools": "नवीनतम स्कोर — सभी विद्यालय",
           "Most improved this week": "इस सप्ताह सर्वाधिक सुधार",
           "Oral Literacy NIPUN Proxy percentage pass rate": "मौखिक साक्षरता निपुण प्रॉक्सी प्रतिशत उत्तीर्ण दर",
           "80% NIPUN target": "80% निपुण लक्ष्य",
-          "The grey bars are schools not on PadhaiPal yet. Click": "स्लेटी बार वे विद्यालय हैं जो अभी पधाईपाल पर नहीं हैं।",
-          "here": "यहाँ क्लिक करें", "to send a message to get these schools using PadhaiPal.": "इन विद्यालयों को पधाईपाल से जोड़ने हेतु संदेश भेजें।",
+          "The grey bars are schools not on Lifteracy yet. Click": "स्लेटी बार वे विद्यालय हैं जो अभी लिफ्टरेसी पर नहीं हैं।",
+          "here": "यहाँ क्लिक करें", "to send a message to get these schools using Lifteracy.": "इन विद्यालयों को लिफ्टरेसी से जोड़ने हेतु संदेश भेजें।",
           "Top school": "शीर्ष विद्यालय", "Most improved": "सर्वाधिक सुधार", "this week": "इस सप्ताह", "pts": "अंक",
           "[dummy quote · fictional name]": "[डमी उद्धरण · काल्पनिक नाम]",
           "Save as template": "टेम्पलेट के रूप में सहेजें",
@@ -155,7 +155,7 @@
           "About": "हमारे बारे में", "How it works": "यह कैसे काम करता है", "Contact": "संपर्क",
           "Trust": "विश्वास", "Annual report": "वार्षिक रिपोर्ट", "Financials": "वित्तीय विवरण", "Governance": "शासन",
           "Safety": "सुरक्षा", "Child safeguarding": "बाल सुरक्षा", "Data & privacy": "डेटा व गोपनीयता",
-          "Figures on this page are illustrative demo data. PadhaiPal is a registered non-profit · child data is processed under our privacy & safeguarding policy.": "इस पृष्ठ के आँकड़े उदाहरणस्वरूप डेमो डेटा हैं। पधाईपाल एक पंजीकृत गैर-लाभकारी संस्था है · बच्चों का डेटा हमारी गोपनीयता व सुरक्षा नीति के अंतर्गत संसाधित होता है।",
+          "Figures on this page are illustrative demo data. Lifteracy is a registered non-profit · child data is processed under our privacy & safeguarding policy.": "इस पृष्ठ के आँकड़े उदाहरणस्वरूप डेमो डेटा हैं। लिफ्टरेसी एक पंजीकृत गैर-लाभकारी संस्था है · बच्चों का डेटा हमारी गोपनीयता व सुरक्षा नीति के अंतर्गत संसाधित होता है।",
           "Illustrative / dummy data — format demonstration. Oral-literacy NIPUN proxy = share of Gr 1–3 students meeting an oral-reading proxy; not an official NAT certification.": "उदाहरणात्मक / डमी डेटा — प्रारूप प्रदर्शन। मौखिक-साक्षरता निपुण प्रॉक्सी = कक्षा 1–3 के मौखिक-पठन प्रॉक्सी पूर्ण करने वाले छात्रों का अंश; यह आधिकारिक NAT प्रमाणन नहीं है।",
         },
       };
@@ -300,7 +300,7 @@
                   className="rounded-lg bg-zinc-900/90 px-2 py-1.5 text-[11px] leading-snug text-white shadow-lg">
                   {pending
                     ? <span>Invitation pending: <span className="font-semibold">{pending.name || "contact"}</span>{pending.phone ? " (" + pending.phone + ")" : ""}. Click to invite again.</span>
-                    : <span>This {geo} has no PadhaiPal user yet — click to add one.</span>}
+                    : <span>This {geo} has no Lifteracy user yet — click to add one.</span>}
                 </div>
               </foreignObject>
             )}
@@ -317,7 +317,7 @@
         const [bulkSent, setBulkSent] = useState(false);
         const digits = phone.replace(/[^\d]/g, "");
         const who = name.trim() ? name.trim() + ", you're" : "Hi! You're";
-        const msg = who + " invited to join the PadhaiPal network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
+        const msg = who + " invited to join the Lifteracy network as the " + data.role + " for " + data.title + ". Tap to get started: " + data.link;
         const waHref = "https://wa.me/" + digits + "?text=" + encodeURIComponent(msg);
         const copy = () => { try { navigator.clipboard.writeText(data.link); } catch (e) {} setCopied(true); };
         const send = (e) => { if (!digits) { e.preventDefault(); return; } onSent({ name: name.trim(), phone: phone.trim() }); onClose(); };
@@ -794,13 +794,13 @@
 
       // citizen-petition page (voice + transcript per signer; deterministic demo)
       const PETITION_LINES = [
-        "Please fund PadhaiPal so {child} can keep learning to read.",
+        "Please fund Lifteracy so {child} can keep learning to read.",
         "My {child} was improving every week — please don't let it stop.",
-        "We cannot afford private tuition. PadhaiPal is our only hope for {child}.",
+        "We cannot afford private tuition. Lifteracy is our only hope for {child}.",
         "The government must pay for this. {child} deserves to finish school.",
         "{child} learned more in a month than in a year — please continue it.",
         "I am a daily-wage worker. Please keep teaching my daughter {child}.",
-        "Our whole village wants PadhaiPal back for children like {child}.",
+        "Our whole village wants Lifteracy back for children like {child}.",
         "{child} cried when the lessons stopped. Please bring them back.",
       ];
       const obscurePhone = (p) => p.length > 7 ? p.slice(0, 5) + " ••• " + p.slice(-3) : p;
@@ -828,7 +828,7 @@
               <button onClick={onClose} className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">← Back to map</button>
               <div className="min-w-0">
                 <div className="truncate text-base font-semibold text-zinc-900">Citizen petitions · {title}</div>
-                <div className="truncate text-xs text-zinc-500">Residents asking the government to fund PadhaiPal here</div>
+                <div className="truncate text-xs text-zinc-500">Residents asking the government to fund Lifteracy here</div>
               </div>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1013,7 +1013,7 @@
       //  Messaging templates + token replacement
       // =====================================================================
       const TEMPLATES = [
-        { id: "welcome", title: "Welcome / onboarding", tags: [], body: "Dear <name>,\n\nWelcome to the PadhaiPal network as <level> for <area>. We're glad to have you on board and look forward to supporting your work.\n\nWarm regards,\nOffice of the DGSE" },
+        { id: "welcome", title: "Welcome / onboarding", tags: [], body: "Dear <name>,\n\nWelcome to the Lifteracy network as <level> for <area>. We're glad to have you on board and look forward to supporting your work.\n\nWarm regards,\nOffice of the DGSE" },
         { id: "checkin", title: "Performance check-in", tags: ["report"], body: "Hi <name>,\n\nA quick check-in on <area>. Your current performance score is <score> (rank <rank>). Let's connect this week to discuss priorities.\n\nThanks,\nDGSE Office" },
         { id: "congrats", title: "Top-performer recognition", tags: ["image"], body: "Congratulations, <name>! 🎉\n\n<area> is among our top performers with a score of <score> (rank <rank>). Thank you for the outstanding leadership — keep it up!" },
         { id: "nudge", title: "Engagement nudge", tags: [], body: "Hello <name>,\n\nWe've noticed engagement in <area> has dipped recently. Could you share what support would help? We're here to assist." },
@@ -1027,30 +1027,30 @@
         { id: "beo-peer-notes", cat: "peer", title: "Compare notes on a problem", tags: [],
           body: "{BEO_name}, a question — what's the situation in your block regarding {issue}? My response rate here is a bit low. I was thinking it might be better if we both sent a joint update to {BSA_name}. What do you think?" },
         { id: "beo-peer-review", cat: "peer", title: "Coordinate before a BSA review", tags: [],
-          body: "{BEO_name}, there's a BSA review on {meeting_date}. I looked at my block's dashboard on PadhaiPal — really useful data coming through. You should take a look at yours too, so both our numbers are ready for the review. Link: {dashboard_link}" },
+          body: "{BEO_name}, there's a BSA review on {meeting_date}. I looked at my block's dashboard on Lifteracy — really useful data coming through. You should take a look at yours too, so both our numbers are ready for the review. Link: {dashboard_link}" },
         { id: "beo-hts-weekly", cat: "down", title: "Weekly nudge + report (all HTs)", tags: ["report"],
-          body: "Hello to all head teachers 🙏 This week's PadhaiPal report is attached 📊 Block average NIPUN: {block_avg}. Check your school's data on the dashboard: {link}. Schools where {metric} improved — well done! 👏 Those who need support, message me and we'll look at it together. Keep going! 💪" },
+          body: "Hello to all head teachers 🙏 This week's Lifteracy report is attached 📊 Block average NIPUN: {block_avg}. Check your school's data on the dashboard: {link}. Schools where {metric} improved — well done! 👏 Those who need support, message me and we'll look at it together. Keep going! 💪" },
         { id: "beo-top-teachers", cat: "down", title: "Recognise top teachers + ask for a tip", tags: [],
           body: "{teacher_name}, your class {class_name} is among the top {metric} performers in the block this week! 🌟 I was glad to see your students' {specific_gain}. One small request: tell me in one line what you did? We'll share it in the weekly report with your name so other teachers can learn from it too. 🙏" },
         { id: "beo-low-teachers", cat: "down", title: "Support lower-performing teachers", tags: [],
-          body: "{teacher_name}, hello 🙏 Your class is currently at {current_score} — the block average is {block_avg}, so there's a small gap we can close easily. The good news is there's the most room for improvement here! 📈 Try these {N} short activities on PadhaiPal this week: {link}. If you run into any trouble, tell me directly, I'm right here. We'll do it together. 💪" },
+          body: "{teacher_name}, hello 🙏 Your class is currently at {current_score} — the block average is {block_avg}, so there's a small gap we can close easily. The good news is there's the most room for improvement here! 📈 Try these {N} short activities on Lifteracy this week: {link}. If you run into any trouble, tell me directly, I'm right here. We'll do it together. 💪" },
         { id: "beo-individual", cat: "down", title: "Individual follow-up / accountability", tags: [],
           body: "{teacher_name}, I noticed that at {school_name}, {observation} for the past {time_period}. Is everything alright? If there's any technical or other problem, let me know — we'll solve it. Please send an update in the next day or so. Thank you 🙏" },
         { id: "beo-photo", cat: "down", title: "Ask head teachers for a profile photo", tags: ["image"],
-          body: "Hello {teacher_name} 🙏 Could you please upload a clear photo of your face to your PadhaiPal profile? 📷 It helps us confirm head teachers and personalise your school's reports. Just open PadhaiPal → Profile → Add photo — it takes about 30 seconds. Thank you so much! 🙏" },
+          body: "Hello {teacher_name} 🙏 Could you please upload a clear photo of your face to your Lifteracy profile? 📷 It helps us confirm head teachers and personalise your school's reports. Just open Lifteracy → Profile → Add photo — it takes about 30 seconds. Thank you so much! 🙏" },
         { id: "beo-cluster", cat: "down", title: "Targeted message to a custom group", tags: [],
           body: "Hello 🙏 I'm messaging you all together because {reason}. This week's goal: {specific_target}. Resources are here: {link}. We'll review progress on {check_in_date}. If you have any questions, ask in the group, and help each other too. Let's get started! 🚀" },
       ];
       const TEMPLATES_TEACHER = [
-        { id: "t-parent-nudge", cat: "down", title: "Daily practice nudge to parents", tags: [], body: "Namaste 🙏 Please help {child_name} spend 10 minutes on PadhaiPal today, and reply with a short voice note of them reading. A little daily practice makes a big difference! 📚" },
+        { id: "t-parent-nudge", cat: "down", title: "Daily practice nudge to parents", tags: [], body: "Namaste 🙏 Please help {child_name} spend 10 minutes on Lifteracy today, and reply with a short voice note of them reading. A little daily practice makes a big difference! 📚" },
         { id: "t-praise", cat: "down", title: "Praise a student / parent", tags: [], body: "Wonderful news! {child_name} read really well today 🌟 Thank you for practising at home — please keep the daily streak going!" },
         { id: "t-peer", cat: "peer", title: "Ask a fellow teacher for a tip", tags: [], body: "Hi {teacher_name} 🙏 your class's reading scores jumped this week — what activity worked for you? I'd love to try it with my Grade {grade}." },
-        { id: "t-ht", cat: "up", title: "Update / request to your head teacher", tags: [], body: "Sir/Madam 🙏 my class is at {score}% on PadhaiPal this week. {request, e.g. \"could we get 10 extra minutes for reading practice?\"} Thank you." },
+        { id: "t-ht", cat: "up", title: "Update / request to your head teacher", tags: [], body: "Sir/Madam 🙏 my class is at {score}% on Lifteracy this week. {request, e.g. \"could we get 10 extra minutes for reading practice?\"} Thank you." },
       ];
       const TEMPLATES_HT = [
-        { id: "h-teachers", cat: "down", title: "Weekly nudge to your teachers", tags: ["report"], body: "Hello teachers 🙏 This week's class scores are on PadhaiPal: {link}. Classes that improved — well done! 👏 Anyone needing support, message me and we'll look at it together." },
+        { id: "h-teachers", cat: "down", title: "Weekly nudge to your teachers", tags: ["report"], body: "Hello teachers 🙏 This week's class scores are on Lifteracy: {link}. Classes that improved — well done! 👏 Anyone needing support, message me and we'll look at it together." },
         { id: "h-top", cat: "down", title: "Recognise a top teacher", tags: [], body: "{teacher_name}, your class is the most improved this week 🌟 Could you share one line on what you did, so the other teachers can learn from it?" },
-        { id: "h-photo", cat: "down", title: "Ask teachers for a profile photo", tags: ["image"], body: "Hello {teacher_name} 🙏 please add a clear photo of your face to your PadhaiPal profile 📷 — it helps personalise your class reports. Profile → Add photo. Thank you!" },
+        { id: "h-photo", cat: "down", title: "Ask teachers for a profile photo", tags: ["image"], body: "Hello {teacher_name} 🙏 please add a clear photo of your face to your Lifteracy profile 📷 — it helps personalise your class reports. Profile → Add photo. Thank you!" },
         { id: "h-peer", cat: "peer", title: "Compare notes with a fellow head teacher", tags: [], body: "{ht_name} 🙏 how is your school doing on {focus_area}? Shall we share what's working before the BEO review?" },
         { id: "h-beo", cat: "up", title: "Report / request to your BEO", tags: ["report"], body: "Sir/Madam 🙏 our school is at {score}% NIPUN. {request}. Full data on the dashboard: {link}. Thank you." },
       ];
@@ -1277,7 +1277,7 @@
                     return (
                       <div key={e.id} className="flex items-center gap-2 rounded border border-zinc-100 px-2 py-1">
                         {e.onboarded === false
-                          ? <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-zinc-200 text-[9px] font-bold text-zinc-400" title="Not using PadhaiPal">{(e.u.name || "?").slice(0, 1)}</span>
+                          ? <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-zinc-200 text-[9px] font-bold text-zinc-400" title="Not using Lifteracy">{(e.u.name || "?").slice(0, 1)}</span>
                           : <img src={e.u.face} alt="" className="h-6 w-6 flex-shrink-0 rounded-full object-cover" />}
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[11px] font-medium text-zinc-800">{e.u.name}</div>
@@ -1305,7 +1305,7 @@
                     {recipients.map((r) => (
                       <div key={r.id} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
                         {r.onboarded === false
-                          ? <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-zinc-200 text-base font-bold text-zinc-400" title={t("Not using PadhaiPal")}>{(r.uname || "?").slice(0, 1)}</span>
+                          ? <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-zinc-200 text-base font-bold text-zinc-400" title={t("Not using Lifteracy")}>{(r.uname || "?").slice(0, 1)}</span>
                           : <img src={r.face} alt="" className="h-11 w-11 flex-shrink-0 rounded-full object-cover" />}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
@@ -1313,7 +1313,7 @@
                             <span className="flex-shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">{t(r.level)}</span>
                           </div>
                           <div className="truncate text-[11px] text-zinc-500">{r.name}{r.location ? " · " + r.location : ""}{r.phone ? " · " + r.phone : ""}</div>
-                          {r.onboarded === false && <div className="text-[10px] font-semibold text-amber-600">{t("Not using PadhaiPal")}</div>}
+                          {r.onboarded === false && <div className="text-[10px] font-semibold text-amber-600">{t("Not using Lifteracy")}</div>}
                         </div>
                         <div className="flex flex-shrink-0 flex-col items-center gap-0.5">
                           <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ background: scoreColor(r.perf), color: textOn(r.perf) }}>{r.score}</span>
@@ -1864,7 +1864,7 @@
         ["Deliver a proxy LaNA test", "Administer a digital proxy of the LaNA assessment for an internationally comparable score."],
         ["Make a teacher dashboard", "Give teachers their own dashboard to track their students' progress."],
         ["Conduct A/B tests", "Run controlled experiments to find which lesson variants drive the most learning."],
-        ["Support other languages", "Extend PadhaiPal beyond Hindi to more languages and scripts."],
+        ["Support other languages", "Extend Lifteracy beyond Hindi to more languages and scripts."],
       ];
       // per-item icon + accent colour for the "Up next" backlog cards
       const NEXT_ICONS = ["fa-certificate", "fa-gauge-high", "fa-align-left", "fa-brain", "fa-clipboard-check", "fa-globe", "fa-chalkboard-user", "fa-flask-vial", "fa-language"];
@@ -1985,7 +1985,7 @@
                 <RoadmapGlobe worldGeo={worldGeo} builtSet={builtSet} reach={idx === 0 ? 0.05 : 1} />
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">PadhaiPal Supply Curve</div>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Lifteracy Supply Curve</div>
                 <CostCurve groupsBuilt={idx} />
               </div>
             </div>
@@ -2004,7 +2004,7 @@
           <div className="grid gap-6 text-left md:grid-cols-2">
             <div>
               <h4 className="text-lg font-extrabold text-zinc-900">We teach children to read in a language they already speak</h4>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600">PadhaiPal is a personalised reading tutor, available for the child to have their lesson whenever and wherever convenient. Because the child already speaks the language, each lesson builds on knowledge they have — they are learning to <span className="font-semibold text-zinc-800">decode</span>, not to learn a new tongue.</p>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">Lifteracy is a personalised reading tutor, available for the child to have their lesson whenever and wherever convenient. Because the child already speaks the language, each lesson builds on knowledge they have — they are learning to <span className="font-semibold text-zinc-800">decode</span>, not to learn a new tongue.</p>
               <p className="mt-3 text-sm leading-relaxed text-zinc-600">Each letter is anchored to a memorable picture (an <span className="font-semibold text-zinc-800">image–letter association</span>), then letters are chained back into whole words the child can read. The lesson loop:</p>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <FlowChip c={C}>word</FlowChip><span className="text-zinc-400">→</span>
@@ -2013,7 +2013,7 @@
                 <FlowChip c={C}>letter / image association</FlowChip><span className="text-zinc-400">→</span>
                 <FlowChip c={C}>word</FlowChip>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> PadhaiPal tracks performance on every individual letter and a decision tree picks the next word to maximise practice where the child needs it most.</p>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> Lifteracy tracks performance on every individual letter and a decision tree picks the next word to maximise practice where the child needs it most.</p>
               <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110" style={{ background: C }}>Try it now <span aria-hidden>→</span></a>
             </div>
             <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
@@ -2028,7 +2028,7 @@
       function MeasurePanel() {
         return (
           <div className="text-left">
-            <p className="text-sm leading-relaxed text-zinc-600">PadhaiPal runs regular digital assessments that place each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score.</p>
+            <p className="text-sm leading-relaxed text-zinc-600">Lifteracy runs regular digital assessments that place each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score.</p>
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700">
               <i className="fa-solid fa-triangle-exclamation" /> Dummy data — illustrative only. Drag to spin the globe; double-click to drill from the world all the way down to an individual student.
             </div>
@@ -2054,7 +2054,7 @@
               <div><div className="text-xs font-bold">P.S. Malihabad · Principals &amp; Teachers</div><div className="text-[9px] text-emerald-100">14 members</div></div>
             </div>
             <div className="space-y-1.5 bg-[#e5ddd5] p-3">
-              {msg("Head Teacher (Principal)", "#1f7aec", "Good evening all 🙏 This week's PadhaiPal report cards are out.", { i: 1 })}
+              {msg("Head Teacher (Principal)", "#1f7aec", "Good evening all 🙏 This week's Lifteracy report cards are out.", { i: 1 })}
               <button onClick={onReport} className="block w-[82%] rounded-lg bg-white px-2.5 py-2 text-left shadow-sm hover:bg-zinc-50">
                 <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded bg-rose-100 text-rose-600"><i className="fa-solid fa-file-pdf" /></span><div><div className="text-[11px] font-semibold text-zinc-800">Class-3 Report Card.pdf</div><div className="text-[9px] text-zinc-400">tap to open</div></div></div>
               </button>
@@ -2097,7 +2097,7 @@
               </div>
               <div className="p-6">
                 <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-                  <div><div className="text-lg font-black text-blue-700">padhAIpal</div><div className="text-[10px] text-zinc-400">Weekly Reading Report Card</div></div>
+                  <div><div className="text-lg font-black text-blue-700">Lifteracy</div><div className="text-[10px] text-zinc-400">Weekly Reading Report Card</div></div>
                   <div className="text-right text-[10px] text-zinc-500">Week 24 · 2026<br />P.S. Malihabad, Lucknow</div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -2167,13 +2167,13 @@
       function DistCards() {
         const cards = [
           { icon: "fa-handshake", title: "Partner", tag: "Connect with trusted organisations", color: "#f59e0b",
-            body: "PadhaiPal can be distributed through any network including public or private schools, community groups, religious organisations or governments." },
+            body: "Lifteracy can be distributed through any network including public or private schools, community groups, religious organisations or governments." },
           { icon: "fa-seedling", title: "Plant", tag: "Seed initial usage", color: "#10b981",
-            body: "Our team trains a few key changemakers within that organisation on how to communicate and demonstrate PadhaiPal." },
+            body: "Our team trains a few key changemakers within that organisation on how to communicate and demonstrate Lifteracy." },
           { icon: "fa-share-nodes", title: "Propagate", tag: "Strong results spread", color: "#3b82f6",
-            body: "Once a few people start using PadhaiPal in a network it gets shared up the hierarchy via reports, down the hierarchy via communication groups and there is horizontal accountability by seeing the progress of peers." },
+            body: "Once a few people start using Lifteracy in a network it gets shared up the hierarchy via reports, down the hierarchy via communication groups and there is horizontal accountability by seeing the progress of peers." },
           { icon: "fa-building-columns", title: "Procure", tag: "Governments or large institutions pay after trial", color: "#8b5cf6",
-            body: "PadhaiPal only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government or their institution to pay for usage. Each dollar donated is used to leverage more resources." },
+            body: "Lifteracy only pays for the first five hours of usage, after which the parent is encouraged to sign a petition requesting the government or their institution to pay for usage. Each dollar donated is used to leverage more resources." },
         ];
         const last = cards.length - 1, pt = "calc(100% - 15px)";
         const clipFor = (i) => i === 0 ? "polygon(0 0," + pt + " 0,100% 50%," + pt + " 100%,0 100%)"
@@ -2312,7 +2312,7 @@
       // Footer — trust, governance, links back to the main site
       function DonorFooter({ t = (s) => s }) {
         const cols = [
-          { h: "PadhaiPal", links: [["About", "https://www.padhaipal.com"], ["How it works", "https://www.padhaipal.com"], ["Contact", "https://www.padhaipal.com"]] },
+          { h: "Lifteracy", links: [["About", "https://www.padhaipal.com"], ["How it works", "https://www.padhaipal.com"], ["Contact", "https://www.padhaipal.com"]] },
           { h: "Trust", links: [["Annual report", "https://www.padhaipal.com"], ["Financials", "https://www.padhaipal.com"], ["Governance", "https://www.padhaipal.com"]] },
           { h: "Safety", links: [["Child safeguarding", "https://www.padhaipal.com"], ["Data & privacy", "https://www.padhaipal.com"]] },
         ];
@@ -2320,7 +2320,7 @@
           <div className="mt-2 rounded-2xl border border-zinc-200 bg-white p-6">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="col-span-2 sm:col-span-1">
-                <div className="text-lg font-black text-blue-700">PadhaiPal</div>
+                <div className="text-lg font-black text-blue-700">Lifteracy</div>
                 <div className="mt-1 text-[11px] text-zinc-500">{t("Teaching every child to read, over WhatsApp.")}</div>
                 <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">www.padhaipal.com ↗</a>
               </div>
@@ -2331,7 +2331,7 @@
                 </div>
               ))}
             </div>
-            <div className="mt-4 border-t border-zinc-100 pt-3 text-[10px] text-zinc-400">{t("Figures on this page are illustrative demo data. PadhaiPal is a registered non-profit · child data is processed under our privacy & safeguarding policy.")}</div>
+            <div className="mt-4 border-t border-zinc-100 pt-3 text-[10px] text-zinc-400">{t("Figures on this page are illustrative demo data. Lifteracy is a registered non-profit · child data is processed under our privacy & safeguarding policy.")}</div>
           </div>
         );
       }
@@ -2424,7 +2424,7 @@
               </span>{" "}by 2050 if every child could read.
             </p>
             <p className="relative mt-6 pb-14" style={stage}>
-              PadhaiPal's goal is to{" "}
+              Lifteracy's goal is to{" "}
               <span className="group relative inline-block font-semibold text-amber-700">cost effectively
                 <span className={note} style={scribble}>achieves Coefficient Giving's funding bar of <Link href={CG_LINK}>$50/DALY</Link></span>
               </span>{" "}capture{" "}
@@ -2458,7 +2458,7 @@
             <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
               <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
               <div className="flex flex-col items-center text-center">
-                <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto" />
+                <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto" />
                 <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">{mode === "login" ? "Log in to your donor account" : "Create your donor account"}</h2>
                 <p className="mt-1 text-sm text-zinc-500">{mode === "login" ? "Welcome back — track the impact of your giving." : "Sign up to track the impact of your giving."}</p>
               </div>
@@ -2491,7 +2491,7 @@
                 </button>
               </form>
               <p className="mt-4 text-center text-[12px] text-zinc-500">
-                {mode === "login" ? "New to PadhaiPal? " : "Already have an account? "}
+                {mode === "login" ? "New to Lifteracy? " : "Already have an account? "}
                 <button onClick={() => setMode(mode === "login" ? "signup" : "login")} className="font-semibold text-[#1d9edf] hover:underline">{mode === "login" ? "Sign up" : "Log in"}</button>
               </p>
               <p className="mt-3 text-center text-[10px] text-zinc-400">Demo — any email &amp; password will sign you in.</p>
@@ -2572,7 +2572,7 @@
             <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
               <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
               <div className="flex flex-col items-center text-center">
-                <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-10 w-auto" />
+                <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-10 w-auto" />
                 <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">Donation receipt</h2>
                 <p className="mt-1 text-sm text-zinc-500">For tax purposes · keep for your records</p>
               </div>
@@ -2580,7 +2580,7 @@
                 <div className={ROW}><span className="text-zinc-500">Receipt no.</span><span className="font-mono font-semibold text-zinc-800">PP-2026-04821</span></div>
                 <div className={ROW}><span className="text-zinc-500">Date</span><span className="font-semibold text-zinc-800">23 Jun 2026</span></div>
                 <div className={ROW}><span className="text-zinc-500">Donor</span><span className="max-w-[60%] truncate font-semibold text-zinc-800" title={account}>{account}</span></div>
-                <div className={ROW}><span className="text-zinc-500">Organization</span><span className="font-semibold text-zinc-800">PadhaiPal Foundation</span></div>
+                <div className={ROW}><span className="text-zinc-500">Organization</span><span className="font-semibold text-zinc-800">Lifteracy Foundation</span></div>
                 <div className={ROW}><span className="text-zinc-500">Tax status</span><span className="font-semibold text-zinc-800">501(c)(3) · 80G</span></div>
                 <div className="flex justify-between gap-4 py-3 text-base"><span className="font-semibold text-zinc-600">Amount</span><span className="text-lg font-extrabold text-emerald-600">${amount.toLocaleString()}</span></div>
               </div>
@@ -2661,12 +2661,12 @@
       const SPONSORED = [
         { name: "Aarav", school: "PS Nabipanah · Malihabad, UP", lon: 80.71, lat: 26.92, chat: "Aarav" },
         { name: "Priya", school: "GPS Rasoolpur · Lucknow, UP", lon: 80.95, lat: 26.85, chat: "Meena Kumari" },
-        { name: "Rohan", school: "PS Kakori · Lucknow, UP", lon: 80.78, lat: 26.83, chat: "PadhaiPal Sponsorship" },
-        { name: "Anjali", school: "UPS Bijnor · Lucknow, UP", lon: 80.85, lat: 26.74, chat: "PadhaiPal Sponsorship" },
-        { name: "Vikram", school: "PS Mohanlalganj · Lucknow, UP", lon: 80.98, lat: 26.66, chat: "PadhaiPal Sponsorship" },
-        { name: "Meera", school: "PS Itaunja · Lucknow, UP", lon: 80.92, lat: 27.07, chat: "PadhaiPal Sponsorship" },
-        { name: "Karan", school: "PS Gosainganj · Lucknow, UP", lon: 81.07, lat: 26.74, chat: "PadhaiPal Sponsorship" },
-        { name: "Sita", school: "PS Chinhat · Lucknow, UP", lon: 81.03, lat: 26.88, chat: "PadhaiPal Sponsorship" },
+        { name: "Rohan", school: "PS Kakori · Lucknow, UP", lon: 80.78, lat: 26.83, chat: "Lifteracy Sponsorship" },
+        { name: "Anjali", school: "UPS Bijnor · Lucknow, UP", lon: 80.85, lat: 26.74, chat: "Lifteracy Sponsorship" },
+        { name: "Vikram", school: "PS Mohanlalganj · Lucknow, UP", lon: 80.98, lat: 26.66, chat: "Lifteracy Sponsorship" },
+        { name: "Meera", school: "PS Itaunja · Lucknow, UP", lon: 80.92, lat: 27.07, chat: "Lifteracy Sponsorship" },
+        { name: "Karan", school: "PS Gosainganj · Lucknow, UP", lon: 81.07, lat: 26.74, chat: "Lifteracy Sponsorship" },
+        { name: "Sita", school: "PS Chinhat · Lucknow, UP", lon: 81.03, lat: 26.88, chat: "Lifteracy Sponsorship" },
       ].map((c, i) => { const s = donorStudent(i); return { ...c, id: "spons." + i, first: c.name, letters: s.letters, activity: s.activity, score: s.score }; });
 
       // "Your Impact" table for the logged-in donor — their sponsored children. Expanding a row
@@ -2749,7 +2749,7 @@
             <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
               <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                 <div className="flex items-center gap-8">
-                  <img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto shrink-0 sm:h-12" />
+                  <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto shrink-0 sm:h-12" />
                   <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                     {NAV.map(([href, label]) => <a key={href} href={href} className="transition-colors hover:text-blue-600">{label}</a>)}
                   </nav>
@@ -2830,7 +2830,7 @@
             <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
               <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                 <div className="flex items-center gap-8">
-                  <a href="#top" className="shrink-0"><img src="./padhaipal-logo.svg" alt="padhAIpal" className="h-11 w-auto sm:h-12" /></a>
+                  <a href="#top" className="shrink-0"><img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto sm:h-12" /></a>
                   <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                     <a href="#what-does" className="transition-colors hover:text-blue-600">What we do</a>
                     <a href="#traction" className="transition-colors hover:text-blue-600">Traction</a>
@@ -2872,9 +2872,9 @@
             {/* 2 · learners in the field — light, full-bleed (running off the screen edges) */}
             <section className="bg-zinc-50 py-10">
               <div className="flex items-center justify-center gap-3">
-                <img src="./photos/learner-1.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
-                <img src="./photos/learner-2.webp" alt="Children learning together with PadhaiPal" className="h-[40vh] w-[46vw] flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg" />
-                <img src="./photos/learner-3.avif" alt="A learner using PadhaiPal" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+                <img src="./photos/learner-1.avif" alt="A learner using Lifteracy" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
+                <img src="./photos/learner-2.webp" alt="Children learning together with Lifteracy" className="h-[40vh] w-[46vw] flex-shrink-0 rounded-3xl bg-zinc-100 object-cover shadow-lg" />
+                <img src="./photos/learner-3.avif" alt="A learner using Lifteracy" className="h-[32vh] w-[30vw] flex-shrink-0 rounded-2xl bg-zinc-100 object-cover shadow-md" />
               </div>
             </section>
 
@@ -2882,18 +2882,18 @@
             <section id="what-does" className="scroll-mt-20 bg-zinc-50 py-10">
               <div className="mx-auto max-w-6xl px-6">
                 <div className={"mb-6 " + H} style={HC}>What{" "}
-                  <span className="group relative inline-block cursor-help underline decoration-dotted decoration-2 underline-offset-4">PadhaiPal
+                  <span className="group relative inline-block cursor-help underline decoration-dotted decoration-2 underline-offset-4">Lifteracy
                     {/* pronunciation + name breakdown on hover (pt-3 bridges the hover gap) */}
                     <span className="pointer-events-none absolute left-1/2 top-full z-30 hidden w-[28rem] max-w-[90vw] -translate-x-1/2 pt-3 group-hover:block">
                       <span className="block rounded-lg border border-zinc-300 bg-white p-5 text-left font-serif text-[15px] font-normal leading-relaxed text-zinc-700 shadow-xl">
                         <span className="flex flex-wrap items-baseline gap-x-2 border-b border-zinc-200 pb-2">
-                          <span className="text-xl font-bold text-zinc-900">Padhai·Pal</span>
-                          <span className="text-zinc-400">\ pad·high·pal \</span>
+                          <span className="text-xl font-bold text-zinc-900">Lift·eracy</span>
+                          <span className="text-zinc-400">\ lift·uh·ruh·see \</span>
                           <span className="italic text-zinc-500">noun</span>
                         </span>
                         <span className="mt-2 block"><span className="font-semibold text-zinc-400">1.</span> An AI tutor that teaches kids to read in their own language with evening WhatsApp voice message lessons.</span>
                         <span className="mt-2 block text-[13px] leading-relaxed text-zinc-500">
-                          <span className="italic">Origin:</span> Hindi <span className="font-semibold not-italic text-zinc-700">padhai</span> “education,” from <span className="font-semibold text-zinc-700">padh</span> “to read,” + <span className="font-semibold text-zinc-700">AI</span> (artificial intelligence) + <span className="font-semibold text-zinc-700">PAL</span>, Personalised Adaptive Learning — also “friend.”
+                          <span className="italic">Origin:</span> English <span className="font-semibold not-italic text-zinc-700">lift</span> “to raise up,” + <span className="font-semibold text-zinc-700">literacy</span> “the ability to read and write” — the lift that carries a child there.
                         </span>
                       </span>
                     </span>
@@ -3023,7 +3023,7 @@
           <div className="flex gap-3">
             {card(report.blockAvgLatest + "%", t("average oral-literacy NIPUN proxy"), nipColor(report.blockAvgLatest))}
             {card(gain, t("avg oral literacy NIPUN proxy gain last week"), "#0891b2")}
-            {card(report.usingN + " of " + report.totalN, t(nounP) + " " + t("using PadhaiPal"), "#16a34a")}
+            {card(report.usingN + " of " + report.totalN, t(nounP) + " " + t("using Lifteracy"), "#16a34a")}
           </div>
         );
       }
@@ -3122,12 +3122,12 @@
       // photo + dummy quote for the top / most-improved school's head teacher
       const REP_QUOTES = {
         top: [
-          "My class started below 40% in April — daily practice on PadhaiPal changed how the children read aloud.",
+          "My class started below 40% in April — daily practice on Lifteracy changed how the children read aloud.",
           "The children look forward to their reading minutes every day — confidence reading aloud has transformed.",
           "Parents tell me their children now read signboards and storybooks at home on their own.",
         ],
         improved: [
-          "Nearly seven points in one week — parents now send PadhaiPal voice notes of their children reading at home.",
+          "Nearly seven points in one week — parents now send Lifteracy voice notes of their children reading at home.",
           "One week of consistent daily practice and almost the whole class moved up a band.",
           "The jump this week surprised even me — the children kept their reading streak going every day.",
         ],
@@ -3161,7 +3161,7 @@
         const figs = [
           [item.onboarded ? item.latest + "%" : "—", t("Latest oral-literacy NIPUN proxy"), col],
           [item.onboarded ? (item.delta >= 0 ? "+" : "") + item.delta.toFixed(1) + " " + t("pts") : "—", t("Change last week"), item.onboarded ? (item.delta >= 0 ? "#16a34a" : "#dc2626") : "#a1a1aa"],
-          [item.onboarded ? t("Yes") : t("No"), item.onboarded ? t("On PadhaiPal · since") + " " + NIP_WEEKS[item.startW] : t("Not using PadhaiPal"), item.onboarded ? "#16a34a" : "#a1a1aa"],
+          [item.onboarded ? t("Yes") : t("No"), item.onboarded ? t("On Lifteracy · since") + " " + NIP_WEEKS[item.startW] : t("Not using Lifteracy"), item.onboarded ? "#16a34a" : "#a1a1aa"],
         ];
         return (
           <div className="flex flex-col gap-5 sm:flex-row sm:items-stretch">
@@ -3200,9 +3200,9 @@
             { from: "Sunita Verma", text: "My Grade 2 class crossed 80% this week!", time: "10:58" },
             { mine: true, text: "Fantastic — congratulations 👏", time: "11:05" },
           ] },
-        { name: "Block NIPUN Taskforce", sub: "PadhaiPal + officials", group: true, color: "#7c3aed", time: "Yesterday",
+        { name: "Block NIPUN Taskforce", sub: "Lifteracy + officials", group: true, color: "#7c3aed", time: "Yesterday",
           msgs: [
-            { from: "PadhaiPal", color: "#0891b2", text: "This week's block report is ready.", time: "Yesterday" },
+            { from: "Lifteracy", color: "#0891b2", text: "This week's block report is ready.", time: "Yesterday" },
             { from: "BSA Lucknow", color: "#16a34a", text: "Noted. Let's push the not-onboarded schools.", time: "Yesterday" },
             { mine: true, text: "On it — sending invites today.", time: "Yesterday" },
           ] },
@@ -3226,9 +3226,9 @@
             { mine: true, text: "That means the world to me 🙏 I'm so proud of him.", time: "Yesterday" },
             { from: "Sunita Devi", text: "He drew you a picture today ❤️ I'll send a photo.", time: "Yesterday" },
           ] },
-        { name: "PadhaiPal Sponsorship", sub: "Your coordinator · updates", group: true, color: "#0891b2", time: "Mon",
+        { name: "Lifteracy Sponsorship", sub: "Your coordinator · updates", group: true, color: "#0891b2", time: "Mon",
           msgs: [
-            { from: "PadhaiPal", color: "#0891b2", text: "Aarav's monthly progress report is ready — oral reading up 18% 📈", time: "Mon" },
+            { from: "Lifteracy", color: "#0891b2", text: "Aarav's monthly progress report is ready — oral reading up 18% 📈", time: "Mon" },
             { from: "Coordinator", color: "#7c3aed", text: "He's on track to reach grade level by December.", time: "Mon" },
             { mine: true, text: "Wonderful news — thank you for the update! 💚", time: "Mon" },
           ] },
@@ -3956,7 +3956,7 @@
         };
         // "send a message to get these schools using PadhaiPal" → inject onboarding template + jump to Messaging
         const onboardUnonboarded = () => {
-          const msg = "Namaste! Your school isn't on PadhaiPal yet. PadhaiPal is a WhatsApp-based reading programme that has raised oral-literacy scores across " + (blk ? blk.name : "this block") + ". Reply YES to onboard your school this week — we'll set up your teachers in minutes. 📚";
+          const msg = "Namaste! Your school isn't on Lifteracy yet. Lifteracy is a WhatsApp-based reading programme that has raised oral-literacy scores across " + (blk ? blk.name : "this block") + ". Reply YES to onboard your school this week — we'll set up your teachers in minutes. 📚";
           setComposeDraft((d) => ({ text: msg, n: d.n + 1 }));
           const el = document.getElementById("rep-messaging");
           if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -4118,7 +4118,7 @@
             const kpis = [
               [report.blockAvgLatest + "%", "average oral-literacy NIPUN proxy", [217, 119, 6]],
               [(report.avgGain >= 0 ? "+" : "") + report.avgGain.toFixed(1) + " pts", "avg oral literacy NIPUN proxy gain last week", [8, 145, 178]],
-              [report.usingN + " of " + report.totalN, nounP + " using PadhaiPal", [22, 163, 74]],
+              [report.usingN + " of " + report.totalN, nounP + " using Lifteracy", [22, 163, 74]],
             ];
             const kw = (CW - 20) / 3, kh = 58;
             kpis.forEach((k, i) => {
@@ -4149,7 +4149,7 @@
             if (y + 16 > PH - M) { doc.addPage(); y = 54; }
             doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(150);
             doc.text("Illustrative / dummy data — format demonstration. Boundaries are real (geoBoundaries); scores are illustrative.", M, y + 4);
-            doc.save("padhaipal-" + ((path[path.length - 1] || "global").replace(/\s+/g, "-").toLowerCase()) + "-report.pdf");
+            doc.save("lifteracy-" + ((path[path.length - 1] || "global").replace(/\s+/g, "-").toLowerCase()) + "-report.pdf");
             setToast("Report generated — PDF downloaded.");
             return;
           }
@@ -4159,7 +4159,7 @@
           const W = doc.internal.pageSize.getWidth();
           const crumb = ["World", country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name, level === "school" ? "School" : null].filter(Boolean).join("  >  ");
           let y = 56;
-          doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(24); doc.text("PadhaiPal — Global Network Report", 40, y);
+          doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(24); doc.text("Lifteracy — Global Network Report", 40, y);
           doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(120);
           y += 18; doc.text(crumb, 40, y);
           y += 14; doc.text(`${entities.length} ${level === "world" ? "countries" : level} | ranked by performance score`, 40, y);
@@ -4177,7 +4177,7 @@
           doc.textWithLink("> Open the live dashboard for this view", 40, y, { url: "https://dashboard.padhaipal.com/r/" + fakeId });
           y += 22; doc.setFontSize(8); doc.setTextColor(150);
           doc.text("Demo report — boundaries are real (geoBoundaries); scores & demographics are illustrative.", 40, y);
-          doc.save("padhaipal-global-report.pdf");
+          doc.save("lifteracy-global-report.pdf");
           setToast("Report generated — PDF downloaded.");
         }, [entities, sendList, country, a1f, a2f, blk, level, report, isReport, nounS, nounP, accent, setToast]);
 
@@ -4316,7 +4316,7 @@
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(teachBuilt(active.demo.pairs) * 100)}% with built langs · {Math.round(active.demo.phon * 100)}% in time</span></div>
                       )}
                       {!active.greyed && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">PadhaiPal coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Lifteracy coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
                       {level !== "adm3" && !active.greyed && (() => {   /* funding/budget card hidden in the BEO (block) view */
                         const live = registered(active.u.id);
@@ -4343,7 +4343,7 @@
                             <div className={"mb-1 text-[11px] font-bold " + (live ? fundClass : "text-zinc-500")}>
                               {!live ? "No funding allocated here yet" : daysLeft >= 365 ? "365+ days of funding left" : daysLeft <= 0 ? "Funding has run out" : daysLeft + " days of funding left"}
                             </div>
-                            {!live && <div className="mb-1 rounded bg-zinc-100 px-2 py-1 text-[9px] font-medium text-zinc-500">No PadhaiPal data collected at this level yet — metrics shown zeroed.</div>}
+                            {!live && <div className="mb-1 rounded bg-zinc-100 px-2 py-1 text-[9px] font-medium text-zinc-500">No Lifteracy data collected at this level yet — metrics shown zeroed.</div>}
                             <div className="mb-1 text-[10px] font-semibold text-zinc-500">Budget <span className="font-normal text-zinc-400">· committed &amp; allocated to this location</span></div>
                             <div className="flex items-center gap-3">
                               <MiniPie parts={parts} r={26} />
@@ -4422,7 +4422,7 @@
                           <React.Fragment>
                             <div className="rounded bg-zinc-50 px-2 py-1.5">
                               <div className="mb-1 flex items-center justify-between gap-2">
-                                <span className="text-[10px] font-semibold text-zinc-500">Outcome vs months since PadhaiPal</span>
+                                <span className="text-[10px] font-semibold text-zinc-500">Outcome vs months since Lifteracy</span>
                                 <span className="flex gap-0.5">
                                   {toggles.map(([k, lbl]) => (
                                     <button key={k} onClick={() => setChartY(k)} className={"rounded px-1.5 py-0.5 text-[9px] font-semibold " + (yKey === k ? "bg-zinc-900 text-white" : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300")}>{lbl}</button>
@@ -4537,7 +4537,7 @@
             if (level === "schools" && blk) return { id: blk.id, title: blk.name, sub: "Block · BEO", label: blk.name + " - " + donTail(), demo: blk.demo, cpd: cpdOf(blk.id, 22) };
             if (level === "adm3" && a2f && a1f) return { id: a2f.id, title: a2f.name, sub: "District · BSA", label: a2f.name + " - " + a1f.name + " - India", demo: a2f.demo, cpd: cpdOf(a2f.id, 16) };
             if (level === "adm2" && a1f) return { id: a1f.id, title: a1f.name, sub: "State · DGSE region", label: a1f.name + " - India", demo: a1f.demo, cpd: cpdOf(a1f.id, 8) };
-            if (level === "adm1" && country) return { id: "don.IND", title: country.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(country.feature, country.iso, country.name, true), cpd: cpdOf("don.IND", 0) };
+            if (level === "adm1" && country) return { id: "don.IND", title: country.name, sub: "Country · where Lifteracy runs today", label: "India", demo: demoFor(country.feature, country.iso, country.name, true), cpd: cpdOf("don.IND", 0) };
             return null;   // world
           };
           const donatePopUp = () => { const s = donateUpSel(); popUp(); setDonateSel(s); };
@@ -4557,7 +4557,7 @@
                       {level === "world" && worldPaths && worldPaths.map((p) => {
                         if (p.iso !== "IND") return <path key={p.i} d={p.d} {...greyProps} />;
                         const id = "don.IND", cpd = cpdOf(id, 0);
-                        const payload = { id, title: p.name, sub: "Country · where PadhaiPal runs today", label: "India", demo: demoFor(p.feature, p.iso, p.name, true), cpd };
+                        const payload = { id, title: p.name, sub: "Country · where Lifteracy runs today", label: "India", demo: demoFor(p.feature, p.iso, p.name, true), cpd };
                         return <path key={p.i} d={p.d} {...areaProps(id, cpd, payload, () => pickCountry({ iso: p.iso, name: p.name, feature: p.feature, covered: true }))} />;
                       })}
                       {level === "adm1" && adm1 && adm1.map((d0) => {
@@ -4584,7 +4584,7 @@
                         if (sc.k >= DON_SCHOOLS && !trial) return <circle key={sc.id} cx={sc.p[0]} cy={sc.p[1]} r={5 / tf.k} fill={DON_GREY} stroke="#ffffff" strokeWidth={1 / tf.k} />;
                         const sel = donateSel && donateSel.id === sc.id, cpd = cpdOf(sc.id, 28);
                         const fill = trial ? (sel ? TRIAL_SEL : TRIAL) : (sel ? ceColorSel(cpd) : ceColor(cpd));
-                        const payload = { id: sc.id, title: sc.name, sub: trial ? "Currently trialing PadhaiPal" : "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
+                        const payload = { id: sc.id, title: sc.name, sub: trial ? "Currently trialing Lifteracy" : "Government school", label: sc.name + " - " + blk.name + " - " + donTail(), demo: null, cpd };
                         return (
                           <g key={sc.id}>
                             {trial && <circle cx={sc.p[0]} cy={sc.p[1]} r={(sel ? 13 : 11) / tf.k} fill={TRIAL} opacity="0.25" pointerEvents="none" />}
@@ -4620,7 +4620,7 @@
                           <div><dt className="text-zinc-400">Area</dt><dd className="font-semibold text-zinc-800">{fmtArea(d.areaKm2)}</dd></div>
                           <div><dt className="text-zinc-400">Adult literacy</dt><dd className="font-semibold text-zinc-800">{d.lit != null ? Math.round(d.lit * 100) + "%" : "—"}</dd></div>
                           <div className="col-span-2"><dt className="text-zinc-400">Main languages</dt><dd className="font-semibold text-zinc-800">{(d.langs || []).slice(0, 3).join(", ") || "—"}</dd></div>
-                          <div className="col-span-2"><dt className="text-zinc-400">Speaks a script PadhaiPal can teach</dt><dd className="font-semibold text-zinc-800">{Math.round((d.phon || 0) * 100)}%</dd></div>
+                          <div className="col-span-2"><dt className="text-zinc-400">Speaks a script Lifteracy can teach</dt><dd className="font-semibold text-zinc-800">{Math.round((d.phon || 0) * 100)}%</dd></div>
                         </dl>
                       )}
                       <div className="mt-2 border-t border-zinc-100 pt-2">
@@ -4643,7 +4643,7 @@
                     <span className="h-2.5 w-20 rounded-sm" style={{ background: "linear-gradient(90deg,#15803d,#eab308)" }} />
                     <span className="text-[9px] text-zinc-400">$50 bar</span>
                   </div>
-                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-offset-0" style={{ background: TRIAL, boxShadow: "0 0 0 3px " + TRIAL + "40" }} /> Trialing PadhaiPal now</div>
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-offset-0" style={{ background: TRIAL, boxShadow: "0 0 0 3px " + TRIAL + "40" }} /> Trialing Lifteracy now</div>
                   <div className="mt-1 flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: DON_GREY }} /> Not funded yet</div>
                 </div>
               </div>
@@ -4663,7 +4663,7 @@
             )}
             {role === "transparency" ? (
               <DonorDashboard t={t} worldGeo={worldGeo} donateMap={donateMap} donateTarget={donateTarget}
-                onDonate={(earmark) => setFund({ title: earmark ? "PadhaiPal · " + earmark : "PadhaiPal — global programme", id: "donor", earmark: earmark || null })} />
+                onDonate={(earmark) => setFund({ title: earmark ? "Lifteracy · " + earmark : "Lifteracy — global programme", id: "donor", earmark: earmark || null })} />
             ) : (
             <React.Fragment>
             {!isReport && (
@@ -4716,7 +4716,7 @@
                 <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
                   <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                     <div className="flex items-center gap-8">
-                      <img src="./padhaipal-logo.svg" alt="PadhaiPal" className="h-10 w-auto shrink-0 sm:h-11" />
+                      <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-10 w-auto shrink-0 sm:h-11" />
                       <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                         <a href="#rep-top" className="transition-colors hover:text-blue-600">{t("Top")}</a>
                         <a href="#rep-perf" className="transition-colors hover:text-blue-600">{t(nounS)} {t("Performance")}</a>
@@ -5027,7 +5027,7 @@
               {isReport && (
                 <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-2 text-[10px] leading-tight text-zinc-600 shadow">
                   <div className="mb-1 font-semibold text-zinc-700">{t("Latest NIPUN proxy")}</div>
-                  {[["≥80", "#16a34a"], ["50–79", "#f59e0b"], ["<50", "#dc2626"], [t("Not using PadhaiPal"), "#a1a1aa"]].map(([l, c]) => (
+                  {[["≥80", "#16a34a"], ["50–79", "#f59e0b"], ["<50", "#dc2626"], [t("Not using Lifteracy"), "#a1a1aa"]].map(([l, c]) => (
                     <div key={l} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: c }} />{l}</div>
                   ))}
                 </div>
@@ -5049,11 +5049,11 @@
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                          <span>On PadhaiPal <span className="text-zinc-400">(colour = avg score)</span></span>
+                          <span>On Lifteracy <span className="text-zinc-400">(colour = avg score)</span></span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                          <span>No PadhaiPal node yet</span>
+                          <span>No Lifteracy node yet</span>
                         </div>
                       </div>
                     </React.Fragment>
@@ -5063,11 +5063,11 @@
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
-                          <span>On PadhaiPal <span className="text-zinc-400">(colour = avg score)</span></span>
+                          <span>On Lifteracy <span className="text-zinc-400">(colour = avg score)</span></span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
-                          <span>No PadhaiPal node yet</span>
+                          <span>No Lifteracy node yet</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
@@ -5122,7 +5122,7 @@
                             <div className="text-sm font-semibold text-zinc-800">{t("Latest score — all schools")}{hvLabel}</div>
                             {/* static legend chip (no popup) */}
                             <span className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-500">
-                              <span className="h-2.5 w-2.5 rounded-full bg-zinc-400" /> {t("Not using PadhaiPal")}
+                              <span className="h-2.5 w-2.5 rounded-full bg-zinc-400" /> {t("Not using Lifteracy")}
                             </span>
                           </div>
                           <div className="relative">
@@ -5131,7 +5131,7 @@
                             {greyPop && (
                               <div className="absolute right-1 -top-3 z-30 w-64" onMouseEnter={openGreyPop} onMouseLeave={closeGreyPop}>
                                 <div className="rounded-lg bg-zinc-900 px-3 py-2 text-[12px] leading-snug text-white shadow-xl">
-                                  {t("The grey bars are schools not on PadhaiPal yet. Click")} <button onClick={onboardUnonboarded} className="font-semibold text-blue-300 hover:text-blue-200">{t("here")}</button> {t("to send a message to get these schools using PadhaiPal.")}
+                                  {t("The grey bars are schools not on Lifteracy yet. Click")} <button onClick={onboardUnonboarded} className="font-semibold text-blue-300 hover:text-blue-200">{t("here")}</button> {t("to send a message to get these schools using Lifteracy.")}
                                 </div>
                               </div>
                             )}
@@ -5250,7 +5250,7 @@
       return (
         <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
-            <span className="text-xs font-semibold text-white">PadhaiPal · Educator Network</span>
+            <span className="text-xs font-semibold text-white">Lifteracy · Educator Network</span>
             <label className="ml-auto flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
               Signed in as
               <select value={role} onChange={(e) => setRole(e.target.value)} title="Switch dashboard / signed-in role"

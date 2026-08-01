@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+	 viewBox="80 255 920 510" style="enable-background:new 0 0 1080 1080;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#D3EBF7;}
+	.st1{fill:#1D9EDF;}
+	.st2{fill:#FFFFFF;}
+</style>
+<g>
+	<path class="st1" d="M392.57,459.47c50.5,9.34,106.38,42.25,126.43,54.84c2.65,1.67,5.91-0.97,4.83-3.9
+		c-9.85-26.74-48.61-105.92-166.61-123.95c-9.32-1.42-17.23,6.83-15.51,16.09l1.43,7.7C347.81,435.32,367.49,454.82,392.57,459.47z"
+		/>
+	<path class="st1" d="M738.37,338.63c1.9,27.5-13.52,53.16-38.55,64.71c-68.48,31.6-139.09,86.87-161.37,110.32
+		c-2.48,2.61-6.84,0.51-6.35-3.05c4.39-31.91,30.08-128.61,180.11-212.07c10.39-5.78,23.28,1.14,24.28,12.99L738.37,338.63z"/>
+	<circle class="st1" cx="473.51" cy="356.74" r="31.46"/>
+	<circle class="st1" cx="577.83" cy="311.64" r="31.46"/>
+</g>
+<text class="st1" x="116" y="708" textLength="854" lengthAdjust="spacingAndGlyphs"
+	font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="700" font-size="168">Lifteracy</text>
+</svg>
