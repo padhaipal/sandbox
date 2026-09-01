@@ -2978,9 +2978,9 @@
       // headline KPIs, both Performance charts, Detail figs and Spotlight
       // together. bias shifts the plausible range per test (demo only).
       const MVP_METRICS = [
-        { key: "g2",   label: "NIPUN grade 2", bias: 6 },
-        { key: "g3",   label: "NIPUN grade 3", bias: 0 },
-        { key: "mplb", label: "MPL-B",         bias: -9 },
+        { key: "g2",   label: "NIPUN grade 2 proxy", bias: 6 },
+        { key: "g3",   label: "NIPUN grade 3 proxy", bias: 0 },
+        { key: "mplb", label: "MPL-B proxy",         bias: -9 },
       ];
       const MVP_METRIC_BY = {}; MVP_METRICS.forEach((m) => { MVP_METRIC_BY[m.key] = m; });
       function MvpMetricToggle({ metric, setMetric }) {
@@ -2995,6 +2995,32 @@
           </div>
         );
       }
+      // /mvp: trend-graph time window (weeks of NIP_WEEKS shown, newest-last).
+      const MVP_RANGES = [
+        { key: "day",  label: "Day",      weeks: 2 },
+        { key: "week", label: "Week",     weeks: 3 },
+        { key: "month",label: "Month",    weeks: 6 },
+        { key: "year", label: "Year",     weeks: 9 },
+        { key: "all",  label: "All time", weeks: 12 },
+      ];
+      function MvpRangeBar({ range, setRange, onCsv }) {
+        return (
+          <div className="flex items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-lg border border-zinc-300 bg-white text-xs font-semibold shadow-sm">
+              {MVP_RANGES.map((r) => (
+                <button key={r.key} onClick={() => setRange(r.key)}
+                  className={"px-3 py-1.5 transition " + (range === r.key ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50")}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={onCsv}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50">
+              Download CSV
+            </button>
+          </div>
+        );
+      }
       const NIP_WEEKS = ["02 Apr", "09 Apr", "16 Apr", "23 Apr", "30 Apr", "07 May", "14 May", "21 May", "28 May", "04 Jun", "11 Jun", "18 Jun"];
       const nipColor = (v) => v == null ? "#a1a1aa" : v >= 80 ? "#16a34a" : v >= 50 ? "#f59e0b" : "#dc2626";
       // build the report from the block's schools (each `sc` has { id, u:{perf}, name, p })
@@ -3003,11 +3029,14 @@
         const W = NIP_WEEKS.length;
         const bias = (MVP_METRIC_BY[metric] || MVP_METRIC_BY.g3).bias;
         const items = schools.map((sc) => {
-          // Seed per metric so switching tests redraws every number.
-          const h = hashStr("nip:" + metric + ":" + sc.id);
-          const onboarded = (h % 100) >= 30;                       // ~70% on PadhaiPal, ~30% not
+          // Onboarding (who is on Lifteracy, and since when) is metric-
+          // INDEPENDENT — switching tabs must never change the using-N count.
+          const hBase = hashStr("nip:" + sc.id);
+          const onboarded = (hBase % 100) >= 30;                   // ~70% on Lifteracy, ~30% not
           if (!onboarded) return { id: sc.id, name: sc.name, sc, onboarded: false, series: null, latest: null, delta: 0, startW: null };
-          const startW = (h >>> 4) % 6;                            // onboarded somewhere in the first 6 weeks
+          const startW = (hBase >>> 4) % 6;                        // onboarded somewhere in the first 6 weeks
+          // Scores re-seed per metric so switching tabs redraws every number.
+          const h = hashStr("nip:" + metric + ":" + sc.id);
           const start = clamp(24 + bias + ((h >>> 7) % 18), 8, 60); // starting score (per-metric bias)
           const target = clamp(Math.round(38 + bias + sc.u.perf * 58), start + 6, 98);  // latest target by perf
           const series = [];
@@ -3053,10 +3082,15 @@
         );
       }
 
-      function RepTrend({ report, hoverId, setHoverId, onSelect, onPick, selId, mineId, t = (s) => s }) {
+      function RepTrend({ report, hoverId, setHoverId, onSelect, onPick, selId, mineId, t = (s) => s, windowWeeks = NIP_WEEKS.length }) {
         if (!report) return null;
         const W = 900, H = 280, mL = 46, mR = 12, mT = 12, mB = 34, iw = W - mL - mR, ih = H - mT - mB;
-        const n = NIP_WEEKS.length;
+        // /mvp time-range: show only the newest `windowWeeks` buckets.
+        const S = Math.max(2, Math.min(windowWeeks, NIP_WEEKS.length));
+        const off = NIP_WEEKS.length - S;
+        const LABELS = NIP_WEEKS.slice(off);
+        const win = (series) => (series ? series.slice(off) : series);
+        const n = LABELS.length;
         const x = (i) => mL + (n <= 1 ? 0 : (i / (n - 1)) * iw), y = (v) => mT + ih - (v / 100) * ih;
         const line = (s) => s.map((v, i) => v == null ? null : ((i === 0 || s[i - 1] == null) ? "M" : "L") + x(i).toFixed(1) + " " + y(v).toFixed(1)).filter(Boolean).join(" ");
         const onb = report.items.filter((i) => i.onboarded);
@@ -3069,18 +3103,18 @@
             {onb.map((it) => {
               const hot = hoverId === it.id || selId === it.id, mine = it.id === mineId;
               return (
-                <path key={it.id} d={line(it.series)} fill="none" onMouseEnter={() => setHoverId(it.id)} onMouseLeave={() => setHoverId(null)}
+                <path key={it.id} d={line(win(it.series))} fill="none" onMouseEnter={() => setHoverId(it.id)} onMouseLeave={() => setHoverId(null)}
                   onClick={() => onSelect && onSelect(it)} onDoubleClick={() => onPick && onPick(it)}
                   stroke={mine || selId === it.id || hot ? "#2563eb" : "#cbd5e1"} strokeWidth={mine ? 2.6 : hot ? 2.4 : 0.8}
                   opacity={(hoverId || selId) && !hot && !mine ? 0.25 : 0.85} style={{ cursor: "pointer", filter: mine ? "drop-shadow(0 0 3px rgba(37,99,235,0.9))" : "none" }} />
               );
             })}
-            {report.topSchool && <path d={line(report.topSchool.series)} fill="none" stroke="#16a34a" strokeWidth="2.2" pointerEvents="none" />}
-            <path d={line(report.blockAvg)} fill="none" stroke="#1e3a5f" strokeWidth="2.8" pointerEvents="none" />
+            {report.topSchool && <path d={line(win(report.topSchool.series))} fill="none" stroke="#16a34a" strokeWidth="2.2" pointerEvents="none" />}
+            <path d={line(win(report.blockAvg))} fill="none" stroke="#1e3a5f" strokeWidth="2.8" pointerEvents="none" />
             {/* 80% target — drawn on top so it's never hidden, and labelled */}
             <line x1={mL} x2={W - mR} y1={y(80)} y2={y(80)} stroke="#ef4444" strokeWidth="1.3" strokeDasharray="5 3" pointerEvents="none" />
             <text x={mL + 3} y={y(80) - 4} fontSize="9" fill="#ef4444" fontWeight="700" pointerEvents="none">{t("80% NIPUN target")}</text>
-            {NIP_WEEKS.map((l, i) => (i % 2 === 0 ? <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="8" fill="#94a3b8">{l}</text> : null))}
+            {LABELS.map((l, i) => ((n <= 6 || i % 2 === 0) ? <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="8" fill="#94a3b8">{l}</text> : null))}
           </svg>
         );
       }
@@ -3948,7 +3982,7 @@
         // the KPIs, charts, detail card & spotlight — built generically from `entities`.
         const usesReport = role !== "transparency" && role !== "measure";
         // noun for the children shown at this level (singular/plural) — drives the generic report labels
-        const REP_NOUN = { world: ["Country", "countries"], adm1: ["Region", "regions"], adm2: ["District", "districts"], adm3: ["Block", "blocks"], schools: ["School", "schools"], school: ["Class member", "class members"] };
+        const REP_NOUN = { world: ["Country", "countries"], adm1: ["State", "states"], adm2: ["District", "districts"], adm3: ["Block", "blocks"], schools: ["School", "schools"], school: ["Class member", "class members"] };
         // the officer who leads each child unit (drives the "{officer} Spotlight" section title)
         const REP_OFFICER = { world: "National Director", adm1: "DGSE", adm2: "BSA", adm3: "BEO", schools: "Head Teacher", school: "Teacher" };
         const officer = REP_OFFICER[level] || "Head Teacher";
@@ -4060,6 +4094,7 @@
 
         // ---- report (built generically from the current level's children) ----
         const [mvpMetric, setMvpMetric] = useState("g3");   // /mvp: shared metric tab (NIPUN g2 / g3 / MPL-B)
+        const [mvpRange, setMvpRange] = useState("all");    // /mvp: trend-graph time window
         const report = useMemo(() => (usesReport && entities && entities.length ? buildBlockReport(entities, mvpMetric) : null), [usesReport, entities, mvpMetric]);
         const nipById = useMemo(() => { const m = new Map(); if (report) for (const it of report.items) m.set(it.id, it); return m; }, [report]);
         // id of the signed-in user's own area among the current children (gets a blue glow in the charts)
@@ -5143,8 +5178,14 @@
                       <div className="-mt-3 mb-5 flex justify-center"><MvpMetricToggle metric={mvpMetric} setMetric={setMvpMetric} /></div>
                       <div className={card + " space-y-6"}>
                         <div>
-                          <div className="mb-1 text-sm font-semibold text-zinc-800">{t("Weekly trend")}{hvLabel}</div>
-                          <RepTrend report={report} hoverId={repHover} setHoverId={setRepHover} onSelect={selectSchool} onPick={pickSchool} selId={repSel} mineId={mineId} t={t} />
+                          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm font-semibold text-zinc-800">{t("Weekly trend")}{hvLabel}</div>
+                            {/* time window + dummy CSV export (demo) */}
+                            <MvpRangeBar range={mvpRange} setRange={setMvpRange}
+                              onCsv={() => setToast("Demo — CSV download coming soon")} />
+                          </div>
+                          <RepTrend report={report} hoverId={repHover} setHoverId={setRepHover} onSelect={selectSchool} onPick={pickSchool} selId={repSel} mineId={mineId} t={t}
+                            windowWeeks={(MVP_RANGES.find((r) => r.key === mvpRange) || MVP_RANGES[4]).weeks} />
                         </div>
                         <div className="border-t border-zinc-100 pt-5">
                           <div className="mb-1 flex items-start justify-between gap-3">
@@ -5272,12 +5313,12 @@
           <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
             <span className="text-xs font-semibold text-white">Lifteracy · Educator Network</span>
           </div>
-          {/* shareable link — top of the page, under the header bar */}
-          <div className="flex items-center justify-center gap-2 border-b border-zinc-200 bg-white px-4 py-2 text-xs">
-            <span className="font-medium text-zinc-500">Shareable link:</span>
-            <span className="select-all font-mono font-semibold text-blue-700">{SHARE_URL}</span>
+          {/* shareable link — under the header bar; URL at ~5× body size */}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-zinc-200 bg-white px-4 py-3">
+            <span className="text-base font-medium text-zinc-500">Shareable link:</span>
+            <span className="select-all font-mono text-6xl font-extrabold tracking-tight text-blue-700">{SHARE_URL}</span>
             <button onClick={copyLink}
-              className="rounded-md border border-zinc-300 px-2 py-0.5 font-semibold text-zinc-600 hover:bg-zinc-50">
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
