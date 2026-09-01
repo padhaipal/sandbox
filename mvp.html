@@ -2995,6 +2995,227 @@
           </div>
         );
       }
+      // /mvp: shareable link — rendered UNDER the report header (Lifteracy nav),
+      // black URL, no label, responsive so it wraps on mobile.
+      function MvpShareBar() {
+        const SHARE_URL = "www.lifteracy.ai/123456";      // dummy placeholder link
+        const [copied, setCopied] = useState(false);
+        const copyLink = () => {
+          const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1600); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(SHARE_URL).then(done, done);
+          else done();
+        };
+        return (
+          <div className="border-b border-zinc-200 bg-white px-4 py-3">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2">
+              <span className="min-w-0 select-all break-all text-center font-mono text-3xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl">www.lifteracy.ai/123456</span>
+              <button onClick={copyLink}
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // ─── /mvp: teacher dashboard table — markup copied from pp-dashboard's
+      // src/app/user/[id]/media-table.tsx (the table a teacher sees on
+      // /user/{id}), filled with deterministic dummy data. The editable
+      // dashboard-transcript control and live audio player are dashboard-only
+      // (they need the backend) and are represented by static placeholders.
+      function mvpFormatIST(iso) {
+        return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      }
+      function mvpFormatLatency(audioCreatedAt, transcriptCreatedAt) {
+        const ms = new Date(transcriptCreatedAt).getTime() - new Date(audioCreatedAt).getTime();
+        if (ms < 0 || !isFinite(ms)) return null;
+        if (ms < 1000) return `${ms}ms`;
+        const sSec = ms / 1000;
+        if (sSec < 60) return `${sSec.toFixed(1)}s`;
+        const m = Math.floor(sSec / 60);
+        const rem = Math.round(sSec % 60);
+        return `${m}m${rem}s`;
+      }
+      function mvpLevelDirection(current, previous) {
+        if (current === null || previous === null) return "none";
+        if (current > previous) return "up";
+        if (current < previous) return "down";
+        return "same";
+      }
+      const MVP_LEVEL_DIRECTION_CLASS = { up: "text-green-600", down: "text-red-600", same: "text-zinc-700", none: "text-zinc-700" };
+      const MVP_WORDS = ["कमल", "घर", "नल", "मछली", "पतंग", "अब कमल इधर आ", "क्या तुम इसे पढ़ सकते हो", "राम ने नीली मछली खरीदी"];
+      const MVP_GRAPHEMES = ["क", "म", "ल", "घ", "र", "न", "प", "त"];
+      const MVP_STATES = ["word", "letter", "image", "sentence", "complete"];
+      function mvpTeacherRows(u) {
+        const N = 8;
+        const rows = [];
+        for (let i = 0; i < N; i++) {
+          const h = hashStr("mvprow:" + u.id + ":" + i);
+          const word = MVP_WORDS[h % MVP_WORDS.length];
+          const sentence = word.indexOf(" ") >= 0;
+          const created = new Date(Date.UTC(2026, 7, 20 + i, 4, (h % 50) + 5, h % 60));
+          const correct = (h >>> 3) % 4 !== 0;                       // ~75% correct
+          const hasAudio = (h >>> 5) % 5 !== 0;                      // ~80% have audio
+          const level = sentence ? 8 + (h % 3) : 2 + (h % 5);
+          const durationS = 4 + (h % 9);
+          rows.push({
+            id: "mm-" + i,
+            created_at: created.toISOString(),
+            has_audio: hasAudio,
+            transcripts: hasAudio
+              ? [
+                  { source: "sarvam", text: correct ? word : word.slice(0, Math.max(1, word.length - 2)), created_at: new Date(created.getTime() + 900 + (h % 2200)).toISOString() },
+                  { source: "reverie", text: word, created_at: new Date(created.getTime() + 1400 + (h % 3200)).toISOString() },
+                ]
+              : [],
+            starting_state: MVP_STATES[h % 4],
+            answer: word,
+            answer_correct: hasAudio ? correct : null,
+            score_changes: hasAudio
+              ? [{ grapheme: MVP_GRAPHEMES[h % MVP_GRAPHEMES.length], score: 2 + ((h >>> 7) % 30) / 10, prev_score: 1.5 + ((h >>> 9) % 30) / 10 }]
+              : [],
+            final_state: correct ? "complete" : MVP_STATES[(h >>> 2) % 4],
+            level,
+            wpm: sentence && hasAudio ? Math.round((word.split(" ").length / durationS) * 60) : null,
+          });
+        }
+        return rows;
+      }
+      function MvpTeacherModal({ u, onClose }) {
+        const rows = useMemo(() => mvpTeacherRows(u), [u]);
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-900/60 p-4" onClick={onClose}>
+            <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-zinc-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <img src={u.face} alt="" className="h-10 w-10 rounded-full object-cover" />
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-900">{u.name} <span className="font-normal text-zinc-400">· Teacher</span></div>
+                    <div className="text-[11px] text-zinc-400">dashboard view · /user/{u.id} · dummy data</div>
+                  </div>
+                </div>
+                <button onClick={onClose} className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-semibold text-zinc-600 hover:bg-zinc-100">✕ Close</button>
+              </div>
+              <div className="bg-white">
+              {/* ↓ copied from pp-dashboard media-table.tsx ↓ */}
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[1100px] text-sm text-left">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-zinc-500 text-xs uppercase tracking-wide">
+                      <th className="py-3 px-4 font-medium">Timestamp</th>
+                      <th className="py-3 px-4 font-medium">Starting State</th>
+                      <th className="py-3 px-4 font-medium">Student Audio</th>
+                      <th className="py-3 px-4 font-medium">Transcript</th>
+                      <th className="py-3 px-4 font-medium">Correct Answer</th>
+                      <th className="py-3 px-4 font-medium">Answer Status</th>
+                      <th className="py-3 px-4 font-medium">Score Change</th>
+                      <th className="py-3 px-4 font-medium">Final State</th>
+                      <th className="py-3 px-4 font-medium">Level</th>
+                      <th className="py-3 px-4 font-medium">WPM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={row.id} className="border-b border-zinc-100 hover:bg-zinc-50 align-top">
+                        <td className="py-2.5 px-4 text-zinc-600 whitespace-nowrap">{mvpFormatIST(row.created_at)}</td>
+                        <td className="py-2.5 px-4">
+                          {row.starting_state ? (
+                            <span className="text-zinc-700 text-xs">{row.starting_state}</span>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.has_audio ? (
+                            <button title="Demo — audio playback needs the backend" className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 cursor-default">▶ 0:0{4 + (i % 6)}</button>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">No audio</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 relative">
+                          <div className="flex flex-col gap-1">
+                            {row.transcripts.map((tr, j) => {
+                              const latency = tr.created_at ? mvpFormatLatency(row.created_at, tr.created_at) : null;
+                              return (
+                                <div key={j} className="text-sm flex items-baseline gap-1">
+                                  <span className="text-xs font-medium text-zinc-400 mr-1">{tr.source}:</span>
+                                  <span className="text-zinc-700">{tr.text || <em className="text-zinc-400">empty</em>}</span>
+                                  {latency && (
+                                    <span className="text-[10px] text-zinc-300 ml-1" title="Transcription latency">{latency}</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {row.transcripts.length === 0 && (
+                              <span className="text-zinc-400 italic text-xs">No transcripts</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.answer ? (
+                            <span className="text-zinc-700">{row.answer}</span>
+                          ) : (
+                            <span className="text-zinc-400 italic">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.answer_correct === true && (<span className="text-emerald-600 font-medium">Correct</span>)}
+                          {row.answer_correct === false && (<span className="text-red-500 font-medium">Incorrect</span>)}
+                          {row.answer_correct === null && (<span className="text-zinc-400 italic">--</span>)}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.score_changes && row.score_changes.length > 0 ? (
+                            <div className="flex flex-col gap-0.5">
+                              {row.score_changes.map((sc, j) => {
+                                const delta = sc.prev_score !== null ? sc.score - sc.prev_score : 0;
+                                const colorClass = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-500" : "text-zinc-600";
+                                return (
+                                  <div key={j} className="text-sm flex items-center gap-1">
+                                    <span className="text-zinc-700 font-medium">{sc.grapheme}</span>
+                                    <span className={"text-xs opacity-60 " + colorClass}>{sc.prev_score !== null ? sc.prev_score.toFixed(1) : "—"}</span>
+                                    <span className={"text-[10px] " + colorClass}>→</span>
+                                    <span className={"text-xs font-medium " + colorClass}>{sc.score.toFixed(1)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.final_state ? (
+                            <span className="text-zinc-700 text-xs">{row.final_state}</span>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.level !== null ? (
+                            <span className={"text-xs font-medium " + MVP_LEVEL_DIRECTION_CLASS[mvpLevelDirection(row.level, (rows[i + 1] && rows[i + 1].level) || null)]}>{row.level}</span>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          {row.wpm !== null ? (
+                            <span className="text-zinc-700 text-xs tabular-nums">{row.wpm}</span>
+                          ) : (
+                            <span className="text-zinc-400 italic text-xs">--</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* ↑ copied from pp-dashboard media-table.tsx ↑ */}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // /mvp: trend-graph time window (weeks of NIP_WEEKS shown, newest-last).
       const MVP_RANGES = [
         { key: "day",  label: "Day",      weeks: 2 },
@@ -3760,15 +3981,8 @@
             const tx = Math.cos(ta) * htLen, ty = Math.sin(ta) * htLen;
             nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9, x: tx, y: ty });
             links.push({ source: selHt, target: tid });
-            const sc = baseChildCount(tid);
-            for (let s = 0; s < sc; s++) {
-              const sid = tid + "." + s;
-              // seed students in an arc on the far side of their teacher (away from the head teacher)
-              const sa = ta + ((s - (sc - 1) / 2) / Math.max(1, sc)) * Math.PI * 1.1;
-              nodes.push({ id: sid, u: node(sid), group: "student", r: 5,
-                x: tx + Math.cos(sa) * stdLen, y: ty + Math.sin(sa) * stdLen });
-              links.push({ source: tid, target: sid });
-            }
+            // /mvp: the school graph shows the head teacher + teachers only —
+            // students are deliberately not rendered (drill a teacher instead).
           }
           const total = nodes.length;
           [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
@@ -4094,6 +4308,7 @@
 
         // ---- report (built generically from the current level's children) ----
         const [mvpMetric, setMvpMetric] = useState("g3");   // /mvp: shared metric tab (NIPUN g2 / g3 / MPL-B)
+        const [mvpTeacher, setMvpTeacher] = useState(null); // /mvp: teacher whose dashboard table is open
         const [mvpRange, setMvpRange] = useState("all");    // /mvp: trend-graph time window
         const report = useMemo(() => (usesReport && entities && entities.length ? buildBlockReport(entities, mvpMetric) : null), [usesReport, entities, mvpMetric]);
         const nipById = useMemo(() => { const m = new Map(); if (report) for (const it of report.items) m.set(it.id, it); return m; }, [report]);
@@ -4798,6 +5013,8 @@
                   </div>
                 </header>
                 <div id="rep-top" />
+                {/* shareable link — directly under the Lifteracy nav header */}
+                <MvpShareBar />
                 {/* large location title */}
                 <div className="mx-auto max-w-6xl px-6 pt-8">
                   <h1 className="text-center text-3xl font-extrabold tracking-tight text-zinc-900 sm:text-4xl">{[country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name].filter(Boolean).map((n) => t(n)).join("  -  ")}</h1>
@@ -4982,7 +5199,7 @@
                               <div style={{ width: W, opacity: shown ? 1 : 0, transform: shown ? "scale(1)" : "scale(.7)", transformOrigin: "center top", transition: "opacity .4s ease, transform .4s ease" }} className="flex flex-col items-center"
                                 onMouseEnter={() => { if (shown) showHover({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
                                 onMouseLeave={clearHover}
-                                onClick={(e) => { e.stopPropagation(); if (shown) pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}>
+                                onClick={(e) => { e.stopPropagation(); if (!shown) return; if (n.group === "teacher") { setMvpTeacher(n.u); return; } pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}>
                                 <img src={n.u.face} alt="" loading="lazy" className="relative rounded-full object-cover brightness-110"
                                   style={{ width: faceR * 2, height: faceR * 2, zIndex: 2, boxShadow: "0 0 0 " + ring + "px " + col, outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: pe }} />
                                 {/* picture circle overlaps the label box — pull the box up under the face */}
@@ -5287,6 +5504,8 @@
             )}
             {/* Fund / Donate modal — shared by the map's "Fund this location" and the donor's Donate CTA */}
             {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
+            {/* /mvp: teacher dashboard table (pp-dashboard /user/:id copy, dummy data) */}
+            {mvpTeacher && <MvpTeacherModal u={mvpTeacher} onClose={() => setMvpTeacher(null)} />}
           </div>
         );
       }
@@ -5301,27 +5520,8 @@
     function Root() {
       // /mvp: Minister of Education only — no role dropdown.
       const role = "minister";
-      const SHARE_URL = "www.lifteracy.ai/123456";        // dummy placeholder link
-      const [copied, setCopied] = useState(false);
-      const copyLink = () => {
-        const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1600); };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(SHARE_URL).then(done, done);
-        else done();
-      };
       return (
         <div className="flex h-full flex-col">
-          <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
-            <span className="text-xs font-semibold text-white">Lifteracy · Educator Network</span>
-          </div>
-          {/* shareable link — under the header bar; URL at ~5× body size */}
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-zinc-200 bg-white px-4 py-3">
-            <span className="text-base font-medium text-zinc-500">Shareable link:</span>
-            <span className="select-all font-mono text-6xl font-extrabold tracking-tight text-blue-700">{SHARE_URL}</span>
-            <button onClick={copyLink}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
           <div className="relative min-h-0 flex-1">
             <WorldMapApp role={role} setRole={() => {}} />
           </div>
