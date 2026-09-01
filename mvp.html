@@ -4389,12 +4389,13 @@
             doc.text("Oral-literacy NIPUN proxy · illustrative demo data", PW / 2, y, { align: "center" });
             // headline metrics
             y += 20;
+            // /mvp: two headline KPIs (the avg-gain middle card is dropped,
+            // matching the on-page RepKpis).
             const kpis = [
               [report.blockAvgLatest + "%", "average oral-literacy NIPUN proxy", [217, 119, 6]],
-              [(report.avgGain >= 0 ? "+" : "") + report.avgGain.toFixed(1) + " pts", "avg oral literacy NIPUN proxy gain last week", [8, 145, 178]],
               [report.usingN + " of " + report.totalN, nounP + " using Lifteracy", [22, 163, 74]],
             ];
-            const kw = (CW - 20) / 3, kh = 58;
+            const kw = (CW - 10) / 2, kh = 58;
             kpis.forEach((k, i) => {
               const x = M + i * (kw + 10);
               doc.setDrawColor(228); doc.setFillColor(250, 250, 250); doc.roundedRect(x, y, kw, kh, 6, 6, "FD");
