@@ -3287,7 +3287,6 @@
       function RepKpis({ report, nounP = "schools", t = (s) => s, metricLabel = null }) {
         if (!report) return null;
         const mName = metricLabel || t("oral-literacy NIPUN proxy");
-        const gain = (report.avgGain >= 0 ? "+" : "") + report.avgGain.toFixed(1) + " " + t("pts");
         const card = (big, label, color) => (
           <div className="flex-1 rounded-xl bg-zinc-50 px-4 py-6 text-center">
             <div className="text-5xl font-extrabold tracking-tight" style={{ color }}>{big}</div>
@@ -3297,7 +3296,6 @@
         return (
           <div className="flex gap-3">
             {card(report.blockAvgLatest + "%", t("average") + " " + mName, nipColor(report.blockAvgLatest))}
-            {card(gain, t("avg") + " " + mName + " " + t("gain last week"), "#0891b2")}
             {card(report.usingN + " of " + report.totalN, t(nounP) + " " + t("using Lifteracy"), "#16a34a")}
           </div>
         );
@@ -5017,7 +5015,7 @@
                 <MvpShareBar />
                 {/* large location title */}
                 <div className="mx-auto max-w-6xl px-6 pt-8">
-                  <h1 className="text-center text-3xl font-extrabold tracking-tight text-zinc-900 sm:text-4xl">{[country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name].filter(Boolean).map((n) => t(n)).join("  -  ")}</h1>
+                  <h1 className="text-center text-3xl font-extrabold tracking-tight text-zinc-900 sm:text-4xl">{[country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name, level === "school" && selHt && schools ? (schools.find((sch) => sch.u.id === selHt) || {}).name : null].filter(Boolean).map((n) => t(n)).join("  -  ")}</h1>
                 </div>
                 {/* headline stats — narrower, with the shared metric tab */}
                 <div className="mx-auto mt-6 max-w-5xl px-6">
