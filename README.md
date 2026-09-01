@@ -12,6 +12,11 @@ GeoJSON, the bundled UDISE schools, and the face images in `faces/`.
   (demo only).
 - `schools/*.json`, `india-*.geojson` — bundled India school points + boundaries.
 
+- `mvp.html` — **/mvp**: Minister-of-Education-only variant (no role dropdown) with a
+  shareable-link bar, a NIPUN g2 / g3 (default) / MPL-B metric tab that re-seeds every
+  number on the page, and the Messaging section removed. Served at `/mvp` by any
+  static host with clean URLs (e.g. `npx serve`).
+
 ## Run locally
 Open `index.html` directly, or serve the folder:
 ```
