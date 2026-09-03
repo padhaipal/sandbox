@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lifteracy · MVP — Minister of Education</title>
+  <title>Lifteracy · MVP — DGSE, Uttar Pradesh</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> <!-- card icons -->
@@ -5517,8 +5517,9 @@
     // ## The two graphs above stay fully independent (separate IIFEs).    ##
     // #####################################################################
     function Root() {
-      // /mvp: Minister of Education only — no role dropdown.
-      const role = "minister";
+      // /mvp: DGSE (Uttar Pradesh) only — no role dropdown. The role's nav
+      // config auto-anchors the map on India → Uttar Pradesh at sign-in.
+      const role = "dgse";
       return (
         <div className="flex h-full flex-col">
           <div className="relative min-h-0 flex-1">
