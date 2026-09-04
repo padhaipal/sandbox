@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lifteracy · MVP — DGSE, Uttar Pradesh</title>
+  <title>Lifteracy · MVP2 — DGSE, Uttar Pradesh</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> <!-- card icons -->
@@ -205,8 +205,8 @@
       // UIs never overlap. uiR ≥ half the card width (CARD_W/2) so neighbours can't touch.
       const SCHOOL_CARD_W = 150;
       const SIDEBAR_W = 360;   // left accordion sidebar width (keep in sync with the aside's w-[360px])
-      const schoolFaceR = (g) => (g === "ht" ? 60 : g === "teacher" ? 30 : 10);
-      const schoolUiR = (g) => (g === "ht" ? 125 : g === "teacher" ? 75 : 40);
+      const schoolFaceR = (g) => (g === "ht" ? 60 : g === "teacher" ? 30 : 26);
+      const schoolUiR = (g) => (g === "ht" ? 125 : g === "teacher" ? 75 : 65);
       // hard minimum link lengths: a teacher never sits closer than this to its head teacher,
       // a student never closer than this to its teacher (floors the score-driven distance below).
       // /mvp: students are hidden in the school graph, so the HT→teacher
@@ -3079,13 +3079,14 @@
       const MVP_GRAPHEMES = ["क", "म", "ल", "घ", "र", "न", "प", "त"];
       const MVP_STATES = ["word", "letter", "image", "sentence", "complete"];
       function mvpTeacherRows(u) {
-        const N = 8;
+        const N = 30;
         const rows = [];
         for (let i = 0; i < N; i++) {
           const h = hashStr("mvprow:" + u.id + ":" + i);
           const word = MVP_WORDS[h % MVP_WORDS.length];
           const sentence = word.indexOf(" ") >= 0;
-          const created = new Date(Date.UTC(2026, 7, 20 + i, 4, (h % 50) + 5, h % 60));
+          // newest-first: row i happened ~2i days ago at a plausible evening hour
+          const created = new Date(Date.now() - (i * 2 + (h % 2)) * 86400000 - ((h % 5) + 2) * 3600000 - (h % 60) * 60000);
           const correct = (h >>> 3) % 4 !== 0;                       // ~75% correct
           const hasAudio = (h >>> 5) % 5 !== 0;                      // ~80% have audio
           const level = sentence ? 8 + (h % 3) : 2 + (h % 5);
@@ -3113,135 +3114,124 @@
         }
         return rows;
       }
-      function MvpTeacherModal({ u, onClose }) {
+      // /mvp2: deterministic weekly score series for one student × metric.
+      function mvpStudentSeries(u, metric) {
+        const bias = (MVP_METRIC_BY[metric] || MVP_METRIC_BY.g3).bias;
+        const h = hashStr("stu:" + metric + ":" + u.id);
+        const start = clamp(20 + bias + (h % 25), 5, 70);
+        const target = clamp(start + 18 + ((h >>> 5) % 30), start + 8, 97);
+        const W = NIP_WEEKS.length;
+        return NIP_WEEKS.map((_, w) => {
+          const prog = w / Math.max(1, W - 1);
+          const noise = (hashStr(u.id + metric + ":w" + w) % 9) - 4;
+          return clamp(Math.round(start + (target - start) * prog + noise), 3, 99);
+        });
+      }
+      function MvpStudentTrend({ u, metric, range }) {
+        const weeks = (MVP_RANGES.find((r) => r.key === range) || MVP_RANGES[4]).weeks;
+        const all = mvpStudentSeries(u, metric);
+        const off = NIP_WEEKS.length - Math.max(2, Math.min(weeks, NIP_WEEKS.length));
+        const series = all.slice(off), labels = NIP_WEEKS.slice(off);
+        const W = 860, H = 220, mL = 40, mR = 12, mT = 14, mB = 30, iw = W - mL - mR, ih = H - mT - mB;
+        const n = series.length;
+        const x = (i) => mL + (n <= 1 ? 0 : (i / (n - 1)) * iw), y = (v) => mT + ih - (v / 100) * ih;
+        const d = series.map((v, i) => (i === 0 ? "M" : "L") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+        return (
+          <svg viewBox={"0 0 " + W + " " + H} className="w-full" style={{ maxHeight: 240 }}>
+            {[0, 20, 40, 60, 80, 100].map((g) => (
+              <g key={g}><line x1={mL} x2={W - mR} y1={y(g)} y2={y(g)} stroke="#f1f5f9" /><text x={mL - 5} y={y(g) + 3} textAnchor="end" fontSize="9" fill="#94a3b8">{g}</text></g>
+            ))}
+            <path d={d} fill="none" stroke="#2563eb" strokeWidth="2.6" />
+            {series.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="#2563eb" />)}
+            <text x={x(n - 1) - 4} y={y(series[n - 1]) - 8} textAnchor="end" fontSize="11" fontWeight="800" fill="#2563eb">{series[n - 1]}%</text>
+            {labels.map((l, i) => ((n <= 6 || i % 2 === 0) ? <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="8" fill="#94a3b8">{l}</text> : null))}
+          </svg>
+        );
+      }
+      // /mvp2: one table row rendered as a friendly sentence.
+      const MVP_MAX_ANSWER_CHARS = 14;
+      function mvpWhen(iso) {
+        const dt = new Date(iso);
+        const time = dt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).replace(" ", "");
+        const day = dt.toLocaleDateString("en-IN", { weekday: "long", timeZone: "Asia/Kolkata" });
+        const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
+        const week = days < 7 ? "this" : days < 14 ? "last" : Math.floor(days / 7) + " weeks ago —";
+        return { time, day, week: week === "this" || week === "last" ? week + " week" : week.replace(" —", "") };
+      }
+      // /mvp2: 7-day practice mini-chart — rounded green bars above a dashed
+      // baseline (minutes practised), small pink stubs below for missed days.
+      function MvpStudentActivity({ u }) {
+        const W = 190, H = 64, base = 44, bw = 18, gap = 8;
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const h = hashStr("act:" + u.id + ":" + i);
+          const practised = h % 5 !== 0;                 // ~80% of days practised
+          return { practised, v: practised ? 8 + (h % 30) : 0 };
+        });
+        const x = (i) => 4 + i * (bw + gap);
+        return (
+          <svg viewBox={"0 0 " + W + " " + H} className="h-14 w-auto" aria-label="practice activity, last 7 days">
+            {days.map((d, i) => d.practised ? (
+              <rect key={i} x={x(i)} y={base - 6 - d.v} width={bw} height={d.v + 12} rx={9} fill="#34d399" />
+            ) : (
+              <rect key={i} x={x(i)} y={base + 2} width={bw} height={7} rx={3.5} fill="#fda4af" />
+            ))}
+            <line x1={0} x2={W} y1={base} y2={base} stroke="#a1a1aa" strokeWidth={1.5} strokeDasharray="5 4" />
+          </svg>
+        );
+      }
+
+      function MvpTeacherModal({ u, onClose, role = "Teacher" }) {
+        const [mMetric, setMMetric] = useState("g3");   // chart defaults: NIPUN grade 3…
+        const [mRange, setMRange] = useState("all");    // …over all time
         const rows = useMemo(() => mvpTeacherRows(u), [u]);
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-900/60 p-4" onClick={onClose}>
             <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-zinc-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <img src={u.face} alt="" className="h-10 w-10 rounded-full object-cover" />
-                  <div>
-                    <div className="text-sm font-semibold text-zinc-900">{u.name} <span className="font-normal text-zinc-400">· Teacher</span></div>
-                    <div className="text-[11px] text-zinc-400">dashboard view · /user/{u.id} · dummy data</div>
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* /mvp2: no photo and a censored name — student privacy */}
+                  <div className="text-2xl font-bold text-zinc-900">
+                    {role === "Student" ? u.name.split(" ").map((wd) => wd[0] + "•••").join(" ") : u.name}
+                    {" "}<span className="font-normal text-zinc-400">· {role}</span>
                   </div>
+                  <MvpStudentActivity u={u} />
                 </div>
                 <button onClick={onClose} className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-semibold text-zinc-600 hover:bg-zinc-100">✕ Close</button>
               </div>
               <div className="bg-white">
-              {/* ↓ copied from pp-dashboard media-table.tsx ↓ */}
-              <div className="w-full overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-sm text-left">
-                  <thead>
-                    <tr className="border-b border-zinc-200 text-zinc-500 text-xs uppercase tracking-wide">
-                      <th className="py-3 px-4 font-medium">Timestamp</th>
-                      <th className="py-3 px-4 font-medium">Starting State</th>
-                      <th className="py-3 px-4 font-medium">Student Audio</th>
-                      <th className="py-3 px-4 font-medium">Transcript</th>
-                      <th className="py-3 px-4 font-medium">Correct Answer</th>
-                      <th className="py-3 px-4 font-medium">Answer Status</th>
-                      <th className="py-3 px-4 font-medium">Score Change</th>
-                      <th className="py-3 px-4 font-medium">Final State</th>
-                      <th className="py-3 px-4 font-medium">Level</th>
-                      <th className="py-3 px-4 font-medium">WPM</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, i) => (
-                      <tr key={row.id} className="border-b border-zinc-100 hover:bg-zinc-50 align-top">
-                        <td className="py-2.5 px-4 text-zinc-600 whitespace-nowrap">{mvpFormatIST(row.created_at)}</td>
-                        <td className="py-2.5 px-4">
-                          {row.starting_state ? (
-                            <span className="text-zinc-700 text-xs">{row.starting_state}</span>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">--</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.has_audio ? (
-                            <button title="Demo — audio playback needs the backend" className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 cursor-default">▶ 0:0{4 + (i % 6)}</button>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">No audio</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4 relative">
-                          <div className="flex flex-col gap-1">
-                            {row.transcripts.map((tr, j) => {
-                              const latency = tr.created_at ? mvpFormatLatency(row.created_at, tr.created_at) : null;
-                              return (
-                                <div key={j} className="text-sm flex items-baseline gap-1">
-                                  <span className="text-xs font-medium text-zinc-400 mr-1">{tr.source}:</span>
-                                  <span className="text-zinc-700">{tr.text || <em className="text-zinc-400">empty</em>}</span>
-                                  {latency && (
-                                    <span className="text-[10px] text-zinc-300 ml-1" title="Transcription latency">{latency}</span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {row.transcripts.length === 0 && (
-                              <span className="text-zinc-400 italic text-xs">No transcripts</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.answer ? (
-                            <span className="text-zinc-700">{row.answer}</span>
-                          ) : (
-                            <span className="text-zinc-400 italic">--</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.answer_correct === true && (<span className="text-emerald-600 font-medium">Correct</span>)}
-                          {row.answer_correct === false && (<span className="text-red-500 font-medium">Incorrect</span>)}
-                          {row.answer_correct === null && (<span className="text-zinc-400 italic">--</span>)}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.score_changes && row.score_changes.length > 0 ? (
-                            <div className="flex flex-col gap-0.5">
-                              {row.score_changes.map((sc, j) => {
-                                const delta = sc.prev_score !== null ? sc.score - sc.prev_score : 0;
-                                const colorClass = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-500" : "text-zinc-600";
-                                return (
-                                  <div key={j} className="text-sm flex items-center gap-1">
-                                    <span className="text-zinc-700 font-medium">{sc.grapheme}</span>
-                                    <span className={"text-xs opacity-60 " + colorClass}>{sc.prev_score !== null ? sc.prev_score.toFixed(1) : "—"}</span>
-                                    <span className={"text-[10px] " + colorClass}>→</span>
-                                    <span className={"text-xs font-medium " + colorClass}>{sc.score.toFixed(1)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">--</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.final_state ? (
-                            <span className="text-zinc-700 text-xs">{row.final_state}</span>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">--</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.level !== null ? (
-                            <span className={"text-xs font-medium " + MVP_LEVEL_DIRECTION_CLASS[mvpLevelDirection(row.level, (rows[i + 1] && rows[i + 1].level) || null)]}>{row.level}</span>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">--</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {row.wpm !== null ? (
-                            <span className="text-zinc-700 text-xs tabular-nums">{row.wpm}</span>
-                          ) : (
-                            <span className="text-zinc-400 italic text-xs">--</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* /mvp2: score-over-time chart with its own metric + range toggles */}
+              <div className="border-b border-zinc-100 px-6 py-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <MvpMetricToggle metric={mMetric} setMetric={setMMetric} />
+                    <MvpRangeBar range={mRange} setRange={setMRange} onCsv={() => {}} />
+                  </div>
+                </div>
+                <MvpStudentTrend u={u} metric={mMetric} range={mRange} />
               </div>
-              {/* ↑ copied from pp-dashboard media-table.tsx ↑ */}
+              {/* /mvp2: the same per-interaction data, one friendly sentence per row */}
+              {/* /mvp2: fixed-height scroll pane — the chart above stays visible */}
+              <div className="max-h-80 divide-y divide-zinc-100 overflow-y-auto px-6">
+                {rows.map((row) => {
+                  const w = mvpWhen(row.created_at);
+                  const ans = row.answer ? (row.answer.length > MVP_MAX_ANSWER_CHARS ? row.answer.slice(0, MVP_MAX_ANSWER_CHARS) + "…" : row.answer) : "—";
+                  return (
+                    <div key={row.id} className="py-3 text-sm leading-relaxed text-zinc-700">
+                      At <span className="font-semibold">{w.time}</span> on <span className="font-semibold">{w.day}</span> {w.week} the student said{" "}
+                      {row.has_audio ? (
+                        <button title="Demo — audio playback needs the backend" className="mx-0.5 inline-flex items-center rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-500 cursor-default align-middle">▶ audio</button>
+                      ) : (
+                        <span className="italic text-zinc-400">nothing (no recording)</span>
+                      )}{" "}
+                      and the correct answer was{" "}
+                      <span className="font-semibold text-zinc-900">{ans}</span> and so was marked as{" "}
+                      {row.answer_correct === true && <span className="font-semibold text-emerald-600">correct</span>}
+                      {row.answer_correct === false && <span className="font-semibold text-red-500">incorrect</span>}
+                      {row.answer_correct === null && <span className="italic text-zinc-400">not assessed</span>}.
+                    </div>
+                  );
+                })}
+              </div>
               </div>
             </div>
           </div>
@@ -3664,6 +3654,8 @@
         const [a2Idx, setA2Idx] = useState(null);
         const [a3Idx, setA3Idx] = useState(null);
         const [selHt, setSelHt] = useState(null);
+        const [mvpTeacherSel, setMvpTeacherSel] = useState(null); // /mvp2: teacher whose class graph is shown (declared with selHt — the school memo below depends on it)
+        useEffect(() => { setMvpTeacherSel(null); }, [selHt, level]);
         const [reveal, setReveal] = useState(2);            // school graph staged reveal: 0=HT, 1=+teachers, 2=+students
         const [repHover, setRepHover] = useState(null);     // block-report: hovered school id (links charts ↔ map dots)
         const [repSel, setRepSel] = useState(null);         // block-report: single-click selected school id (School Detail + send list)
@@ -4031,20 +4023,35 @@
           // representative link lengths (slider floor + half the score range) — used to seed the
           // initial layout and to scale the repulsion so the graph fans out at any slider value.
           const htLen = minHtTchr + 35, stdLen = minTchrStd + 27;
-          // pin the head teacher at the centre so the teachers fan symmetrically around it
-          // (otherwise the heavy student mass drags the centroid and pushes the HT to the edge)
-          const nodes = [{ id: selHt, u: htU, group: "ht", r: 15, x: 0, y: 0, fx: 0, fy: 0 }];
+          // pin the centre node: normally the head teacher with teachers around;
+          // /mvp2 — when a teacher is drilled, THAT teacher sits centred (big)
+          // with their students fanned around instead.
+          const nodes = [];
           const links = [];
-          const teachers = baseChildCount(selHt);
-          for (let t = 0; t < teachers; t++) {
-            const tid = selHt + "." + t;
-            // seed each teacher evenly around the head teacher on a ring of radius htLen
-            const ta = (2 * Math.PI * t) / Math.max(1, teachers);
-            const tx = Math.cos(ta) * htLen, ty = Math.sin(ta) * htLen;
-            nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9, x: tx, y: ty });
-            links.push({ source: selHt, target: tid });
-            // /mvp: the school graph shows the head teacher + teachers only —
-            // students are deliberately not rendered (drill a teacher instead).
+          let teachers = 0;
+          if (mvpTeacherSel) {
+            const tu = node(mvpTeacherSel);
+            nodes.push({ id: mvpTeacherSel, u: tu, group: "teacher", center: true, r: 15, x: 0, y: 0, fx: 0, fy: 0 });
+            const students = baseChildCount(mvpTeacherSel);
+            for (let st = 0; st < students; st++) {
+              const sid = mvpTeacherSel + "." + st;
+              const sa = (2 * Math.PI * st) / Math.max(1, students);
+              nodes.push({ id: sid, u: node(sid), group: "student", r: 9,
+                x: Math.cos(sa) * stdLen, y: Math.sin(sa) * stdLen });
+              links.push({ source: mvpTeacherSel, target: sid });
+            }
+          } else {
+            nodes.push({ id: selHt, u: htU, group: "ht", r: 15, x: 0, y: 0, fx: 0, fy: 0 });
+            teachers = baseChildCount(selHt);
+            for (let t = 0; t < teachers; t++) {
+              const tid = selHt + "." + t;
+              // seed each teacher evenly around the head teacher on a ring of radius htLen
+              const ta = (2 * Math.PI * t) / Math.max(1, teachers);
+              const tx = Math.cos(ta) * htLen, ty = Math.sin(ta) * htLen;
+              nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9, x: tx, y: ty });
+              links.push({ source: selHt, target: tid });
+              // students are not rendered at the school level — drill a teacher.
+            }
           }
           const total = nodes.length;
           [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
@@ -4096,7 +4103,7 @@
             }).strength(0.6))
             .force("charge", groupedCharge)
             // collide radius == rendered card footprint → node UI elements can't overlap
-            .force("collide", d3.forceCollide().radius((d) => schoolUiR(d.group)).strength(1).iterations(4))
+            .force("collide", d3.forceCollide().radius((d) => (d.center ? schoolUiR("ht") : schoolUiR(d.group))).strength(1).iterations(4))
             // centering pulls only teachers toward the middle; students must NOT feel it, otherwise
             // every cluster's students drift toward the centre (looks like cross-class attraction).
             .force("x", d3.forceX(0).strength((d) => d.group === "student" ? 0 : 0.03))
@@ -4108,7 +4115,7 @@
           // pad by the card footprint so edge cards aren't clipped (face above, label box below)
           return { nodes, links, htU, bbox: [minx - 46, miny - 32, maxx + 46, maxy + 60],
             counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
-        }, [selHt, minHtTchr, minTchrStd]);
+        }, [selHt, minHtTchr, minTchrStd, mvpTeacherSel]);
 
         // insetL = left-edge padding to keep the framed content out from under the absolutely-
         // positioned 360px sidebar (centres within the visible area to the right of it). Defaults
@@ -4154,7 +4161,7 @@
 
         const popUp = useCallback(() => {
           if (LEVEL_ORDER.indexOf(level) <= LEVEL_ORDER.indexOf((ROLE_BY[role] || ROLE_BY.transparency).home)) return; // capped at the role's home level
-          if (level === "school") goLevel("schools");
+          if (level === "school") { if (mvpTeacherSel) { setMvpTeacherSel(null); return; } goLevel("schools"); }
           else if (level === "schools") goLevel("adm3");
           else if (level === "adm3") goLevel("adm2");
           else if (level === "adm2") goLevel("adm1");
@@ -4188,7 +4195,17 @@
           if (!selHt) { if (schools && schools.length) { moved.current = false; drillSchool(schools[Math.min(nav.school, schools.length - 1)]); } }
         }, [role, busy, worldPaths, country, adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, schools, selHt]);
 
-        useEffect(() => { if (level === "school" && school) setTf(frame(school.bbox, 0.82, 0)); }, [school, level, frame]);
+        useEffect(() => {
+          if (level !== "school" || !school) return;
+          // /mvp2: with only two teachers the graph is nearly a line, so the
+          // raw bbox over-zooms. Enforce a minimum framed span (no-op for
+          // graphs that are already larger, i.e. 3+ teachers).
+          const [minx, miny, maxx, maxy] = school.bbox;
+          const MINW = 720, MINH = 450;
+          const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
+          const w = Math.max(maxx - minx, MINW), h = Math.max(maxy - miny, MINH);
+          setTf(frame([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], 0.82, 0));
+        }, [school, level, frame]);
 
         // Frame the adm2/adm3 maps to the union bbox of the children actually rendered (districts /
         // blocks) rather than the parent polygon. Block/district geometry can poke past the parent
@@ -4214,7 +4231,7 @@
           const t1 = setTimeout(() => setReveal(1), 400);
           const t2 = setTimeout(() => setReveal(2), 850);
           return () => { clearTimeout(t1); clearTimeout(t2); };
-        }, [selHt, level]);
+        }, [selHt, level, mvpTeacherSel]);
 
         // which graph node is the signed-in user (HT role → the head teacher; Teacher role → first teacher)
         const selfId = useMemo(() => {
@@ -4419,7 +4436,7 @@
 
         // ---- report (built generically from the current level's children) ----
         const [mvpMetric, setMvpMetric] = useState("g3");   // /mvp: shared metric tab (NIPUN g2 / g3 / MPL-B)
-        const [mvpTeacher, setMvpTeacher] = useState(null); // /mvp: teacher whose dashboard table is open
+        const [mvpTeacher, setMvpTeacher] = useState(null); // /mvp2: STUDENT whose dashboard table is open
         const [mvpRange, setMvpRange] = useState("all");    // /mvp: trend-graph time window
         const report = useMemo(() => (usesReport && entities && entities.length ? buildBlockReport(entities, mvpMetric) : null), [usesReport, entities, mvpMetric]);
         const nipById = useMemo(() => { const m = new Map(); if (report) for (const it of report.items) m.set(it.id, it); return m; }, [report]);
@@ -4588,7 +4605,8 @@
             }
             return `≈${schools ? schools.length : 0} schools · illustrative — no OpenStreetMap school data for this block · click a school`;
           }
-          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · ${school ? school.counts.students : 0} students · click empty space to go up`;
+          if (level === "school" && mvpTeacherSel && school) return `${node(mvpTeacherSel).name} (Teacher) · ${school.counts.students} students · click a student for their dashboard · click empty space to go back`;
+          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · double-click a teacher for their class · click empty space to go up`;
           return "";
         })();
 
@@ -5328,10 +5346,10 @@
                           const on = active && active.u.id === n.id;
                           const shown = reveal >= groupStage[n.group];     // staged reveal: HT → teachers → students
                           const pe = shown ? "auto" : "none";
-                          const faceR = schoolFaceR(n.group);
+                          const faceR = n.center ? schoolFaceR("ht") : schoolFaceR(n.group);
                           const ring = n.group === "ht" ? 4 : 3;          // slightly thicker picture border
                           // /mvp: principal card + text at 1.5× the teacher size
-                          const isHt = n.group === "ht";
+                          const isHt = n.group === "ht" || n.center;   // centred teacher renders at HT scale
                           const W = isHt ? SCHOOL_CARD_W * 1.5 : SCHOOL_CARD_W, lbl = n.group === "ht" ? t("Principal") : n.group === "teacher" ? t("Teacher") : t("Student");
                           const nm = n.u.name.length > 16 ? n.u.name.slice(0, 15) + "…" : n.u.name;
                           const title = n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student";
@@ -5343,7 +5361,8 @@
                               <div style={{ width: W, opacity: shown ? 1 : 0, transform: shown ? "scale(1)" : "scale(.7)", transformOrigin: "center top", transition: "opacity .4s ease, transform .4s ease" }} className="flex flex-col items-center"
                                 onMouseEnter={() => { if (shown) showHover({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
                                 onMouseLeave={clearHover}
-                                onClick={(e) => { e.stopPropagation(); if (!shown) return; if (n.group === "teacher") { setMvpTeacher(n.u); return; } pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}>
+                                onClick={(e) => { e.stopPropagation(); if (!shown) return; if (n.group === "student") { setMvpTeacher(n.u); return; } pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
+                                onDoubleClick={(e) => { e.stopPropagation(); if (shown && n.group === "teacher" && !n.center) setMvpTeacherSel(n.id); }}>
                                 <img src={n.u.face} alt="" loading="lazy" className="relative rounded-full object-cover brightness-110"
                                   style={{ width: faceR * 2, height: faceR * 2, zIndex: 2, boxShadow: "0 0 0 " + ring + "px " + col, outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: pe }} />
                                 {/* picture circle overlaps the label box — pull the box up under the face */}
@@ -5640,7 +5659,7 @@
             {/* Fund / Donate modal — shared by the map's "Fund this location" and the donor's Donate CTA */}
             {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
             {/* /mvp: teacher dashboard table (pp-dashboard /user/:id copy, dummy data) */}
-            {mvpTeacher && <MvpTeacherModal u={mvpTeacher} onClose={() => setMvpTeacher(null)} />}
+            {mvpTeacher && <MvpTeacherModal u={mvpTeacher} role="Student" onClose={() => setMvpTeacher(null)} />}
           </div>
         );
       }

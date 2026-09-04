@@ -17,6 +17,10 @@ GeoJSON, the bundled UDISE schools, and the face images in `faces/`.
   number on the page, and the Messaging section removed. Served at `/mvp` by any
   static host with clean URLs (e.g. `npx serve`).
 
+- `mvp2.html` — **/mvp2**: active iteration branch of the MVP (`/mvp` is the frozen
+  save point). Adds tile street underlay, block-name labels, teacher→class force
+  graph, student dashboard modal, and assorted polish.
+
 ## Run locally
 Open `index.html` directly, or serve the folder:
 ```
