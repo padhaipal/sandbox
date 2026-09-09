@@ -2986,6 +2986,22 @@
         { key: "mplb", label: "MPL-B proxy",         short: "MPL-B proxy",    bias: -9 },
       ];
       const MVP_METRIC_BY = {}; MVP_METRICS.forEach((m) => { MVP_METRIC_BY[m.key] = m; });
+      // /mvp2: deterministic per-metric score + weekly delta for one person —
+      // re-seeds by metric so switching test tabs reorders/recolours the cards.
+      const mvpScore = (u, metric) => clamp(Math.round(u.score + (MVP_METRIC_BY[metric] || MVP_METRIC_BY.g3).bias + ((hashStr("ms:" + metric + ":" + u.id) % 11) - 5)), 5, 99);
+      const mvpDelta = (u, metric) => ((hashStr("md:" + metric + ":" + u.id) % 121) - 55) / 10;
+      // /mvp2: viewport hook — charts adapt below the sm (640px) breakpoint
+      function useIsMobile(bp = 640) {
+        const [m, setM] = useState(() => window.innerWidth < bp);
+        useEffect(() => {
+          const q = window.matchMedia("(max-width: " + (bp - 0.02) + "px)");
+          const f = () => setM(q.matches);
+          f();
+          q.addEventListener ? q.addEventListener("change", f) : q.addListener(f);
+          return () => { q.removeEventListener ? q.removeEventListener("change", f) : q.removeListener(f); };
+        }, [bp]);
+        return m;
+      }
       // /mvp: stock-style zig-zag trend arrow — up (green) / down (red) /
       // flat (grey) when the weekly change is close to zero (|Δ| < 0.5).
       function MvpTrend({ delta }) {
@@ -3257,8 +3273,9 @@
                 </button>
               ))}
             </div>
+            {/* /mvp2: CSV export is desktop-only — hidden below the sm breakpoint */}
             <button onClick={onCsv}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50">
+              className="hidden rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50 sm:block">
               Download CSV
             </button>
           </div>
@@ -3324,8 +3341,10 @@
       }
 
       function RepTrend({ report, hoverId, setHoverId, onSelect, onPick, selId, mineId, t = (s) => s, windowWeeks = NIP_WEEKS.length }) {
+        const mobile = useIsMobile();
         if (!report) return null;
-        const W = 900, H = 280, mL = 46, mR = 12, mT = 12, mB = 34, iw = W - mL - mR, ih = H - mT - mB;
+        // /mvp2: phones get a narrower viewBox + bigger type so the chart stays legible
+        const W = mobile ? 440 : 900, H = mobile ? 300 : 280, mL = mobile ? 36 : 46, mR = 12, mT = 12, mB = mobile ? 40 : 34, iw = W - mL - mR, ih = H - mT - mB;
         // /mvp time-range: show only the newest `windowWeeks` buckets.
         const S = Math.max(2, Math.min(windowWeeks, NIP_WEEKS.length));
         const off = NIP_WEEKS.length - S;
@@ -3338,20 +3357,20 @@
         return (
           <svg data-rep-chart="trend" viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 300 }}>
             {[0, 20, 40, 60, 80, 100].map((g) => (
-              <g key={g}><line x1={mL} x2={W - mR} y1={y(g)} y2={y(g)} stroke="#f1f5f9" /><text x={mL - 5} y={y(g) + 3} textAnchor="end" fontSize="9" fill="#94a3b8">{g}</text></g>
+              <g key={g}><line x1={mL} x2={W - mR} y1={y(g)} y2={y(g)} stroke="#f1f5f9" /><text x={mL - 5} y={y(g) + 3} textAnchor="end" fontSize={mobile ? 13 : 9} fill="#94a3b8">{g}</text></g>
             ))}
-            <text transform={`translate(12 ${mT + ih / 2}) rotate(-90)`} textAnchor="middle" fontSize="8.5" fill="#64748b">{t("Oral Literacy NIPUN Proxy percentage pass rate")}</text>
+            <text transform={`translate(12 ${mT + ih / 2}) rotate(-90)`} textAnchor="middle" fontSize={mobile ? 11 : 8.5} fill="#64748b">{t("Oral Literacy NIPUN Proxy percentage pass rate")}</text>
             {onb.map((it) => {
               const hot = hoverId === it.id || selId === it.id, mine = it.id === mineId;
               return (
                 <path key={it.id} d={line(win(it.series))} fill="none" onMouseEnter={() => setHoverId(it.id)} onMouseLeave={() => setHoverId(null)}
                   onClick={() => onSelect && onSelect(it)} onDoubleClick={() => onPick && onPick(it)}
-                  stroke={mine || selId === it.id || hot ? "#2563eb" : "#94a3b8"} strokeWidth={mine ? 2.6 : hot ? 2.4 : 1.4}
+                  stroke={mine || selId === it.id || hot ? "#2563eb" : "#94a3b8"} strokeWidth={(mine ? 2.6 : hot ? 2.4 : 1.4) * (mobile ? 1.5 : 1)}
                   opacity={(hoverId || selId) && !hot && !mine ? 0.35 : 0.9} style={{ cursor: "pointer", filter: mine ? "drop-shadow(0 0 3px rgba(37,99,235,0.9))" : "none" }} />
               );
             })}
-            {report.topSchool && <path d={line(win(report.topSchool.series))} fill="none" stroke="#16a34a" strokeWidth="2.2" pointerEvents="none" />}
-            <path d={line(win(report.blockAvg))} fill="none" stroke="#1e3a5f" strokeWidth="2.8" pointerEvents="none" />
+            {report.topSchool && <path d={line(win(report.topSchool.series))} fill="none" stroke="#16a34a" strokeWidth={mobile ? 3.2 : 2.2} pointerEvents="none" />}
+            <path d={line(win(report.blockAvg))} fill="none" stroke="#1e3a5f" strokeWidth={mobile ? 3.8 : 2.8} pointerEvents="none" />
             {/* /mvp: label the average line at its end point */}
             {(() => {
               const avg = win(report.blockAvg);
@@ -3359,13 +3378,13 @@
               for (let i = avg.length - 1; i >= 0; i--) { if (avg[i] != null) { li = i; break; } }
               if (li < 0) return null;
               return (
-                <text x={x(li) - 4} y={y(avg[li]) - 7} textAnchor="end" fontSize="11" fontWeight="800" fill="#1e3a5f" pointerEvents="none">{t("Average")}</text>
+                <text x={x(li) - 4} y={y(avg[li]) - 7} textAnchor="end" fontSize={mobile ? 15 : 11} fontWeight="800" fill="#1e3a5f" pointerEvents="none">{t("Average")}</text>
               );
             })()}
             {/* 80% target — drawn on top so it's never hidden, and labelled */}
-            <line x1={mL} x2={W - mR} y1={y(80)} y2={y(80)} stroke="#ef4444" strokeWidth="1.3" strokeDasharray="5 3" pointerEvents="none" />
-            <text x={mL + 3} y={y(80) - 4} fontSize="9" fill="#ef4444" fontWeight="700" pointerEvents="none">{t("80% NIPUN target")}</text>
-            {LABELS.map((l, i) => ((n <= 6 || i % 2 === 0) ? <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="8" fill="#94a3b8">{l}</text> : null))}
+            <line x1={mL} x2={W - mR} y1={y(80)} y2={y(80)} stroke="#ef4444" strokeWidth={mobile ? 2 : 1.3} strokeDasharray="5 3" pointerEvents="none" />
+            <text x={mL + 3} y={y(80) - 4} fontSize={mobile ? 12 : 9} fill="#ef4444" fontWeight="700" pointerEvents="none">{t("80% NIPUN target")}</text>
+            {LABELS.map((l, i) => ((mobile ? i % 3 === 0 : (n <= 6 || i % 2 === 0)) ? <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize={mobile ? 11 : 8} fill="#94a3b8">{l}</text> : null))}
           </svg>
         );
       }
@@ -3408,8 +3427,10 @@
       }
 
       function RepImproved({ report, hoverId, setHoverId, onSelect, onPick, selId, mineId }) {
+        const mobile = useIsMobile();
         if (!report || !report.mostImproved.length) return null;
-        const arr = report.mostImproved, W = 900, rowH = 19, mT = 6, mL = 168, mR = 44, H = mT * 2 + arr.length * rowH;
+        // /mvp2: phones get a narrower viewBox + taller rows + bigger type
+        const arr = report.mostImproved, W = mobile ? 440 : 900, rowH = mobile ? 30 : 19, mT = 6, mL = mobile ? 130 : 168, mR = mobile ? 52 : 44, H = mT * 2 + arr.length * rowH;
         const max = Math.max(1, ...arr.map((i) => i.delta)), iw = W - mL - mR;
         return (
           <svg data-rep-chart="improved" viewBox={`0 0 ${W} ${H}`} className="w-full">
@@ -3419,9 +3440,9 @@
                 <g key={it.id} onMouseEnter={() => setHoverId(it.id)} onMouseLeave={() => setHoverId(null)}
                   onClick={() => onSelect && onSelect(it)} onDoubleClick={() => onPick && onPick(it)} style={{ cursor: "pointer" }}>
                   <rect x={0} y={yy} width={W} height={rowH} fill={selId === it.id ? "#dbeafe" : hoverId === it.id ? "#f0fdf4" : "transparent"} />
-                  <text x={mL - 6} y={yy + rowH - 6} textAnchor="end" fontSize="9.5" fill={mine ? "#2563eb" : hot ? "#15803d" : "#475569"} fontWeight={mine ? "700" : "400"}>{it.name.length > 30 ? it.name.slice(0, 29) + "…" : it.name}</text>
+                  <text x={mL - 6} y={yy + rowH - 6} textAnchor="end" fontSize={mobile ? 12.5 : 9.5} fill={mine ? "#2563eb" : hot ? "#15803d" : "#475569"} fontWeight={mine ? "700" : "400"}>{(() => { const mx = mobile ? 16 : 30; return it.name.length > mx ? it.name.slice(0, mx - 1) + "…" : it.name; })()}</text>
                   <rect x={mL} y={yy + 3} width={bw} height={rowH - 7} rx="1.5" fill={mine ? "#2563eb" : hot ? "#15803d" : "#22c55e"} style={{ filter: mine ? "drop-shadow(0 0 3px rgba(37,99,235,0.95))" : "none" }} />
-                  <text x={mL + bw + 5} y={yy + rowH - 6} fontSize="9.5" fill={mine ? "#2563eb" : "#16a34a"} fontWeight="700">+{it.delta.toFixed(1)}</text>
+                  <text x={mL + bw + 5} y={yy + rowH - 6} fontSize={mobile ? 12.5 : 9.5} fill={mine ? "#2563eb" : "#16a34a"} fontWeight="700">+{it.delta.toFixed(1)}</text>
                 </g>
               );
             })}
@@ -3656,6 +3677,7 @@
         const [selHt, setSelHt] = useState(null);
         const [mvpTeacherSel, setMvpTeacherSel] = useState(null); // /mvp2: teacher whose class graph is shown (declared with selHt — the school memo below depends on it)
         useEffect(() => { setMvpTeacherSel(null); }, [selHt, level]);
+        const [mvpMetric, setMvpMetric] = useState("g3");   // /mvp: shared metric tab (NIPUN g2 / g3 / MPL-B) — declared early: the school card memo depends on it
         const [reveal, setReveal] = useState(2);            // school graph staged reveal: 0=HT, 1=+teachers, 2=+students
         const [repHover, setRepHover] = useState(null);     // block-report: hovered school id (links charts ↔ map dots)
         const [repSel, setRepSel] = useState(null);         // block-report: single-click selected school id (School Detail + send list)
@@ -4016,106 +4038,31 @@
           return map;
         }, [blocks]);
 
-        // ---- one school (force graph) ----
+        // ---- one school: card lists (the force graph was replaced by cards) ----
+        // teachers of the selected school, decreasing score on the selected test
+        // metric; when a teacher is drilled (mvpTeacherSel) their students too.
         const school = useMemo(() => {
-          if (!selHt || !d3) return null;
+          if (!selHt) return null;
           const htU = node(selHt);
-          // representative link lengths (slider floor + half the score range) — used to seed the
-          // initial layout and to scale the repulsion so the graph fans out at any slider value.
-          const htLen = minHtTchr + 35, stdLen = minTchrStd + 27;
-          // pin the centre node: normally the head teacher with teachers around;
-          // /mvp2 — when a teacher is drilled, THAT teacher sits centred (big)
-          // with their students fanned around instead.
-          const nodes = [];
-          const links = [];
-          let teachers = 0;
-          if (mvpTeacherSel) {
-            const tu = node(mvpTeacherSel);
-            nodes.push({ id: mvpTeacherSel, u: tu, group: "teacher", center: true, r: 15, x: 0, y: 0, fx: 0, fy: 0 });
-            const students = baseChildCount(mvpTeacherSel);
-            for (let st = 0; st < students; st++) {
-              const sid = mvpTeacherSel + "." + st;
-              const sa = (2 * Math.PI * st) / Math.max(1, students);
-              nodes.push({ id: sid, u: node(sid), group: "student", r: 9,
-                x: Math.cos(sa) * stdLen, y: Math.sin(sa) * stdLen });
-              links.push({ source: mvpTeacherSel, target: sid });
-            }
-          } else {
-            nodes.push({ id: selHt, u: htU, group: "ht", r: 15, x: 0, y: 0, fx: 0, fy: 0 });
-            teachers = baseChildCount(selHt);
-            for (let t = 0; t < teachers; t++) {
-              const tid = selHt + "." + t;
-              // seed each teacher evenly around the head teacher on a ring of radius htLen
-              const ta = (2 * Math.PI * t) / Math.max(1, teachers);
-              const tx = Math.cos(ta) * htLen, ty = Math.sin(ta) * htLen;
-              nodes.push({ id: tid, u: node(tid), group: "teacher", r: 9, x: tx, y: ty });
-              links.push({ source: selHt, target: tid });
-              // students are not rendered at the school level — drill a teacher.
-            }
+          const nTeachers = baseChildCount(selHt);
+          const teachers = [];
+          for (let ti = 0; ti < nTeachers; ti++) {
+            const tid = selHt + "." + ti;
+            teachers.push({ id: tid, u: node(tid), students: baseChildCount(tid) });
           }
-          const total = nodes.length;
-          [...nodes].sort((a, b) => b.u.score - a.u.score).forEach((n, i) => { n.rank = i + 1; n.total = total; });
-          // Grouped repulsion (replaces a global forceManyBody): the head teacher + teachers all
-          // repel each other so the teachers fan out around the HT, but each student only repels
-          // the siblings under its own teacher — students of different teachers ignore each other.
-          // Strengths scale with the link length so the fan-out holds at any slider value.
-          const teacherRepel = -Math.max(150, htLen * 0.9);
-          const studentRepel = -Math.max(320, stdLen * 2.4);   // strong: the only thing spreading siblings
-          const groupedCharge = (() => {
-            const force = (alpha) => {
-              for (const g of force._groups) {
-                const arr = g.n, k = g.k;
-                for (let i = 0; i < arr.length; i++) {
-                  for (let j = i + 1; j < arr.length; j++) {
-                    const A = arr[i], B = arr[j];
-                    let dx = B.x - A.x, dy = B.y - A.y, l2 = dx * dx + dy * dy;
-                    if (l2 < 1e-6) { dx = (i - j) || 1e-3; dy = (i + j + 1) * 1e-3; l2 = dx * dx + dy * dy; }
-                    const w = k * alpha / l2;          // k < 0 → A and B pushed apart
-                    A.vx += dx * w; A.vy += dy * w;
-                    B.vx -= dx * w; B.vy -= dy * w;
-                  }
-                }
-              }
-            };
-            force.initialize = (ns) => {
-              const top = { k: teacherRepel, n: ns.filter((d) => d.group === "ht" || d.group === "teacher") };
-              const byTeacher = new Map();
-              for (const d of ns) if (d.group === "student") {
-                const pid = d.id.slice(0, d.id.lastIndexOf("."));   // the student's teacher id
-                if (!byTeacher.has(pid)) byTeacher.set(pid, { k: studentRepel, n: [] });
-                byTeacher.get(pid).n.push(d);
-              }
-              force._groups = [top, ...byTeacher.values()];
-            };
-            return force;
-          })();
-          const sim = d3.forceSimulation(nodes)
-            // Connection length encodes the child's score: higher score → shorter link (sits closer
-            // to its parent), lower score → longer link. Base ≥ parent+child collide radii so the
-            // collide force never fights the link force.
-            .force("link", d3.forceLink(links).id((d) => d.id).distance((l) => {
-              const norm = (l.target.u.score || 0) / 100;
-              // floor by both the collide footprint and the explicit (slider-driven) hierarchy minimum
-              const collide = schoolUiR(l.source.group) + schoolUiR(l.target.group) + 6;
-              const base = Math.max(collide, l.source.group === "ht" ? minHtTchr : minTchrStd);
-              const range = l.source.group === "ht" ? 70 : 55;
-              return base + (1 - norm) * range;
-            }).strength(0.6))
-            .force("charge", groupedCharge)
-            // collide radius == rendered card footprint → node UI elements can't overlap
-            .force("collide", d3.forceCollide().radius((d) => (d.center ? schoolUiR("ht") : schoolUiR(d.group))).strength(1).iterations(4))
-            // centering pulls only teachers toward the middle; students must NOT feel it, otherwise
-            // every cluster's students drift toward the centre (looks like cross-class attraction).
-            .force("x", d3.forceX(0).strength((d) => d.group === "student" ? 0 : 0.03))
-            .force("y", d3.forceY(0).strength((d) => d.group === "student" ? 0 : 0.03))
-            .alphaDecay(0.018).stop();
-          for (let i = 0; i < 520; i++) sim.tick();
-          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-          for (const n of nodes) { if (n.x < minx) minx = n.x; if (n.x > maxx) maxx = n.x; if (n.y < miny) miny = n.y; if (n.y > maxy) maxy = n.y; }
-          // pad by the card footprint so edge cards aren't clipped (face above, label box below)
-          return { nodes, links, htU, bbox: [minx - 46, miny - 32, maxx + 46, maxy + 60],
-            counts: { teachers, students: nodes.filter((n) => n.group === "student").length } };
-        }, [selHt, minHtTchr, minTchrStd, mvpTeacherSel]);
+          teachers.sort((x, y) => mvpScore(y.u, mvpMetric) - mvpScore(x.u, mvpMetric));
+          let students = null;
+          if (mvpTeacherSel) {
+            const nStudents = baseChildCount(mvpTeacherSel);
+            students = [];
+            for (let si = 0; si < nStudents; si++) {
+              const sid = mvpTeacherSel + "." + si;
+              students.push({ id: sid, u: node(sid) });
+            }
+            students.sort((x, y) => mvpScore(y.u, mvpMetric) - mvpScore(x.u, mvpMetric));
+          }
+          return { htU, teachers, students, counts: { teachers: nTeachers, students: students ? students.length : 0 } };
+        }, [selHt, mvpTeacherSel, mvpMetric]);
 
         // insetL = left-edge padding to keep the framed content out from under the absolutely-
         // positioned 360px sidebar (centres within the visible area to the right of it). Defaults
@@ -4195,17 +4142,7 @@
           if (!selHt) { if (schools && schools.length) { moved.current = false; drillSchool(schools[Math.min(nav.school, schools.length - 1)]); } }
         }, [role, busy, worldPaths, country, adm1, a1Idx, adm2, a2Idx, blocks, a3Idx, schools, selHt]);
 
-        useEffect(() => {
-          if (level !== "school" || !school) return;
-          // /mvp2: with only two teachers the graph is nearly a line, so the
-          // raw bbox over-zooms. Enforce a minimum framed span (no-op for
-          // graphs that are already larger, i.e. 3+ teachers).
-          const [minx, miny, maxx, maxy] = school.bbox;
-          const MINW = 720, MINH = 450;
-          const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
-          const w = Math.max(maxx - minx, MINW), h = Math.max(maxy - miny, MINH);
-          setTf(frame([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], 0.82, 0));
-        }, [school, level, frame]);
+        // /mvp2: no school-level auto-framing — the card panel overlays the whole map card
 
         // Frame the adm2/adm3 maps to the union bbox of the children actually rendered (districts /
         // blocks) rather than the parent polygon. Block/district geometry can poke past the parent
@@ -4393,7 +4330,7 @@
           else if (level === "adm2" && adm2) arr = adm2.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "BSA · " + d.u.name, location: a1f ? a1f.name : "", level: "BSA", anchor: d.c, pathD: d.d, demo: d.demo }));
           else if (level === "adm3" && blocks) arr = blocks.map((b) => ({ id: b.id, u: b.u, name: b.name, sub: "BEO · " + b.u.name, location: a2f ? a2f.name : "", level: "BEO", anchor: b.seed, pathD: b.d, demo: b.demo }));
           else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: (s.kind && s.kind !== "unknown" ? s.kind[0].toUpperCase() + s.kind.slice(1) + " · " : "") + "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", kind: s.kind, anchor: s.p, dot: true }));
-          else if (level === "school" && school) arr = school.nodes.map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: [n.x, n.y], dot: true }));
+          else if (level === "school" && school) arr = [{ id: selHt, u: school.htU }, ...school.teachers, ...(school.students || [])].map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: null, dot: true }));
           arr = arr.map((e) => ({ ...e, score: e.u.score }));
           const order = [...arr].sort((a, b) => b.score - a.score);
           const rank = new Map(); order.forEach((e, i) => rank.set(e.id, i + 1));
@@ -4435,7 +4372,6 @@
         }, [level, schools, a1f, a2f, blk, blocks, adm2, role, entities]);
 
         // ---- report (built generically from the current level's children) ----
-        const [mvpMetric, setMvpMetric] = useState("g3");   // /mvp: shared metric tab (NIPUN g2 / g3 / MPL-B)
         const [mvpTeacher, setMvpTeacher] = useState(null); // /mvp2: STUDENT whose dashboard table is open
         const [mvpRange, setMvpRange] = useState("all");    // /mvp: trend-graph time window
         const report = useMemo(() => (usesReport && entities && entities.length ? buildBlockReport(entities, mvpMetric) : null), [usesReport, entities, mvpMetric]);
@@ -4605,8 +4541,8 @@
             }
             return `≈${schools ? schools.length : 0} schools · illustrative — no OpenStreetMap school data for this block · click a school`;
           }
-          if (level === "school" && mvpTeacherSel && school) return `${node(mvpTeacherSel).name} (Teacher) · ${school.counts.students} students · click a student for their dashboard · click empty space to go back`;
-          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · double-click a teacher for their class · click empty space to go up`;
+          if (level === "school" && mvpTeacherSel && school) return `${node(mvpTeacherSel).name} (Teacher) · ${school.counts.students} students · click a student card for their dashboard · ↑ takes you back to the teachers`;
+          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · double-click a teacher card for their class · ↑ goes up a level`;
           return "";
         })();
 
@@ -5104,7 +5040,7 @@
                 <span>score</span><span>0</span>
                 <span className="h-2 w-28 rounded" style={{ background: "linear-gradient(to right,#ef4444,#eab308,#22c55e)" }} />
                 <span>100</span>
-                <button onClick={() => setTf(level === "school" && school ? frame(school.bbox, 0.82, 0) : level === "schools" && blk ? frame(blk.bbox, 0.9, 0) : level === "adm3" && a2f ? frame(a2f.bbox) : level === "adm2" && a1f ? frame(a1f.bbox) : { k: 1, x: 0, y: 0 })}
+                <button onClick={() => setTf((level === "school" || level === "schools") && blk ? frame(blk.bbox, 0.9, 0) : level === "adm3" && a2f ? frame(a2f.bbox) : level === "adm2" && a1f ? frame(a1f.bbox) : { k: 1, x: 0, y: 0 })}
                   className="ml-2 rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">{t("Reset")}</button>
                 <button onClick={genReport} className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-600 hover:bg-zinc-50">⤓ {t("Report")}</button>
                 {!isReport && (
@@ -5318,66 +5254,7 @@
                       );
                     })}
 
-                    {/* school force graph */}
-                    {level === "school" && school && (
-                      <g>
-                        {school.links.map((l, idx) => {
-                          const shown = reveal >= groupStage[l.target.group];   // edge appears with its child
-                          return (
-                            <line key={"l" + idx} x1={l.source.x} y1={l.source.y} x2={l.target.x} y2={l.target.y}
-                              stroke="#cbd5e1" strokeWidth={(l.source.group === "ht" ? 1.6 : 0.8) / tf.k}
-                              style={{ opacity: shown ? 1 : 0, transition: "opacity .4s ease" }} />
-                          );
-                        })}
-                        {/* blue glow behind the signed-in user's node */}
-                        {(() => {
-                          const me = selfId && school.nodes.find((n) => n.id === selfId);
-                          if (!me || reveal < groupStage[me.group]) return null;
-                          const fr = schoolFaceR(me.group);
-                          return (
-                            <g pointerEvents="none" className="user-glow">
-                              <circle cx={me.x} cy={me.y} r={fr + 26} fill="#2563eb" opacity={0.14} />
-                              <circle cx={me.x} cy={me.y} r={fr + 16} fill="#3b82f6" opacity={0.22} />
-                              <circle cx={me.x} cy={me.y} r={fr + 8} fill="#60a5fa" opacity={0.32} />
-                            </g>
-                          );
-                        })()}
-                        {school.nodes.map((n) => {
-                          const on = active && active.u.id === n.id;
-                          const shown = reveal >= groupStage[n.group];     // staged reveal: HT → teachers → students
-                          const pe = shown ? "auto" : "none";
-                          const faceR = n.center ? schoolFaceR("ht") : schoolFaceR(n.group);
-                          const ring = n.group === "ht" ? 4 : 3;          // slightly thicker picture border
-                          // /mvp: principal card + text at 1.5× the teacher size
-                          const isHt = n.group === "ht" || n.center;   // centred teacher renders at HT scale
-                          const W = isHt ? SCHOOL_CARD_W * 1.5 : SCHOOL_CARD_W, lbl = n.group === "ht" ? t("Principal") : n.group === "teacher" ? t("Teacher") : t("Student");
-                          const nm = n.u.name.length > 16 ? n.u.name.slice(0, 15) + "…" : n.u.name;
-                          const title = n.group === "ht" ? "Head Teacher" : n.group === "teacher" ? "Teacher" : "Student";
-                          const col = scoreColor(n.u.perf);
-                          // world-anchored (no 1/tf.k counter-scale): the layout collide radius == this
-                          // footprint, so cards can't overlap; they zoom with the map.
-                          return (
-                            <foreignObject key={n.id} x={n.x - W / 2} y={n.y - faceR - ring} width={W} height={faceR * 2 + 84} style={{ overflow: "visible", pointerEvents: "none" }}>
-                              <div style={{ width: W, opacity: shown ? 1 : 0, transform: shown ? "scale(1)" : "scale(.7)", transformOrigin: "center top", transition: "opacity .4s ease, transform .4s ease" }} className="flex flex-col items-center"
-                                onMouseEnter={() => { if (shown) showHover({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
-                                onMouseLeave={clearHover}
-                                onClick={(e) => { e.stopPropagation(); if (!shown) return; if (n.group === "student") { setMvpTeacher(n.u); return; } pinItem({ u: n.u, title, sub: n.u.name, student: n.group === "student" }); }}
-                                onDoubleClick={(e) => { e.stopPropagation(); if (shown && n.group === "teacher" && !n.center) setMvpTeacherSel(n.id); }}>
-                                <img src={n.u.face} alt="" loading="lazy" className="relative rounded-full object-cover brightness-110"
-                                  style={{ width: faceR * 2, height: faceR * 2, zIndex: 2, boxShadow: "0 0 0 " + ring + "px " + col, outline: on ? "2px solid #0f172a" : "none", cursor: "pointer", pointerEvents: pe }} />
-                                {/* picture circle overlaps the label box — pull the box up under the face */}
-                                <div className="max-w-full rounded px-2 pb-1.5 text-center shadow-sm"
-                                  style={{ position: "relative", zIndex: 1, marginTop: -faceR * 0.42, paddingTop: faceR * 0.42 + 2, lineHeight: 1.4, background: col, color: textOn(n.u.perf), pointerEvents: pe }}>
-                                  <div className="truncate font-semibold" style={{ fontSize: isHt ? 22 : 15, marginBottom: 1 }}>{nm}</div>
-                                  <div style={{ fontSize: isHt ? 20 : 13, opacity: 0.95 }}>{lbl}</div>
-                                  <div style={{ fontSize: isHt ? 20 : 13, opacity: 0.9, marginTop: 1 }}>{n.u.score}% {MVP_METRIC_BY[mvpMetric].short}</div>
-                                </div>
-                              </div>
-                            </foreignObject>
-                          );
-                        })}
-                      </g>
-                    )}
+                    {/* /mvp2: the school force graph was replaced by the card panel overlay (below the svg) */}
 
                     {/* hover glow from the bar graph */}
                     {hoverId && (() => {
@@ -5393,6 +5270,58 @@
 
                   </g>
                 </svg>
+              )}
+
+              {/* /mvp2: school + class card panels — fill the map card (same
+                  size/border) with teacher cards, or with student cards once a
+                  teacher is double-clicked; scrolls when the list overflows */}
+              {level === "school" && school && (
+                <div className="absolute inset-0 z-10 overflow-y-auto bg-[#eaf0f6] p-3 sm:p-5" onClick={() => popUp()}>
+                  {!school.students ? (
+                    <div className="mx-auto flex max-w-3xl flex-col gap-3">
+                      {school.teachers.map(({ id, u, students }) => {
+                        const sc = mvpScore(u, mvpMetric), col = nipColor(sc);
+                        return (
+                          <div key={id} className="flex cursor-pointer items-center gap-4 rounded-xl px-4 py-3 shadow-sm transition hover:shadow-md sm:px-5 sm:py-4"
+                            style={{ background: col + "1f", border: "1px solid " + col + "55" }}
+                            title="Double-click for this teacher's class"
+                            onClick={(e) => { e.stopPropagation(); pinItem({ u, title: "Teacher", sub: u.name, student: false }); }}
+                            onDoubleClick={(e) => { e.stopPropagation(); setMvpTeacherSel(id); }}>
+                            <img src={u.face} alt="" loading="lazy" className="h-14 w-14 flex-shrink-0 rounded-full object-cover sm:h-16 sm:w-16" style={{ boxShadow: "0 0 0 3px " + col }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-base font-bold leading-tight text-zinc-900 sm:text-lg">{u.name}</div>
+                              <div className="text-[12px] text-zinc-500">{t("Teacher")} · {students} {t("students")}</div>
+                            </div>
+                            <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4">
+                              <div className="text-right">
+                                <div className="text-xl font-extrabold tabular-nums sm:text-2xl" style={{ color: col }}>{sc}%</div>
+                                <div className="text-[10px] leading-tight text-zinc-500">{MVP_METRIC_BY[mvpMetric].short}</div>
+                              </div>
+                              <MvpTrend delta={mvpDelta(u, mvpMetric)} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                      {school.students.map(({ id, u }) => {
+                        const sc = mvpScore(u, mvpMetric), col = nipColor(sc), d = mvpDelta(u, mvpMetric);
+                        const fg = sc >= 50 && sc < 80 ? "#1c1917" : "#ffffff";
+                        return (
+                          <div key={id} className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-xl p-3 text-center shadow-sm transition hover:shadow-md"
+                            style={{ background: col, color: fg }} title="Click for this student's dashboard"
+                            onClick={(e) => { e.stopPropagation(); setMvpTeacher(u); }}>
+                            <div className="w-full truncate text-sm font-bold sm:text-base">{u.name}</div>
+                            <div className="text-2xl font-extrabold tabular-nums sm:text-3xl">{sc}%</div>
+                            <div className="text-[11px] font-semibold opacity-90">{MVP_METRIC_BY[mvpMetric].short}</div>
+                            <div className="text-[12px] font-bold tabular-nums">{Math.abs(d) < 0.5 ? "→" : d > 0 ? "▲" : "▼"} {(d >= 0 ? "+" : "") + d.toFixed(1) + "%"} <span className="font-medium opacity-80">last week</span></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
 
               {busy && (
@@ -5477,13 +5406,23 @@
                 </div>
               )}
 
-              {/* bottom-right: zoom buttons immediately to the left of the legend */}
+              {/* bottom-right: up-a-level button (replaces zoom in/out) immediately to the left of the legend */}
               <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex items-end gap-2">
-                <div className="pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
-                  <button onClick={() => zoomBy(1.5)} title="Zoom in" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">+</button>
-                  <div className="h-px bg-zinc-200" />
-                  <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
-                </div>
+                {(() => {
+                  const canUp = (level === "school" && mvpTeacherSel != null) || LEVEL_ORDER.indexOf(level) > LEVEL_ORDER.indexOf((ROLE_BY[role] || ROLE_BY.transparency).home);
+                  return (
+                    <div className="pointer-events-auto overflow-hidden rounded-lg border border-zinc-300 bg-white shadow-md">
+                      <button onClick={() => popUp()} title="Go up a level" disabled={!canUp}
+                        className={"flex h-9 w-9 items-center justify-center " + (canUp ? "text-zinc-700 hover:bg-zinc-100" : "cursor-default text-zinc-300")}>
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 16V5" />
+                          <path d="M7 10l5-5 5 5" />
+                          <path d="M5 20h14" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })()}
                 {/* pie legend describes map-area pies — hidden in the school graph and the block report */}
                 {level !== "school" && !isReport && (
                 <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
