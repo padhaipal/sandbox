@@ -62,7 +62,7 @@
       { code: "dgse",         label: "DGSE",         home: "adm1",    who: "DGSE",         where: "Uttar Pradesh",    nav: { iso: "IND" }, mine: { adm1: "uttar pradesh" } },
       { code: "bsa",          label: "BSA",          home: "adm2",    who: "BSA",          where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh" }, mine: { adm2: "lucknow" } },
       { code: "beo",          label: "BEO",          home: "adm3",    who: "BEO",          where: "Lucknow district", nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow" }, mine: { adm3: "malihabad" } },
-      { code: "ht",           label: "Head Teacher", home: "school",  who: "Head Teacher", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 }, mine: { school: 0 } },
+      { code: "ht",           label: "Principal", home: "school",  who: "Principal", where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 }, mine: { school: 0 } },
       { code: "teacher",      label: "Teacher",      home: "school",  who: "Teacher",      where: "Lucknow",          nav: { iso: "IND", a1: "uttar pradesh", a2: "lucknow", block: 0, school: 0 } },
       { code: "measure",      label: "Measure demo", home: "world",   who: "Lifteracy",    where: "Global · dummy data", nav: {} },
     ];
@@ -121,13 +121,13 @@
           "countries": "देश", "regions": "क्षेत्र", "districts": "ज़िले", "blocks": "ब्लॉक", "schools": "विद्यालय", "class members": "कक्षा सदस्य",
           "Country": "देश", "Region": "क्षेत्र", "District": "ज़िला", "Block": "ब्लॉक", "School": "विद्यालय", "Class member": "कक्षा सदस्य",
           "BEO": "BEO", "BSA": "BSA", "DGSE": "DGSE", "Teacher": "शिक्षक", "Principal": "प्रधानाचार्य", "Student": "छात्र", "Minister of Education": "शिक्षा मंत्री", "National Director": "राष्ट्रीय निदेशक",
-          "Top": "ऊपर", "School Performance": "विद्यालय प्रदर्शन", "Head Teacher Spotlight": "प्रधानाध्यापक स्पॉटलाइट",
+          "Top": "ऊपर", "School Performance": "विद्यालय प्रदर्शन", "Principal Spotlight": "प्रधानाध्यापक स्पॉटलाइट",
           "Messaging": "संदेश", "Generate report": "रिपोर्ट बनाएँ",
           "block oral-literacy NIPUN proxy avg": "ब्लॉक मौखिक-साक्षरता निपुण प्रॉक्सी औसत",
           "avg oral literacy NIPUN proxy gain last week": "पिछले सप्ताह औसत मौखिक साक्षरता निपुण प्रॉक्सी वृद्धि",
           "schools using Lifteracy": "लिफ्टरेसी उपयोग करने वाले विद्यालय",
           "Latest NIPUN proxy": "नवीनतम निपुण प्रॉक्सी", "Not using Lifteracy": "लिफ्टरेसी उपयोग नहीं",
-          "School Detail": "विद्यालय विवरण", "Head Teacher": "प्रधानाध्यापक",
+          "School Detail": "विद्यालय विवरण",
           "Latest oral-literacy NIPUN proxy": "नवीनतम मौखिक-साक्षरता निपुण प्रॉक्सी", "Change last week": "पिछले सप्ताह बदलाव",
           "On Lifteracy · since": "लिफ्टरेसी पर · से", "Yes": "हाँ", "No": "नहीं",
           "Weekly trend": "साप्ताहिक रुझान", "Average": "औसत", "Latest score — all schools": "नवीनतम स्कोर — सभी विद्यालय",
@@ -189,8 +189,8 @@
       const scoreColor = (p) => `rgb(${scoreRGB(p).join(",")})`;
       const textOn = (p) => { const [r, g, b] = scoreRGB(p); return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1c1917" : "#ffffff"; };
 
-      // --- org model: country=National Director, ADM1=DGSE, ADM2=BSA, ADM3=BEO, school=Head Teacher ---
-      const LEVELS = ["World", "Country", "DGSE", "BSA", "BEO", "Head Teacher", "Teacher", "Student"];
+      // --- org model: country=National Director, ADM1=DGSE, ADM2=BSA, ADM3=BEO, school=Principal ---
+      const LEVELS = ["World", "Country", "DGSE", "BSA", "BEO", "Principal", "Teacher", "Student"];
       const SUB = { Country: "National Director", DGSE: "DGSE", BSA: "BSA", BEO: "BEO" };
       // children-per-node range, by org level. Only school->teacher->student are procedural;
       // country/ADM1/ADM2/ADM3 counts come from the live map data.
@@ -1992,7 +1992,7 @@
                 <CostCurve groupsBuilt={idx} />
               </div>
             </div>
-            <div className="mt-2 text-[10px] text-zinc-400">Height = modelled income-doublings per donated dollar (cost-efficiency); width = deployable market. <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Methodology ↗</a></div>
+            <div className="mt-2 text-[10px] text-zinc-400">Height = modelled income-doublings per donated dollar (cost-efficiency); width = deployable market. <a href="https://www.lifteracy.ai" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Methodology ↗</a></div>
           </div>
         );
       }
@@ -2017,7 +2017,7 @@
                 <FlowChip c={C}>word</FlowChip>
               </div>
               <p className="mt-3 text-sm leading-relaxed text-zinc-600"><span className="font-semibold text-zinc-800">Personalised &amp; adaptive:</span> Lifteracy tracks performance on every individual letter and a decision tree picks the next word to maximise practice where the child needs it most.</p>
-              <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110" style={{ background: C }}>Try it now <span aria-hidden>→</span></a>
+              <a href="https://www.lifteracy.ai" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110" style={{ background: C }}>Try it now <span aria-hidden>→</span></a>
             </div>
             <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
               <i className="fa-solid fa-diagram-project mb-3 text-3xl text-zinc-300" />
@@ -2057,7 +2057,7 @@
               <div><div className="text-xs font-bold">P.S. Malihabad · Principals &amp; Teachers</div><div className="text-[9px] text-emerald-100">14 members</div></div>
             </div>
             <div className="space-y-1.5 bg-[#e5ddd5] p-3">
-              {msg("Head Teacher (Principal)", "#1f7aec", "Good evening all 🙏 This week's Lifteracy report cards are out.", { i: 1 })}
+              {msg("Principal", "#1f7aec", "Good evening all 🙏 This week's Lifteracy report cards are out.", { i: 1 })}
               <button onClick={onReport} className="block w-[82%] rounded-lg bg-white px-2.5 py-2 text-left shadow-sm hover:bg-zinc-50">
                 <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded bg-rose-100 text-rose-600"><i className="fa-solid fa-file-pdf" /></span><div><div className="text-[11px] font-semibold text-zinc-800">Class-3 Report Card.pdf</div><div className="text-[9px] text-zinc-400">tap to open</div></div></div>
               </button>
@@ -2314,18 +2314,22 @@
       }
       // Footer — trust, governance, links back to the main site
       function DonorFooter({ t = (s) => s }) {
+        const SITE = "https://www.lifteracy.ai";
         const cols = [
-          { h: "Lifteracy", links: [["About", "https://www.padhaipal.com"], ["How it works", "https://www.padhaipal.com"], ["Contact", "https://www.padhaipal.com"]] },
-          { h: "Trust", links: [["Annual report", "https://www.padhaipal.com"], ["Financials", "https://www.padhaipal.com"], ["Governance", "https://www.padhaipal.com"]] },
-          { h: "Safety", links: [["Child safeguarding", "https://www.padhaipal.com"], ["Data & privacy", "https://www.padhaipal.com"]] },
+          { h: "Lifteracy", links: [["About", SITE + "/#founders"], ["How it works", SITE + "/#video"], ["Contact", SITE + "/#traction-2"]] },
+          { h: "Safety", links: [
+            ["Child protection policy", "https://drive.google.com/file/d/1imqEMVpaPaERlr6RZrhtcYTf_cxe-sNV/view"],
+            ["Privacy policy", "https://drive.google.com/file/d/1U1eMbmRu1NUVKAcSXsJzFhMUkaZTsXVE/view?usp=drive_link"],
+            ["Terms and Conditions", "https://drive.google.com/file/d/1U1eMbmRu1NUVKAcSXsJzFhMUkaZTsXVE/view?usp=drive_link"],
+          ] },
         ];
         return (
           <div className="mt-2 rounded-2xl border border-zinc-200 bg-white p-6">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
               <div className="col-span-2 sm:col-span-1">
-                <div className="text-lg font-black text-blue-700">Lifteracy</div>
-                <div className="mt-1 text-[11px] text-zinc-500">{t("Teaching every child to read, over WhatsApp.")}</div>
-                <a href="https://www.padhaipal.com" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">www.padhaipal.com ↗</a>
+                <img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-10 w-auto" />
+                <div className="mt-2 text-[11px] text-zinc-500">{t("Teaching every child to read, over WhatsApp.")}</div>
+                <a href={SITE} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-600 hover:underline">www.lifteracy.ai</a>
               </div>
               {cols.map((col) => (
                 <div key={col.h}>
@@ -2334,7 +2338,6 @@
                 </div>
               ))}
             </div>
-            <div className="mt-4 border-t border-zinc-100 pt-3 text-[10px] text-zinc-400">{t("Figures on this page are illustrative demo data. Lifteracy is a registered non-profit · child data is processed under our privacy & safeguarding policy.")}</div>
           </div>
         );
       }
@@ -2343,7 +2346,7 @@
       const PP_LOGO = "https://framerusercontent.com/images/O8OuegVZwL9Qy2rsKnI1plw4b60.png";
       const WWHGE_PDF = "https://www.wwhge.org/wp-content/uploads/2026/02/WWHGE_Universal-Foundational-Learning-Insight-Note.pdf";
       const CG_LINK = "https://coefficientgiving.org/research/our-planned-allocation-to-givewells-recommendations-for-the-next-few-years/";
-      const PP_ANALYSIS = "https://www.padhaipal.com";   // TODO: replace with the real analysis link
+      const PP_ANALYSIS = "https://www.lifteracy.ai";   // TODO: replace with the real analysis link
 
       // padhAIpal logo + wordmark lockup
       // Headline value proposition — its own large section, with interactive inline "cards"
@@ -2990,6 +2993,8 @@
       // re-seeds by metric so switching test tabs reorders/recolours the cards.
       const mvpScore = (u, metric) => clamp(Math.round(u.score + (MVP_METRIC_BY[metric] || MVP_METRIC_BY.g3).bias + ((hashStr("ms:" + metric + ":" + u.id) % 11) - 5)), 5, 99);
       const mvpDelta = (u, metric) => ((hashStr("md:" + metric + ":" + u.id) % 121) - 55) / 10;
+      // /mvp2: student names are blanked except the first letter for everyone but their teacher
+      const censorName = (n) => n.split(" ").map((w) => w[0] + "•••").join(" ");
       // /mvp2: viewport hook — charts adapt below the sm (640px) breakpoint
       function useIsMobile(bp = 640) {
         const [m, setM] = useState(() => window.innerWidth < bp);
@@ -3465,8 +3470,8 @@
       };
       // /mvp: the spotlighted person is the OFFICER of the level's child units
       // (DGSE at country view, BSA at state view, …) — was hardcoded to
-      // Head Teacher at every level.
-      function RepQuote({ kind, item, t = (s) => s, officer = "Head Teacher", nounS = "School" }) {
+      // Principal at every level.
+      function RepQuote({ kind, item, t = (s) => s, officer = "Principal", nounS = "School" }) {
         if (!item || !item.sc) return null;
         const u = item.sc.u, pool = REP_QUOTES[kind];
         const q = pool[hashStr("q:" + kind + ":" + item.id) % pool.length];
@@ -3503,7 +3508,7 @@
               <div className="min-w-0">
                 <div className="truncate text-xl font-bold leading-tight text-zinc-900" title={item.name}>{item.name}</div>
                 <div className="mt-0.5 text-sm font-medium text-zinc-700">{u.name}</div>
-                <div className="text-[12px] text-zinc-500">{t((item.sc && item.sc.level) || "Head Teacher")}</div>
+                <div className="text-[12px] text-zinc-500">{t((item.sc && item.sc.level) || "Principal")}</div>
               </div>
             </div>
             {/* right 50% — headline stats, large & horizontally centred */}
@@ -3530,7 +3535,7 @@
             { from: "BEO Office", color: "#2563eb", text: "Great work everyone. Let's onboard the remaining schools this week.", time: "12:35" },
             { mine: true, text: "Sharing the onboarding steps now 👇", time: "12:40" },
           ] },
-        { name: "Sunita Verma", sub: "Head Teacher · PS Nabipanah", group: false, color: "#dc2626", time: "11:05",
+        { name: "Sunita Verma", sub: "Principal · PS Nabipanah", group: false, color: "#dc2626", time: "11:05",
           msgs: [
             { from: "Sunita Verma", text: "My Grade 2 class crossed 80% this week!", time: "10:58" },
             { mine: true, text: "Fantastic — congratulations 👏", time: "11:05" },
@@ -3541,7 +3546,7 @@
             { from: "BSA Lucknow", color: "#16a34a", text: "Noted. Let's push the not-onboarded schools.", time: "Yesterday" },
             { mine: true, text: "On it — sending invites today.", time: "Yesterday" },
           ] },
-        { name: "Imran Khan", sub: "Head Teacher · PS Rasoolpur", group: false, color: "#d97706", time: "Mon",
+        { name: "Imran Khan", sub: "Principal · PS Rasoolpur", group: false, color: "#d97706", time: "Mon",
           msgs: [
             { from: "Imran Khan", text: "Parents are sending voice notes of the children reading 😍", time: "Mon" },
             { mine: true, text: "Wonderful! Keep the streak going.", time: "Mon" },
@@ -3702,7 +3707,7 @@
         const capIdx = LEVEL_ORDER.indexOf(roleCfg.home);   // can't navigate above this level
         // on refresh the role auto-drills world → … → its home level; hide that flash until ready.
         // `navigating` is computed after `report` (below). Reset the stuck-timer on every drill step so
-        // a slow multi-level path (e.g. Head Teacher → school force graph) isn't cut off prematurely.
+        // a slow multi-level path (e.g. Principal → school force graph) isn't cut off prematurely.
         const [navStuck, setNavStuck] = useState(false);
         useEffect(() => { setNavStuck(false); const id = setTimeout(() => setNavStuck(true), 11000); return () => clearTimeout(id); }, [role, level]);
         // the geographical region the signed-in user is responsible for (gets a blue border highlight)
@@ -3963,7 +3968,7 @@
           return () => { cancelled = true; };
         }, [level, a3Idx, blocks, projd, country]);
 
-        // ---- schools (Head Teacher): illustrative points inside the focused block ----
+        // ---- schools (Principal): illustrative points inside the focused block ----
         // lazily fetch real OSM schools for the focused block (bbox via projection invert).
         // India uses the bundled UDISE data above; OSM is for everywhere else (optional overlay).
         useEffect(() => {
@@ -4263,9 +4268,10 @@
         // noun for the children shown at this level (singular/plural) — drives the generic report labels
         const REP_NOUN = { world: ["Country", "countries"], adm1: ["State", "states"], adm2: ["District", "districts"], adm3: ["Block", "blocks"], schools: ["School", "schools"], school: ["Teacher", "teachers"] };
         // the officer who leads each child unit (drives the "{officer} Spotlight" section title)
-        const REP_OFFICER = { world: "National Director", adm1: "DGSE", adm2: "BSA", adm3: "BEO", schools: "Head Teacher", school: "Teacher" };
-        const officer = REP_OFFICER[level] || "Head Teacher";
-        const [nounS, nounP] = REP_NOUN[level] || ["Area", "areas"];
+        const REP_OFFICER = { world: "National Director", adm1: "DGSE", adm2: "BSA", adm3: "BEO", schools: "Principal", school: "Teacher" };
+        const officer = REP_OFFICER[level] || "Principal";
+        // /mvp2: inside a drilled class the children are students, not teachers
+        const [nounS, nounP] = (level === "school" && mvpTeacherSel ? ["Student", "students"] : REP_NOUN[level]) || ["Area", "areas"];
         // drill into a child entity (works at every level)
         const drillEntity = (it) => {
           if (!it || moved.current) return;
@@ -4329,8 +4335,13 @@
           else if (level === "adm1" && adm1) arr = adm1.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "DGSE · " + d.u.name, location: country ? country.name : "", level: "DGSE", anchor: d.c, pathD: d.d, demo: d.demo }));
           else if (level === "adm2" && adm2) arr = adm2.map((d) => ({ id: d.id, u: d.u, name: d.name, sub: "BSA · " + d.u.name, location: a1f ? a1f.name : "", level: "BSA", anchor: d.c, pathD: d.d, demo: d.demo }));
           else if (level === "adm3" && blocks) arr = blocks.map((b) => ({ id: b.id, u: b.u, name: b.name, sub: "BEO · " + b.u.name, location: a2f ? a2f.name : "", level: "BEO", anchor: b.seed, pathD: b.d, demo: b.demo }));
-          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: (s.kind && s.kind !== "unknown" ? s.kind[0].toUpperCase() + s.kind.slice(1) + " · " : "") + "Head Teacher · " + s.u.name, location: blk ? blk.name : "", level: "Head Teacher", kind: s.kind, anchor: s.p, dot: true }));
-          else if (level === "school" && school) arr = [{ id: selHt, u: school.htU }, ...school.teachers, ...(school.students || [])].map((n) => ({ id: n.id, u: n.u, name: n.u.designation, sub: n.u.name, location: blk ? blk.name : "", level: n.u.designation, anchor: null, dot: true }));
+          else if (level === "schools" && schools) arr = schools.map((s) => ({ id: s.id, u: s.u, name: s.name, sub: (s.kind && s.kind !== "unknown" ? s.kind[0].toUpperCase() + s.kind.slice(1) + " · " : "") + "Principal · " + s.u.name, location: blk ? blk.name : "", level: "Principal", kind: s.kind, anchor: s.p, dot: true }));
+          else if (level === "school" && school) {
+            // school view = principal + teachers (named); drilled class = that teacher's
+            // students only, names blanked except the first letter unless the viewer IS the teacher
+            const ppl = school.students ? school.students : [{ id: selHt, u: school.htU }, ...school.teachers];
+            arr = ppl.map((n) => ({ id: n.id, u: n.u, name: school.students && role !== "teacher" ? censorName(n.u.name) : n.u.name, sub: n.u.designation, location: blk ? blk.name : "", level: n.u.designation, anchor: null, dot: true }));
+          }
           arr = arr.map((e) => ({ ...e, score: e.u.score }));
           const order = [...arr].sort((a, b) => b.score - a.score);
           const rank = new Map(); order.forEach((e, i) => rank.set(e.id, i + 1));
@@ -4352,7 +4363,7 @@
           (blocks && blocks.length ? blocks : [blk]).filter(Boolean).forEach((b) => list.push(mk("h.beo." + b.id, b.name + " BEO", "BEO", 3, { state: stateId, district: districtId, block: b.id })));
           schools.forEach((s) => {
             const sOnb = nipOnb(s.id);
-            list.push({ id: s.id, u: s.u, name: s.name, sub: "Head Teacher", location: blk ? blk.name : "", level: "Head Teacher", hrank: 4, path: { state: stateId, district: districtId, block: blockId, school: s.id }, score: s.u.score, onboarded: sOnb });
+            list.push({ id: s.id, u: s.u, name: s.name, sub: "Principal", location: blk ? blk.name : "", level: "Principal", hrank: 4, path: { state: stateId, district: districtId, block: blockId, school: s.id }, score: s.u.score, onboarded: sOnb });
             for (let ti = 0; ti < 2; ti++) { const id = s.id + ".t" + ti, u = node(id); list.push({ id, u, name: u.name + " · " + s.name, sub: "Teacher", location: blk ? blk.name : "", level: "Teacher", hrank: 5, path: { state: stateId, district: districtId, block: blockId, school: s.id }, score: u.score, onboarded: sOnb }); }
           });
           const ur = HR[role];
@@ -4542,7 +4553,7 @@
             return `≈${schools ? schools.length : 0} schools · illustrative — no OpenStreetMap school data for this block · click a school`;
           }
           if (level === "school" && mvpTeacherSel && school) return `${node(mvpTeacherSel).name} (Teacher) · ${school.counts.students} students · click a student card for their dashboard · ↑ takes you back to the teachers`;
-          if (level === "school") return `${school ? school.htU.name : ""} (Head Teacher) · ${school ? school.counts.teachers : 0} teachers · double-click a teacher card for their class · ↑ goes up a level`;
+          if (level === "school") return `${school ? school.htU.name : ""} (Principal) · ${school ? school.counts.teachers : 0} teachers · double-click a teacher card for their class · ↑ goes up a level`;
           return "";
         })();
 
@@ -5282,19 +5293,28 @@
                       {school.teachers.map(({ id, u, students }) => {
                         const sc = mvpScore(u, mvpMetric), col = nipColor(sc);
                         return (
-                          <div key={id} className="flex cursor-pointer items-center gap-4 rounded-xl px-4 py-3 shadow-sm transition hover:shadow-md sm:px-5 sm:py-4"
+                          <div key={id} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 shadow-sm transition hover:shadow-md sm:gap-4 sm:px-5 sm:py-4"
                             style={{ background: col + "1f", border: "1px solid " + col + "55" }}
                             title="Double-click for this teacher's class"
                             onClick={(e) => { e.stopPropagation(); pinItem({ u, title: "Teacher", sub: u.name, student: false }); }}
                             onDoubleClick={(e) => { e.stopPropagation(); setMvpTeacherSel(id); }}>
-                            <img src={u.face} alt="" loading="lazy" className="h-14 w-14 flex-shrink-0 rounded-full object-cover sm:h-16 sm:w-16" style={{ boxShadow: "0 0 0 3px " + col }} />
+                            <img src={u.face} alt="" loading="lazy" className="h-12 w-12 flex-shrink-0 rounded-full object-cover sm:h-16 sm:w-16" style={{ boxShadow: "0 0 0 3px " + col }} />
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-base font-bold leading-tight text-zinc-900 sm:text-lg">{u.name}</div>
-                              <div className="text-[12px] text-zinc-500">{t("Teacher")} · {students} {t("students")}</div>
+                              <div className="truncate text-[15px] font-bold leading-tight text-zinc-900 sm:text-lg">{u.name}</div>
+                              <div className="truncate text-[11px] text-zinc-500 sm:text-[12px]">{t("Teacher")} · {students} {t("students")}</div>
+                              {/* phones: score + compact trend under the name so nothing is squeezed out */}
+                              <div className="mt-1 flex items-center gap-2 sm:hidden">
+                                <span className="text-lg font-extrabold tabular-nums" style={{ color: col }}>{sc}%</span>
+                                <span className="text-[10px] leading-tight text-zinc-500">{MVP_METRIC_BY[mvpMetric].short}</span>
+                                {(() => { const d = mvpDelta(u, mvpMetric); const flat = Math.abs(d) < 0.5; const c = flat ? "#71717a" : d > 0 ? "#16a34a" : "#dc2626"; return (
+                                  <span className="text-[12px] font-bold tabular-nums" style={{ color: c }}>{flat ? "→" : d > 0 ? "▲" : "▼"} {(d >= 0 ? "+" : "") + d.toFixed(1) + "%"}</span>
+                                ); })()}
+                              </div>
                             </div>
-                            <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4">
+                            {/* ≥sm: score + zig-zag trend on the right */}
+                            <div className="hidden flex-shrink-0 items-center gap-4 sm:flex">
                               <div className="text-right">
-                                <div className="text-xl font-extrabold tabular-nums sm:text-2xl" style={{ color: col }}>{sc}%</div>
+                                <div className="text-2xl font-extrabold tabular-nums" style={{ color: col }}>{sc}%</div>
                                 <div className="text-[10px] leading-tight text-zinc-500">{MVP_METRIC_BY[mvpMetric].short}</div>
                               </div>
                               <MvpTrend delta={mvpDelta(u, mvpMetric)} />
@@ -5304,18 +5324,18 @@
                       })}
                     </div>
                   ) : (
-                    <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    <div className="mx-auto grid max-w-5xl gap-2.5 sm:gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
                       {school.students.map(({ id, u }) => {
                         const sc = mvpScore(u, mvpMetric), col = nipColor(sc), d = mvpDelta(u, mvpMetric);
                         const fg = sc >= 50 && sc < 80 ? "#1c1917" : "#ffffff";
                         return (
-                          <div key={id} className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-xl p-3 text-center shadow-sm transition hover:shadow-md"
+                          <div key={id} className="flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-3 text-center shadow-sm transition hover:shadow-md"
                             style={{ background: col, color: fg }} title="Click for this student's dashboard"
                             onClick={(e) => { e.stopPropagation(); setMvpTeacher(u); }}>
-                            <div className="w-full truncate text-sm font-bold sm:text-base">{u.name}</div>
-                            <div className="text-2xl font-extrabold tabular-nums sm:text-3xl">{sc}%</div>
-                            <div className="text-[11px] font-semibold opacity-90">{MVP_METRIC_BY[mvpMetric].short}</div>
-                            <div className="text-[12px] font-bold tabular-nums">{Math.abs(d) < 0.5 ? "→" : d > 0 ? "▲" : "▼"} {(d >= 0 ? "+" : "") + d.toFixed(1) + "%"} <span className="font-medium opacity-80">last week</span></div>
+                            <div className="w-full truncate text-[13px] font-bold sm:text-sm">{u.name}</div>
+                            <div className="text-xl font-extrabold tabular-nums sm:text-2xl">{sc}%</div>
+                            <div className="text-[9px] font-semibold opacity-90">{MVP_METRIC_BY[mvpMetric].short}</div>
+                            <div className="text-[11px] font-bold tabular-nums">{Math.abs(d) < 0.5 ? "→" : d > 0 ? "▲" : "▼"} {(d >= 0 ? "+" : "") + d.toFixed(1) + "%"}</div>
                           </div>
                         );
                       })}
@@ -5396,8 +5416,8 @@
                 </div>
               )}
 
-              {/* small NIPUN dot legend on the block map */}
-              {isReport && (
+              {/* small NIPUN dot legend on the block map — hidden at school/class level (it overlapped the cards) */}
+              {isReport && level !== "school" && (
                 <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-lg border border-zinc-200 bg-white/95 px-2.5 py-2 text-[10px] leading-tight text-zinc-600 shadow">
                   <div className="mb-1 font-semibold text-zinc-700">{"Latest " + MVP_METRIC_BY[mvpMetric].label}</div>
                   {[["≥80", "#16a34a"], ["50–79", "#f59e0b"], ["<50", "#dc2626"], [t("Not using Lifteracy"), "#a1a1aa"]].map(([l, c]) => (
@@ -5499,7 +5519,9 @@
                       <div className={"mb-6 " + H} style={HC}>{t(nounS)} {t("Performance")}</div>
                       <div className="-mt-3 mb-5 flex justify-center"><MvpMetricToggle metric={mvpMetric} setMetric={setMvpMetric} /></div>
                       <div className={card + " space-y-6"}>
-                        {/* /mvp: headline share of areas not on Lifteracy at all */}
+                        {/* /mvp: headline share of areas not on Lifteracy at all —
+                            hidden at school/class level (teacher headcounts are unreliable) */}
+                        {level !== "school" && (
                         <div className="text-center text-base font-medium text-zinc-700">
                           <span className="text-xl font-extrabold tabular-nums text-red-600">
                             {Math.round(((report.totalN - report.usingN) / Math.max(1, report.totalN)) * 100)}%
@@ -5507,6 +5529,7 @@
                           of {t(nounP)} in {t([country && country.name, a1f && a1f.name, a2f && a2f.name, blk && blk.name, level === "school" && selHt && schools ? (schools.find((sch) => sch.u.id === selHt) || {}).name : null].filter(Boolean).slice(-1)[0] || "this area")} are not using Lifteracy at all
                           <span className="ml-1 text-zinc-400">({report.totalN - report.usingN} of {report.totalN})</span>
                         </div>
+                        )}
                         <div>
                           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                             <div className="text-base font-semibold text-zinc-800">{t("Weekly trend")}{hvLabel}</div>
@@ -5525,7 +5548,7 @@
                     </div>
                   </section>
 
-                  {/* Head Teacher Spotlight — two testimonials inside a card */}
+                  {/* Principal Spotlight — two testimonials inside a card */}
                   <section id="rep-spotlight" className="scroll-mt-16 py-10">
                     <div className="mx-auto max-w-6xl px-6">
                       <div className={"mb-6 " + H} style={HC}>{t(officer)} {t("Spotlight")}</div>
