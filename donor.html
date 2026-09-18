@@ -14,6 +14,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/d3@7"></script>                              <!-- global map + school force graph -->
   <script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script> <!-- report PDF export -->
+  <script src="https://www.paypalobjects.com/donate/sdk/donate-sdk.js" charset="UTF-8"></script> <!-- /donor: PayPal Donate SDK (hosted Donate buttons) -->
   <!-- pin to Babel 7: its preset-react uses the classic JSX runtime (React.createElement).
        Babel 8 defaults to the automatic runtime, which emits an `import` an inline classic
        <script> can't execute → blank page. -->
@@ -879,6 +880,148 @@
 
       // "Fund this location" CTA — visible to donors, residents, peers and officials.
       // Tabs: individual (payment portal) | government | philanthropic org (intake forms).
+      // ─── /donor: real donations via PayPal's Donate SDK (hosted Donate buttons) ───
+      // One hosted Donate button per GDG PayPal account (AU / NZ / US), created
+      // in each account's PayPal dashboard with "let donors make this monthly"
+      // enabled. Everything GDG must supply lives here; going live is a
+      // constants change (hosted_button_id ×3, env → "production").
+      // Amounts are NEVER trusted from the browser: PayPal's IPN (account-level,
+      // pointed at ipn_url) is the record — onComplete only drives the thank-you.
+      const LIFTERACY_VIDEO_URL = "https://framerusercontent.com/assets/UzlwOpPmZp3DVtJKOUr7hrlM8.mp4";   // www.lifteracy.ai/#video
+      const DONATE_CONFIG = {
+        env: "sandbox",                                   // "production" when the hosted button ids are real
+        item_name: "J####N - Lifteracy, India",           // GDG convention; #### = programme id (tbc)
+        fee_suffix: " (&offset)",                         // GDG's literal for "donor covers the fee"
+        custom: "lifteracyWebsite",
+        countries: {
+          AU: { label: "Australia",     flag: "🇦🇺", currency: "AUD", sym: "A$",  business: "greg@gdg.org.au",   hosted_button_id: "REPLACE_ME_AU", presets: [10, 25, 50, 100], ipn_url: "https://api.padhaipal.org/paypal/ipn/au" },
+          NZ: { label: "New Zealand",   flag: "🇳🇿", currency: "NZD", sym: "NZ$", business: "paypal@gdg.org.nz", hosted_button_id: "REPLACE_ME_NZ", presets: [10, 25, 50, 100], ipn_url: "https://api.padhaipal.org/paypal/ipn/nz" },
+          US: { label: "United States", flag: "🇺🇸", currency: "USD", sym: "$",   business: "paypal@gdgusa.org", hosted_button_id: "REPLACE_ME_US", presets: [10, 25, 50, 100], ipn_url: "https://api.padhaipal.org/paypal/ipn/us" },
+        },
+        default_country: "US",
+      };
+      const DONATE_COUNTRIES = Object.keys(DONATE_CONFIG.countries);
+      const DONATE_BUTTON_ID = "paypal-donate-button-container";
+      // Country from the visitor's IP (static host → client-side lookup; free,
+      // HTTPS, CORS, no key), then the browser timezone, then the US default.
+      async function detectDonateCountry() {
+        try {
+          const r = await fetch("https://get.geojs.io/v1/ip/country.json", { cache: "no-store" });
+          const j = await r.json();
+          if (j && DONATE_COUNTRIES.includes(j.country)) return j.country;
+        } catch (e) { /* fall through */ }
+        try {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+          if (tz.startsWith("Australia/")) return "AU";
+          if (tz === "Pacific/Auckland" || tz === "Pacific/Chatham") return "NZ";
+        } catch (e) { /* fall through */ }
+        return DONATE_CONFIG.default_country;
+      }
+      const donateRef = () => "LFT-" + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+      function DonateModal({ onClose }) {
+        const [country, setCountry] = useState(DONATE_CONFIG.default_country);
+        const [detected, setDetected] = useState(false);
+        const [monthly, setMonthly] = useState(true);       // recurring by default
+        const [amount, setAmount] = useState(25);
+        const [custom, setCustom] = useState("");
+        const [coverFee, setCoverFee] = useState(true);
+        const [done, setDone] = useState(null);             // onComplete payload
+        const [sdkError, setSdkError] = useState(null);
+        const ref = useRef(donateRef());                    // one reference per popup, comes back in IPN as item_number
+        const box = useRef(null);
+        const cfg = DONATE_CONFIG.countries[country];
+        const amt = custom ? Math.max(0, parseFloat(custom) || 0) : amount;
+        const testMode = DONATE_CONFIG.env !== "production" || cfg.hosted_button_id.startsWith("REPLACE_ME");
+        useEffect(() => { let live = true; detectDonateCountry().then((c) => { if (live) { setCountry(c); setDetected(true); } }); return () => { live = false; }; }, []);
+        // (Re)render PayPal's hosted button whenever an option changes.
+        useEffect(() => {
+          if (done || !box.current) return;
+          box.current.innerHTML = "";
+          if (!(window.PayPal && window.PayPal.Donation)) { setSdkError("PayPal Donate SDK did not load — check your connection / ad blocker."); return; }
+          setSdkError(null);
+          try {
+            window.PayPal.Donation.Button({
+              env: DONATE_CONFIG.env,
+              hosted_button_id: cfg.hosted_button_id,
+              item_name: DONATE_CONFIG.item_name + (coverFee ? DONATE_CONFIG.fee_suffix : ""),
+              item_number: ref.current,
+              custom: DONATE_CONFIG.custom,
+              amount: amt > 0 ? amt.toFixed(2) : undefined,
+              currency_code: cfg.currency,
+              image: { src: "https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif", title: "Donate with PayPal", alt: "Donate with PayPal button" },
+              onComplete: (d) => setDone(d),          // { tx, st, amt, cc, cm, item_number, item_name }
+            }).render("#" + DONATE_BUTTON_ID);              // the SDK wants a selector, not an element
+          } catch (e) { setSdkError("PayPal button failed to render: " + e.message); }
+        }, [country, monthly, amt, coverFee, done]);
+        const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
+        return (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()} data-testid="donate-modal">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-zinc-900">Donate to Lifteracy</div>
+                  <div className="text-xs text-zinc-500">Tax-deductible via Global Development Group ({cfg.label}). You'll finish on PayPal.</div>
+                </div>
+                <button onClick={onClose} className="-mr-1 rounded-md px-2 py-0.5 text-lg leading-none text-zinc-400 hover:bg-zinc-100">×</button>
+              </div>
+              {done ? (
+                <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-center">
+                  <div className="text-2xl">✅</div>
+                  <div className="mt-1 text-sm font-semibold text-emerald-800">Thank you! {done.amt ? (done.cc || cfg.currency) + " " + done.amt : ""}{monthly ? " every month" : ""}.</div>
+                  <div className="mt-1 text-xs text-emerald-700">A receipt is on its way from PayPal. Reference {done.item_number || ref.current}{done.tx ? " · " + done.tx : ""}.</div>
+                  <button onClick={onClose} className="mt-3 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Done</button>
+                </div>
+              ) : (
+                <div className="mt-3">
+                  {/* country — only here, preselected from the visitor's IP */}
+                  <div className="flex gap-1 rounded-lg bg-zinc-100 p-0.5" role="group" aria-label="Country">
+                    {DONATE_COUNTRIES.map((c) => (
+                      <button key={c} onClick={() => setCountry(c)} aria-pressed={country === c}
+                        className={"flex-1 rounded-md px-2 py-1.5 text-xs font-semibold " + (country === c ? "bg-white text-zinc-900 shadow" : "text-zinc-500 hover:text-zinc-800")}>
+                        {DONATE_CONFIG.countries[c].flag} {DONATE_CONFIG.countries[c].label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-1 text-[10px] text-zinc-400">{detected ? "Chosen from your location — change it if that's wrong." : "Detecting your country…"} Gifts are in {cfg.currency}.</div>
+                  {/* monthly (default) / one-time */}
+                  <div className="mt-3 flex gap-1 rounded-lg bg-zinc-100 p-0.5">
+                    {[[true, "Monthly"], [false, "One-time"]].map(([m, lbl]) => (
+                      <button key={lbl} onClick={() => setMonthly(m)} aria-pressed={monthly === m}
+                        className={"flex-1 rounded-md px-2 py-1.5 text-xs font-semibold " + (monthly === m ? "bg-white text-zinc-900 shadow" : "text-zinc-500 hover:text-zinc-800")}>{lbl}</button>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {cfg.presets.map((v) => (
+                      <button key={v} onClick={() => { setAmount(v); setCustom(""); }}
+                        className={"rounded-lg border px-2 py-2 text-sm font-semibold " + (!custom && amount === v ? "border-blue-500 bg-blue-50 text-blue-700" : "border-zinc-300 text-zinc-700 hover:bg-zinc-50")}>{cfg.sym}{v}</button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-sm text-zinc-400">{cfg.sym}</span>
+                    <input value={custom} onChange={(e) => setCustom(e.target.value)} inputMode="decimal" placeholder="Other amount" className={inputCls} />
+                  </div>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
+                    <input type="checkbox" checked={coverFee} onChange={(e) => setCoverFee(e.target.checked)} /> Cover PayPal's fee so 100% reaches the programme
+                  </label>
+                  <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                    {amt > 0
+                      ? <React.Fragment>{cfg.sym}{amt}{monthly ? "/mo" : ""} ≈ <b>{Math.max(1, Math.round(amt / 0.5)).toLocaleString()}</b> child-weeks of reading{monthly ? ", every month" : ""}.</React.Fragment>
+                      : "Pick an amount to see your impact."}
+                  </div>
+                  {monthly && <div className="mt-2 text-[10px] text-zinc-400">Tick "Make this a monthly donation" on PayPal's page to keep it recurring; cancel any time from your PayPal account.</div>}
+                  {/* PayPal's hosted Donate button renders here; it opens PayPal's checkout in a popup */}
+                  <div ref={box} id={DONATE_BUTTON_ID} className="mt-3 flex justify-center" data-testid="paypal-donate-button" />
+                  {sdkError && <div className="mt-2 text-[11px] text-red-600">{sdkError}</div>}
+                  {testMode && <div className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-center text-[10px] font-semibold text-amber-700">Test mode — PayPal sandbox; no real money moves until GDG's hosted button ids are in.</div>}
+                  <div className="mt-2 text-[10px] text-zinc-400">Reference {ref.current} · receipts from {cfg.business}.</div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       function FundModal({ data, onClose }) {
         const [tab, setTab] = useState("individual");
         const [amount, setAmount] = useState(25);
@@ -1902,36 +2045,6 @@
                 );
               })}
             </div>
-            {/* May note */}
-            <div className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-rose-700">
-              <span className="mt-0.5 h-3 w-3 flex-shrink-0 rounded-sm" style={{ background: "rgba(239,68,68,0.12)", border: "1px dashed rgba(239,68,68,0.6)" }} />
-              <span>Software engineer David Nelson could only work part-time due to lack of funds.</span>
-            </div>
-            {/* ordered backlog — hover for a one-line explanation */}
-            <div className="border-t border-zinc-100 pt-3">
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Up next</div>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                {TECH_NEXT.map(([task, desc], i) => {
-                  const c = NEXT_COLORS[i % NEXT_COLORS.length];
-                  return (
-                    <div key={task} className="group/t relative flex items-start gap-2.5 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2.5 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md">
-                      {/* oversized faint watermark number behind the content (same effect as Theory of Change) */}
-                      <span className="pointer-events-none absolute -bottom-5 -right-1 text-7xl font-black leading-none tabular-nums" style={{ color: c + "14" }}>{i + 1}</span>
-                      <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-base transition-transform group-hover/t:scale-110" style={{ background: c + "1a", color: c }}>
-                        <i className={"fa-solid " + NEXT_ICONS[i % NEXT_ICONS.length]} />
-                      </div>
-                      <div className="relative min-w-0">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-black leading-none tabular-nums" style={{ color: c }}>{i + 1}</span>
-                          <span className="text-base font-semibold text-zinc-800">{task}</span>
-                        </div>
-                        <div className="mt-1 text-[11px] leading-snug text-zinc-500">{desc}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         );
       }
@@ -2289,16 +2402,9 @@
               <BankFeedPanel />
             </div>
 
-            {/* donate-by-region map (same drill-down as the educator map) */}
-            <div className="mt-6">
-              <div className="mb-2 text-sm font-bold text-zinc-900">Choose where your donation goes</div>
-              <div className="mb-2 text-xs text-zinc-500">Click a coloured region to select it · double-click to drill in</div>
-              {donateMap}
-            </div>
-
             {/* dynamic Donate CTA — label tracks the selected region */}
             <button onClick={() => onDonate(donateTarget && donateTarget !== "most needed" ? donateTarget : null)}
-              className="mx-auto mt-5 block w-full max-w-2xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now to {donateTarget}</button>
+              className="mx-auto mt-5 block w-full max-w-2xl rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-sm hover:bg-emerald-700">💚 Donate now</button>
             {showStopRecurring && (
               recurStopped
                 ? <div className="mx-auto mt-2 block w-full max-w-2xl rounded-xl border border-emerald-200 bg-emerald-50 py-2.5 text-center text-sm font-semibold text-emerald-700">✓ Recurring payments stopped</div>
@@ -2458,7 +2564,7 @@
             <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
               <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
               <div className="flex flex-col items-center text-center">
-                <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto" />
+                <img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-11 w-auto" />
                 <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">{mode === "login" ? "Log in to your donor account" : "Create your donor account"}</h2>
                 <p className="mt-1 text-sm text-zinc-500">{mode === "login" ? "Welcome back — track the impact of your giving." : "Sign up to track the impact of your giving."}</p>
               </div>
@@ -2572,7 +2678,7 @@
             <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-7 shadow-2xl sm:p-8" onClick={(e) => e.stopPropagation()}>
               <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">✕</button>
               <div className="flex flex-col items-center text-center">
-                <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-10 w-auto" />
+                <img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-10 w-auto" />
                 <h2 className="mt-4 text-xl font-extrabold tracking-tight text-zinc-900">Donation receipt</h2>
                 <p className="mt-1 text-sm text-zinc-500">For tax purposes · keep for your records</p>
               </div>
@@ -2749,7 +2855,7 @@
             <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
               <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                 <div className="flex items-center gap-8">
-                  <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto shrink-0 sm:h-12" />
+                  <img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-11 w-auto shrink-0 sm:h-12" />
                   <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                     {NAV.map(([href, label]) => <a key={href} href={href} className="transition-colors hover:text-blue-600">{label}</a>)}
                   </nav>
@@ -2830,7 +2936,7 @@
             <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
               <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                 <div className="flex items-center gap-8">
-                  <a href="#top" className="shrink-0"><img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-11 w-auto sm:h-12" /></a>
+                  <a href="#top" className="shrink-0"><img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-11 w-auto sm:h-12" /></a>
                   <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                     <a href="#what-does" className="transition-colors hover:text-blue-600">What we do</a>
                     <a href="#traction" className="transition-colors hover:text-blue-600">Traction</a>
@@ -2850,10 +2956,7 @@
                       <button onClick={() => setAccount(null)}
                         className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100">Log out</button>
                     </div>
-                  ) : (
-                    <button onClick={() => setShowAuth(true)}
-                      className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 sm:text-base">Log in / Sign up</button>
-                  )}
+                  ) : null}
                   <button onClick={() => onDonate(null)}
                     className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:text-base">💚 Donate now</button>
                 </div>
@@ -2899,9 +3002,8 @@
                     </span>
                   </span>{" "}Does</div>
                 <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
-                  <EOSCards />
-                  <div className={"mb-5 mt-10 " + SUBH} style={HC}>Theory of Change</div>
-                  <DistCards />
+                  {/* the "See Lifteracy in Action" clip from www.lifteracy.ai/#video */}
+                  <video src={LIFTERACY_VIDEO_URL} controls preload="metadata" playsInline className="mx-auto w-full max-w-4xl rounded-xl bg-black" />
                 </div>
               </div>
             </section>
@@ -3970,6 +4072,7 @@
         const recordInvite = (id, person) => setPendingInvites((m) => { const n = new Map(m); n.set(id, person); return n; });
         const [petition, setPetition] = useState(null);   // { title, count, signups } -> full-screen petition page
         const [fund, setFund] = useState(null);            // { title, id } -> Fund-this-location modal
+        const [donateOpen, setDonateOpen] = useState(false); // /donor: PayPal Donate SDK popup
 
         // ===== messaging + bar-graph state =====
         const [composeOpen, setComposeOpen] = useState(true);
@@ -4663,7 +4766,7 @@
             )}
             {role === "transparency" ? (
               <DonorDashboard t={t} worldGeo={worldGeo} donateMap={donateMap} donateTarget={donateTarget}
-                onDonate={(earmark) => setFund({ title: earmark ? "Lifteracy · " + earmark : "Lifteracy — global programme", id: "donor", earmark: earmark || null })} />
+                onDonate={() => setDonateOpen(true)} />
             ) : (
             <React.Fragment>
             {!isReport && (
@@ -4716,7 +4819,7 @@
                 <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-zinc-50/90 backdrop-blur">
                   <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
                     <div className="flex items-center gap-8">
-                      <img src="./lifteracy-logo.svg" alt="Lifteracy" className="h-10 w-auto shrink-0 sm:h-11" />
+                      <img src="./lifteracy-logo-only.svg" alt="Lifteracy" className="h-10 w-auto shrink-0 sm:h-11" />
                       <nav className="hidden items-center gap-6 text-sm font-semibold text-zinc-600 md:flex">
                         <a href="#rep-top" className="transition-colors hover:text-blue-600">{t("Top")}</a>
                         <a href="#rep-perf" className="transition-colors hover:text-blue-600">{t(nounS)} {t("Performance")}</a>
@@ -5234,6 +5337,7 @@
             )}
             {/* Fund / Donate modal — shared by the map's "Fund this location" and the donor's Donate CTA */}
             {fund && <FundModal data={fund} onClose={() => setFund(null)} />}
+            {donateOpen && <DonateModal onClose={() => setDonateOpen(false)} />}
           </div>
         );
       }
