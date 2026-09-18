@@ -283,9 +283,9 @@
       }
       // "+" invite button at an area's centroid (greyscale, no border, constant screen size).
       // Hover shows a tooltip explaining the area has no user yet. geo = country/region/district/block.
-      function PlusButton({ c, k, geo, pending, onClick }) {
+      function PlusButton({ c, k, geo, pending, onClick, hidden = false }) {
         const [hov, setHov] = useState(false);
-        if (!c || isNaN(c[0])) return null;
+        if (hidden || !c || isNaN(c[0])) return null;
         const r = 8.8 / k, sw = 1.8 / k, len = 4.4 / k;           // 20% smaller than before, no border
         const s = 1 / k, tw = 176, th = pending ? 64 : 56;
         return (
@@ -1230,7 +1230,7 @@
       // =====================================================================
       //  Bottom bar graph — every entity ranked by score
       // =====================================================================
-      function BarGraph({ entities, selectedIds, hoverId, onHover, onToggle, onAddRange }) {
+      function BarGraph({ entities, selectedIds, hoverId, onHover, onToggle, onAddRange, slim = false }) {
         const bars = useMemo(() => [...entities].sort((a, b) => b.score - a.score), [entities]);
         const [drag, setDrag] = useState(null);
         const dragging = useRef(false);
@@ -1252,7 +1252,7 @@
         return (
           <div className="relative shrink-0 select-none border-t border-zinc-200 bg-white" style={{ height: 150 }} onMouseLeave={() => onHover(null)}>
             <div className="flex items-center justify-between px-3 py-1 text-[11px] text-zinc-500">
-              <span>{bars.length} entities · ranked by score · click a bar to add to the send list · drag across bars to multi-select</span>
+              <span>{bars.length} entities · ranked by score{slim ? "" : " · click a bar to add to the send list · drag across bars to multi-select"}</span>
               <span className="text-zinc-400">hover a bar for details</span>
             </div>
             <div className="absolute inset-x-0 bottom-0 flex items-end gap-px px-2" style={{ top: 26 }}>
@@ -2182,11 +2182,11 @@
       function MeasurePanel() {
         return (
           <div className="text-left">
-            <p className="text-sm leading-relaxed text-zinc-600">Lifteracy runs regular digital assessments that place each child on an internationally-recognised scale. At lower levels we administer a proxy for the <span className="font-semibold text-zinc-800">ASER</span> reading test; once a child progresses we switch to a proxy for the <span className="font-semibold text-zinc-800">LaNA</span> (Learning and Numeracy Assessment) for an internationally comparable score.</p>
+            <p className="text-sm leading-relaxed text-zinc-600">Every day Lifteracy recalculates every active student score on proxies of internationally recognized (<span className="font-semibold text-zinc-800">MPL-b</span>) and nationally recognized (<span className="font-semibold text-zinc-800">NIPUN</span>) tests.</p>
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700">
               <i className="fa-solid fa-triangle-exclamation" /> Dummy data — illustrative only. Drag to spin the globe; double-click to drill from the world all the way down to an individual student.
             </div>
-            <div className="relative mt-3 h-[68vh] overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
+            <div className="relative mt-3 h-[100vh] min-h-[900px] overflow-hidden rounded-xl border border-zinc-200 bg-[#eaf0f6]">
               <WorldMap role="measure" setRole={() => {}} />
             </div>
           </div>
@@ -3514,7 +3514,8 @@
         const [donateSel, setDonateSel] = useState(null);   // donor map: selected colored area { title, sub, label }
         const [uiLang, setUiLang] = useState("en");         // UI language (i18n) — English is the default/source
         const t = useCallback((s) => translate(uiLang, s), [uiLang]);
-        const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;   // `role` comes from Root (top-bar toggle)
+        const roleCfg = ROLE_BY[role] || ROLE_BY.transparency;
+        const slim = role === "measure";   // /donor "Measuring Every Child": read-only globe — no invites, funding, compose or officials   // `role` comes from Root (top-bar toggle)
         const capIdx = LEVEL_ORDER.indexOf(roleCfg.home);   // can't navigate above this level
         // on refresh the role auto-drills world → … → its home level; hide that flash until ready.
         // `navigating` is computed after `report` (below). Reset the stuck-timer on every drill step so
@@ -4384,11 +4385,17 @@
                           </span>
                         </React.Fragment>
                       );
+                      if (slim) return (
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-zinc-900">{active.title}</div>
+                          <div className="truncate text-xs text-zinc-500">{(active.sub || "").split(" · ")[0]}</div>
+                        </div>
+                      );
                       const hasPerson = !active.greyed && registered(active.u.id);
                       const canInvite = !active.greyed && !registered(active.u.id);
                       const role = (active.sub || "").split(" · ")[0];
                       const geo = { "National Director": "country", DGSE: "region", BSA: "district", BEO: "block" }[role] || "area";
-                      const testName = NAT_TEST[active.iso] || "ACER";   // local test, default ACER (India = NIPUN)
+                      const testName = NAT_TEST[active.iso] || "MPL-b";   // local test, default ACER (India = NIPUN)
                       const invite = () => openInvite({ id: active.u.id, title: active.title, role, geo });
                       if (canInvite) {
                         const pend = pendingInvites.get(active.u.id);
@@ -4457,7 +4464,7 @@
                       {active.demo.lit != null && (
                         <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{t("Adult literacy")} <span className="text-zinc-400">(UNESCO)</span></span><span className="font-semibold">{active.demo.lit}%</span></div>
                       )}
-                      {(() => {
+                      {!slim && (() => {
                         const { now, soon, never } = splitLangs(active.demo.pairs, builtLangs);
                         return (
                           <React.Fragment>
@@ -4467,13 +4474,13 @@
                           </React.Fragment>
                         );
                       })()}
-                      {active.demo.phon != null && (
+                      {!slim && active.demo.phon != null && (
                         <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Reach</span><span className="text-right font-semibold">{Math.round(teachBuilt(active.demo.pairs) * 100)}% with built langs · {Math.round(active.demo.phon * 100)}% in time</span></div>
                       )}
                       {!active.greyed && (
-                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Lifteracy coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of phonetic pop" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
+                        <div className="flex justify-between gap-2 rounded bg-zinc-50 px-2 py-1"><span className="flex-shrink-0">Lifteracy coverage</span><span className="text-right font-semibold">{registered(active.u.id) ? Math.round(coverShare(active.u.id) * 100) + "% of population" : <span className="text-zinc-500">Not registered (area dimmed)</span>}</span></div>
                       )}
-                      {level !== "adm3" && !active.greyed && (() => {   /* funding/budget card hidden in the BEO (block) view */
+                      {!slim && level !== "adm3" && !active.greyed && (() => {   /* funding/budget card hidden in the BEO (block) view */
                         const live = registered(active.u.id);
                         const js = jurisStats(active.u, active.demo, active.iso, live);
                         const parts = [
@@ -4538,29 +4545,29 @@
                         return (
                           <React.Fragment>
                             <div className="rounded bg-zinc-50 px-2 py-1.5">
-                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">Letters learnt</div>
+                              <div className="mb-1 text-[10px] font-semibold text-zinc-500">{slim ? "Usage (hours)" : "Letters learnt"}</div>
                               <div className="grid grid-cols-4 gap-1 text-center">
                                 {[["Yesterday", ls.yest], ["Week", ls.week], ["Month", ls.month], ["Year", ls.year]].map(([k, v]) => (
-                                  <div key={k}><div className="text-[9px] text-zinc-400">{k}</div><div className="text-[11px] font-semibold text-zinc-800">{fmtPop(v)}</div></div>
+                                  <div key={k}><div className="text-[9px] text-zinc-400">{k}</div><div className="text-[11px] font-semibold text-zinc-800">{fmtPop(slim ? Math.round(v / 120) : v)}</div></div>
                                 ))}
                               </div>
                             </div>
-                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>ACER avg</span><span className="font-semibold">{ls.acer} / 100</span></div>
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>MPL-b avg</span><span className="font-semibold">{ls.acer} / 100</span></div>
                             {ls.nat && <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>{ls.nat.name} avg</span><span className="font-semibold">{ls.nat.score} / 100</span></div>}
                           </React.Fragment>
                         );
                       })()}
-                      {!active.greyed && (() => {
+                      {!slim && !active.greyed && (() => {
                         const js = jurisStats(active.u, active.demo, active.iso, registered(active.u.id));
                         const yKey = (chartY === "nat" && js.nip) ? "nat" : chartY === "letters" ? "letters" : "acer";
                         const curve = yKey === "letters" ? js.letters : yKey === "nat" ? js.nip : js.acer;
                         const color = yKey === "letters" ? "#06b6d4" : yKey === "nat" ? "#8b5cf6" : "#2563eb";
                         const fmtY = yKey === "letters" ? fmtPop : ((v) => String(Math.round(v)));
-                        const toggles = [["acer", "ACER"], js.natName && ["nat", js.natName], ["letters", "Letters"]].filter(Boolean);
+                        const toggles = [["acer", "MPL-b"], js.natName && ["nat", js.natName], ["letters", "Letters"]].filter(Boolean);
                         const W = 320;
                         const outSeries = [
                           { name: "Spend", color: "#10b981", values: js.outputs.spend, fmt: fmtMoney },
-                          { name: "ACER tests", color: "#2563eb", values: js.outputs.acerTests, fmt: fmtPop },
+                          { name: "MPL-b tests", color: "#2563eb", values: js.outputs.acerTests, fmt: fmtPop },
                           js.outputs.nipTests && { name: js.natName + " tests", color: "#8b5cf6", values: js.outputs.nipTests, fmt: fmtPop },
                           { name: "Students", color: "#f59e0b", values: js.outputs.students, fmt: fmtPop },
                           { name: "Lesson hrs", color: "#f43f5e", values: js.outputs.hours, fmt: fmtPop },
@@ -4601,7 +4608,7 @@
                               </div>
                               <div className="mt-1 text-[8px] text-zinc-400">2050 impact: counterfactual 2031–2050, scaled from WWHGE ($196T GDP / 368M children).</div>
                             </div>
-                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on ACER</span><span className="font-semibold">{js.costAcerSD != null ? fmtMoney(js.costAcerSD) + " / child" : "—"}</span></div>
+                            <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on MPL-b</span><span className="font-semibold">{js.costAcerSD != null ? fmtMoney(js.costAcerSD) + " / child" : "—"}</span></div>
                             {js.costNatSD != null && <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Cost / +1 SD on {js.natName}</span><span className="font-semibold">{fmtMoney(js.costNatSD)} / child</span></div>}
                             <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Current spend (annual)</span><span className="font-semibold">{fmtMoney(js.spendNow)}</span></div>
                             <div className="flex justify-between rounded bg-zinc-50 px-2 py-1"><span>Funding ends</span><span className="font-semibold">{js.fundEnd} <span className="font-normal text-zinc-400">(reallocated)</span></span></div>
@@ -4843,8 +4850,9 @@
                     ));
                   })()}
                 </h1>
-                <p className="text-xs text-zinc-500"><span className="font-semibold text-zinc-700">Signed in: {roleCfg.who} · {roleCfg.where}</span> · {bannerText}</p>
+                {!slim && <p className="text-xs text-zinc-500"><span className="font-semibold text-zinc-700">Signed in: {roleCfg.who} · {roleCfg.where}</span> · {bannerText}</p>}
               </div>
+              {!slim && (
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
                 <select value={uiLang} onChange={(e) => setUiLang(e.target.value)} title="Language / भाषा"
                   className="rounded-md border border-zinc-200 px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50">
@@ -4862,6 +4870,7 @@
                   </button>
                 )}
               </div>
+              )}
             </header>
             )}
 
@@ -4938,7 +4947,7 @@
                       }
                       if (!p.covered) {
                         return (
-                          <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={NONPHON} fillOpacity={1}
+                          <path key={p.i} d={p.d} data-iso={p.iso || ""} data-name={p.name} fill={UNCOVERED} fillOpacity={1}
                             stroke={on ? "#0f172a" : "#ffffff"} strokeWidth={(on ? 1.1 : 0.3) / tf.k}
                             style={{ cursor: "pointer" }} onMouseEnter={hov} onMouseLeave={leave} onClick={pin} onDoubleClick={onDbl} />
                         );
@@ -5001,13 +5010,13 @@
 
                     {/* invite "+" buttons — rendered last so they sit above every area fill */}
                     {level === "world" && !roadmapOpen && worldPaths && worldPaths.map((p) => (p.covered && !registered(p.u.id)
-                      ? <PlusButton key={"plus" + p.i} c={p.c} k={tf.k} geo="country" pending={pendingInvites.get(p.u.id)} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
+                      ? <PlusButton hidden={slim} key={"plus" + p.i} c={p.c} k={tf.k} geo="country" pending={pendingInvites.get(p.u.id)} onClick={() => openInvite({ id: p.u.id, title: p.name, role: "National Director", geo: "country" })} /> : null))}
                     {level === "adm1" && adm1 && adm1.map((d0) => (!registered(d0.id)
-                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
+                      ? <PlusButton hidden={slim} key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="region" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "DGSE", geo: "region" })} /> : null))}
                     {level === "adm2" && adm2 && adm2.map((d0) => (!registered(d0.id)
-                      ? <PlusButton key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
+                      ? <PlusButton hidden={slim} key={"plus" + d0.id} c={polyCentroid(d0.ring)} k={tf.k} geo="district" pending={pendingInvites.get(d0.id)} onClick={() => openInvite({ id: d0.id, title: d0.name, role: "BSA", geo: "district" })} /> : null))}
                     {level === "adm3" && blocks && blocks.map((b) => (!registered(b.id)
-                      ? <PlusButton key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" pending={pendingInvites.get(b.id)} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
+                      ? <PlusButton hidden={slim} key={"plus" + b.id} c={polyCentroid(b.ring)} k={tf.k} geo="block" pending={pendingInvites.get(b.id)} onClick={() => openInvite({ id: b.id, title: b.name, role: "BEO", geo: "block" })} /> : null))}
 
                     {/* schools */}
                     {level === "schools" && blk && (
@@ -5113,7 +5122,7 @@
               )}
 
               {/* unified left accordion sidebar: Area · Compose · Spacing — hidden in the block report */}
-              {!isReport && (
+              {!isReport && !slim && (
               <aside className="absolute left-0 top-0 bottom-0 z-30 w-[360px] flex flex-col overflow-y-auto border-r border-zinc-200 bg-white shadow-xl"
                 onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
                 {(() => {
@@ -5196,7 +5205,7 @@
                   <button onClick={() => zoomBy(1 / 1.5)} title="Zoom out" className="flex h-9 w-9 items-center justify-center text-xl font-semibold text-zinc-700 hover:bg-zinc-100">−</button>
                 </div>
                 {/* pie legend describes map-area pies — hidden in the school graph and the block report */}
-                {level !== "school" && !isReport && (
+                {!slim && level !== "school" && !isReport && (
                 <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
                   {level === "adm3" ? (
                     <React.Fragment>
@@ -5224,9 +5233,42 @@
                           <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
                           <span>No Lifteracy node yet</span>
                         </div>
+                      </div>
+                    </React.Fragment>
+                  )}
+                  <div className="mt-1.5 text-[9px] text-zinc-400">demo data</div>
+                </div>
+                )}
+              </div>
+              <div className="pointer-events-none absolute bottom-4 left-4 z-30" data-testid="measure-legend">
+                {/* pie legend describes map-area pies — hidden in the school graph and the block report */}
+                {slim && level !== "school" && (
+                <div className="w-64 rounded-xl border border-zinc-200 bg-white/95 p-3 text-[11px] leading-tight text-zinc-700 shadow-lg">
+                  {level === "adm3" ? (
+                    <React.Fragment>
+                      <div className="mb-1.5 font-semibold text-zinc-900">Each block is coloured by its avg NIPUN proxy</div>
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: NONPHON }} />
-                          <span>Speaks a language beyond our method (or no data)</span>
+                          <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
+                          <span>On Lifteracy <span className="text-zinc-400">(colour = avg score)</span></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
+                          <span>No Lifteracy node yet</span>
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <div className="mb-1.5 font-semibold text-zinc-900">Each area is coloured by its avg NIPUN proxy</div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }} />
+                          <span>On Lifteracy <span className="text-zinc-400">(colour = avg score)</span></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-5 flex-shrink-0 rounded-sm" style={{ background: UNCOVERED }} />
+                          <span>No Lifteracy node yet</span>
                         </div>
                       </div>
                     </React.Fragment>
@@ -5381,9 +5423,15 @@
               );
             })()}
 
+            {slim && (
+              <div className="max-h-64 shrink-0 overflow-y-auto border-t border-zinc-200 bg-white px-4 py-3" data-testid="measure-area-panel">
+                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">{t("Area")}</div>
+                {areaBody || <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-4 text-center text-xs text-zinc-400">{t("Hover a region on the map to see its details.")}</div>}
+              </div>
+            )}
             {!isReport && (
               <BarGraph entities={entities} selectedIds={selectedIds} hoverId={hoverId}
-                onHover={setHoverId} onToggle={toggleSend} onAddRange={addEntities} />
+                onHover={setHoverId} onToggle={toggleSend} onAddRange={addEntities} slim={slim} />
             )}
             </React.Fragment>
             )}
