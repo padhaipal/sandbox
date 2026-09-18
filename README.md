@@ -21,6 +21,11 @@ GeoJSON, the bundled UDISE schools, and the face images in `faces/`.
   save point). Adds tile street underlay, block-name labels, teacher→class force
   graph, student dashboard modal, and assorted polish.
 
+- `donor.html` — **/donor**: the transparency (donor) view on its own URL — a copy of
+  `index.html` with the signed-in role pinned to `transparency` and the role dropdown
+  removed. Everything else (map, drill-down, Fund/Donate flow) is the same code, so
+  keep the two files in sync when the transparency view changes.
+
 ## Run locally
 Open `index.html` directly, or serve the folder:
 ```
