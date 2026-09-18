@@ -21,6 +21,23 @@ GeoJSON, the bundled UDISE schools, and the face images in `faces/`.
   save point). Adds tile street underlay, block-name labels, teacher→class force
   graph, student dashboard modal, and assorted polish.
 
+- `donor.html` — **/donor**: the transparency (donor) view on its own URL — a copy of
+  `index.html` with the signed-in role pinned to `transparency`, the role dropdown and
+  "Log in / Sign up" removed, mvp2's logo, the lifteracy.ai video in "What Lifteracy
+  Does", and a REAL donate flow: "Donate now" opens `DonateModal`, which renders
+  PayPal's hosted Donate button via the Donate SDK
+  (`https://www.paypalobjects.com/donate/sdk/donate-sdk.js`). Country (AU / NZ / US,
+  each a separate GDG PayPal account) is picked only inside the popup, preselected
+  from the visitor's IP (`get.geojs.io`, then timezone, then US). Monthly is the
+  default; "Cover PayPal's fee" appends GDG's ` (&offset)` to `item_name`; each popup
+  gets a `LFT-<uuid>` reference sent as `item_number`.
+  **To go live** edit `DONATE_CONFIG` at the top of the script: the three
+  `hosted_button_id`s (Donate buttons created in each GDG account with "let donors
+  make this monthly" enabled) and `env: "production"`. Amounts are never trusted from
+  the browser — each account's IPN must point at `https://api.padhaipal.org/paypal/ipn/{au|nz|us}`
+  (verify with PayPal, check `receiver_email`, relay to GDG's `ipn.php`); that endpoint
+  is backend work, not in this repo. Until then the popup shows a "Test mode" pill.
+
 ## Run locally
 Open `index.html` directly, or serve the folder:
 ```
