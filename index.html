@@ -3896,7 +3896,7 @@
           const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
           if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
           if (drag.current.spin) { const [l0, p0] = drag.current.rot; setGlobeRot([l0 + dx * 0.4, clamp(p0 - dy * 0.4, -89, 89)]); }
-          else setTf((t) => ({ ...t, x: drag.current.tx + dx, y: drag.current.ty + dy }));
+          else { const nx = drag.current.tx + dx, ny = drag.current.ty + dy; setTf((t) => ({ ...t, x: nx, y: ny })); } // ref read here: the updater may run after onPointerUp nulls it
         }, []);
         const onPointerUp = useCallback(() => { drag.current = null; }, []);
         // empty-space click: if a card is pinned, first click just unpins; otherwise go up a level
